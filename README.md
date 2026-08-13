@@ -23,6 +23,7 @@ python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, g
 python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
+python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py gui          # Overview / Technology / Cells tabs (needs a real X11/Xvnc display)
 ```
 
@@ -44,8 +45,9 @@ running both side by side for real.
 Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
-definition data -- **Layers** and **Magic Tech** as sub-tabs, one per
-tool that defines it), and **Cells** (real cell/macro data -- `LefView`
+definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
+sub-tabs, one per tool that defines it), and **Cells** (real cell/macro
+data -- `LefView`
 directly, since LEF is currently the only real cell-data parser; a
 sub-notebook is the right move once a second one exists, e.g. CDL/
 Liberty/Verilog). No empty **Simulation** top-level group exists yet --
@@ -160,6 +162,42 @@ Saving only ever touches the local, gitignored `data/` copy.
   round trip confirmed the write is byte-exact (a prepended marker
   line, the rest of the file untouched) -- the real, fetched `data/`
   itself was never touched by this verification.
+- **`openpdkcreator/ihp/drc.py`** -- real KLayout DRC-deck rule
+  extraction, adapted from OpenPDKCreator's own `import_open_pdks.py`
+  (that logic already proved itself against a real *subset* of this
+  exact IHP deck -- this module points the same, unmodified pattern at
+  the **full** real deck: 42 real `.drc` files, not a sample). Real
+  result: **61 real design rules** extracted, all 61 with a real,
+  resolved numeric value (100% resolution against the real JSON config
+  -- hand-checked: `M1.a`'s `0.16` matches both the real
+  `sg13g2_tech_default.json` and the real source line,
+  `rule_decks/beol/5_16_metal1.drc:31`), and **94** composite/derived
+  constructs honestly reported as not-auto-extracted, never dropped
+  silently. One real, interesting finding worth noting: some real rule
+  IDs themselves contain a literal Ruby string-interpolation template
+  (`M#{met_no}.a`, from a real per-metal-layer loop in the source) --
+  captured verbatim, not silently mangled.
+- **`openpdkcreator/schema.py`** -- `CheckTypeSpec`/`CHECK_TYPES`/
+  `CHECK_TYPE_ORDER`, copied verbatim from OpenPDKCreator's own
+  `scripts/pdk_wizard/schema.py` -- already confirmed fully
+  technology-agnostic during ADR 0018 research in that project (every
+  entry is a generic DRC concept: min width/spacing/area/overlap/
+  enclosure, max length/current-density/array-dimension, density
+  window).
+- **`openpdkcreator/gui/rules_view.py` + `rule_canvas.py`** -- a real
+  DRC Rules tab (`RulesView`), adapted from OpenPDKCreator's own
+  Design Rules tab: the same rule list + live-diagram + full-field
+  form, New/Delete Rule, and rule-ID auto-naming -- one real
+  simplification (`_suggest_prefix`'s native-device-stack special case
+  is dropped, since this project has no `devices` model at all), plus
+  one real addition: a **View Source** button opening the exact real
+  `.drc` file (and line) a selected rule was extracted from, via each
+  rule's own `source_provenance`. Rules start real (61 of them, loaded
+  from `ihp/drc.py` at startup), not blank, then editable the same way
+  a hand-authored rule would be. Verified for real, driven against the
+  actual data: correct row/form population, New/Delete both work,
+  **View Source** opens the exact real file and highlights the right
+  lines, and the live diagram/`layer_colors()` both render correctly.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -183,9 +221,14 @@ models, ...), not just read/display layers. Concretely, still open:
 - Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
   `compose` sections (each its own real, separate mini rule-language --
   `drc` and `extract` in particular are the Magic equivalent of
-  KLayout's DRC Ruby DSL), plus GDS, Liberty, real KLayout DRC decks,
-  and LEF's own `VIA`/`ViaRULE` via-stack geometry -- no generic
-  parser for any of these exists yet.
+  KLayout's DRC Ruby DSL), plus GDS, Liberty, and LEF's own `VIA`/
+  `ViaRULE` via-stack geometry -- no generic parser for any of these
+  exists yet.
+- Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
+  reliable `width()/space()/sep()` -> `.output()` pattern (61 real
+  rules); the other 94 real, honestly-skipped constructs are composite
+  checks (`.enc()`, multi-step derived regions, ...) with no reliable,
+  generic pattern to extract yet.
 - Editing/creating/generating PDK content in a *structured* way (e.g.
   adding a real LEF pin through a form, not raw text) -- the real gap
   left after `file_view_dialog.py`'s raw View/Edit/Save, which only

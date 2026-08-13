@@ -141,3 +141,33 @@ only in the separate `sg13g2_tech.lef`), and `sg13g2_io.lef` defines
 **two** real `SITE`s (`sg13g2_ioSite` and `sg13g2_cornerSite` -- IO
 pads and corner cells use different row heights than core standard
 cells' `CoreSite`), not one.
+
+## Real KLayout DRC-deck extraction results
+
+`openpdkcreator/ihp/drc.py` was pointed at the **full**, real,
+downloaded IHP DRC deck (`libs.tech/klayout/tech/drc/`, 42 real `.drc`
+files -- the top-level `ihp-sg13g2.drc` plus 41 more under
+`rule_decks/`, several nested a level deeper still, e.g.
+`rule_decks/beol/5_16_metal1.drc`, correctly reached by a recursive
+scan). This is the same regex-based extraction logic OpenPDKCreator's
+own `import_open_pdks.py` already proved against a real, deliberately
+small *subset* of this exact deck (5 real rules extracted there);
+against the full deck, the real result is **61 real design rules**,
+every one with a real, resolved numeric value (cross-referenced
+against the real `sg13g2_tech_default.json` by variable name -- 100%
+resolution, zero unresolved values). **94** real constructs were
+honestly reported as not-auto-extracted -- composite/derived checks
+(`.output()` on a variable that isn't a direct `.width()`/`.space()`/
+`.sep()` result) and a handful of real `.width()`/`.space()`/`.sep()`
+calls whose `.output()` never matches back to the same variable name
+(a real, KLayout-DRC-DSL construct this pass's simple pattern doesn't
+follow).
+
+One real, noteworthy finding: several rule IDs extracted verbatim
+contain a literal, unresolved Ruby string-interpolation template --
+e.g. `M#{met_no}.a` from `rule_decks/beol/5_17_metaln.drc`, a real
+rule defined once inside a Ruby loop over metal layer numbers rather
+than once per layer. The extractor doesn't attempt to resolve or
+enumerate this (that would mean actually running the Ruby DSL, not
+regex-matching it) -- it's captured honestly as the literal template
+text, not silently dropped or guessed at.

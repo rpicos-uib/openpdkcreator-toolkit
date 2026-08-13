@@ -6,7 +6,12 @@ grouped by what they actually represent rather than left flat:
   libs.ref/'s cell libraries, libs.doc/).
 - **Technology** -- process/technology-definition data specifically,
   one sub-tab per tool that defines it: **Layers** (KLayout's real
-  ``.lyp``) and **Magic Tech** (Magic's real ``.tech`` files).
+  ``.lyp``), **Magic Tech** (Magic's real ``.tech`` files), and
+  **DRC Rules** (a real KLayout DRC deck, best-effort extracted --
+  ``ihp/drc.py``) -- reusing OpenPDKCreator's own Design Rules tab
+  (``RulesView``/``rule_canvas.py``), the same "reuse the existing
+  interface" pattern ``LayersView`` already established, just against
+  a real, pre-extracted starting set instead of an empty one.
 - **Cells** -- real cell/macro data (``LefView``, currently LEF only --
   tech-layer routing rules plus real macro/cell footprints with real
   pins). Hosts ``LefView`` directly rather than nesting it inside
@@ -34,25 +39,31 @@ verbatim from OpenPDKCreator) needs -- just ``layers``/
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
-from ..models import Layer
+from ..models import DesignRule, Layer
 from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
 from .magic_tech_view import MagicTechView
+from .rules_view import RulesView
+
+_PROVENANCE_PATH_RE = re.compile(r"^([^:]+):\d+")
 
 
 class ProjectState:
     """The subset of OpenPDKCreator's own ``Project`` that
-    ``LayersView`` actually touches."""
+    ``LayersView``/``RulesView`` actually touch."""
 
-    def __init__(self, layers: list[Layer] | None = None):
+    def __init__(self, layers: list[Layer] | None = None, design_rules: list[DesignRule] | None = None):
         self.layers: list[Layer] = layers or []
+        self.design_rules: list[DesignRule] = design_rules or []
 
     def sorted_layers(self) -> list[Layer]:
         return sorted(self.layers, key=lambda layer: layer.stack_order)
@@ -106,7 +117,7 @@ class App(ttk.Frame):
                 "", "end", values=(inv.tool, inv.file_count, f"{size_mb:.1f}", top_ext)
             )
 
-    # -- Technology group (Layers, Magic Tech) -------------------------------
+    # -- Technology group (Layers, Magic Tech, DRC Rules) --------------------
 
     def _build_technology_group(self):
         frame = ttk.Frame(self.notebook)
@@ -128,9 +139,25 @@ class App(ttk.Frame):
         self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root)
         self.magic_tech_view.pack(fill="both", expand=True)
 
+        rules_frame = ttk.Frame(self.technology_notebook)
+        self.technology_notebook.add(rules_frame, text="DRC Rules")
+        self.rules_view = RulesView(rules_frame, self)
+        self.rules_view.pack(fill="both", expand=True)
+
     def _view_lyp_file(self):
         if self.lyp_path is not None:
             view_file_dialog(self, self.lyp_path)
+
+    def layer_colors(self) -> dict[str, tuple[str, str]]:
+        return {layer.name: (layer.frame_color, layer.fill_color) for layer in self.project.layers}
+
+    def _view_rule_source(self, rule: DesignRule):
+        match = _PROVENANCE_PATH_RE.match(rule.source_provenance or "")
+        if match is None:
+            return
+        path = self.pdk_root / match.group(1)
+        if path.is_file():
+            view_file_dialog(self, path)
 
     # -- Cells group (LEF) --------------------------------------------------
 
@@ -156,5 +183,14 @@ class App(ttk.Frame):
         self.project.layers = parsed
         self.layers_view.refresh()
 
+        drc_root = drc_mod.find_drc_root(self.pdk_root)
+        rules, skipped = drc_mod.extract_design_rules(self.pdk_root, drc_root)
+        self.project.design_rules = rules
+        self.drc_skipped_count = len(skipped)
+        self.rules_view.refresh()
+
         warning = f" (WARNING: {group_members} <group-members> block(s) found -- some layers may be missing)" if group_members else ""
-        self.status.set(f"Loaded {len(parsed)} layers from {lyp_path.name}{warning}")
+        self.status.set(
+            f"Loaded {len(parsed)} layers from {lyp_path.name}{warning}; "
+            f"extracted {len(rules)} DRC rules ({len(skipped)} construct(s) not auto-extracted, see ihp/drc.py)"
+        )

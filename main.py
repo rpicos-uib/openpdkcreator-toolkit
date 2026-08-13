@@ -12,17 +12,23 @@ cifoutput geometry DSL (a real Magic-type-name -> GDS-layer/datatype
 mapping), cross-referenced against the KLayout .lyp data above -- and a
 real LEF parser (tech-LEF layers plus real macro/cell footprints:
 class/size/site/symmetry, PINs with direction/use/port layers+rect
-counts, OBS layers). No attempt at GDS parsing, LEF via-stack geometry,
-or Magic's drc/extract/cifinput/connect/compose sections (each its own
-real, separate mini rule-language) -- that's real, separate future
-work. The much larger end goal -- editing/creating/generating arbitrary
-PDK file types, not just reading/displaying them -- is explicit,
-tracked future work, not attempted here.
+counts, OBS layers), and a real KLayout DRC-deck rule extractor (the
+same, already-proven-elsewhere regex pattern, pointed at the full,
+real, downloaded deck: a line assigning a real
+width()/space()/sep() result to a variable, cross-referenced against
+a real JSON values file, feeding a same-variable .output() call).
+No attempt at GDS parsing, LEF via-stack geometry, or Magic's
+drc/extract/cifinput/connect/compose sections (each its own real,
+separate mini rule-language) -- that's real, separate future work.
+The much larger end goal -- editing/creating/generating arbitrary PDK
+file types, not just reading/displaying them -- is explicit, tracked
+future work, not attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
     python3 main.py magic-tech            # real Magic .tech parse + KLayout cross-reference
     python3 main.py lef                   # real LEF parse summary (tech layers + macros)
+    python3 main.py drc                   # real KLayout DRC-deck rule extraction summary
     python3 main.py gui                   # Overview, Technology, Cells tabs
 """
 
@@ -32,6 +38,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from openpdkcreator.ihp import drc as drc_mod
 from openpdkcreator.ihp import fetch as fetch_mod
 from openpdkcreator.ihp import inventory as inventory_mod
 from openpdkcreator.ihp import layers as layers_mod
@@ -137,6 +144,28 @@ def cmd_lef(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_drc(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    drc_root = drc_mod.find_drc_root(pdk_root)
+    if drc_root is None:
+        print(f"No DRC deck found under {pdk_root}/libs.tech/klayout/tech/drc/", file=sys.stderr)
+        return 2
+
+    rules, skipped = drc_mod.extract_design_rules(pdk_root, drc_root)
+    print(f"{len(rules)} real design rule(s) extracted from {drc_root.relative_to(pdk_root)}:")
+    for rule in rules:
+        value = f"{rule.value} {rule.units}" if rule.value is not None else "(unresolved value)"
+        print(f"  {rule.rule_id}: {rule.check_type} = {value}  [{rule.source_provenance}]")
+
+    print(f"\n{len(skipped)} construct(s) not auto-extracted (composite/derived checks -- real, honest gaps):")
+    for line in skipped:
+        print(f"  {line}")
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -163,6 +192,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("inventory", help="Print a per-tool file inventory.")
     sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
+    sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -177,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_magic_tech(args.pdk_root.resolve())
     if args.command == "lef":
         return cmd_lef(args.pdk_root.resolve())
+    if args.command == "drc":
+        return cmd_drc(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1
