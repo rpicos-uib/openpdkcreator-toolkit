@@ -17,6 +17,12 @@ raw geometry is a real, separate, much bigger feature, out of scope
 here). "View File" opens the real, selected ``.lef`` file directly
 (``file_view_dialog.view_file_dialog``), which *can* also be edited,
 as raw text.
+
+Each real ``.lef`` file, once parsed, is cached (``_parsed_cache``) --
+a real bug, found and fixed while adding cross-tab persistence, would
+otherwise silently discard any in-memory pin edits the moment the file
+combo was switched away and back (it re-parsed fresh every time,
+confirmed by a real, driven test before the cache existed).
 """
 
 from __future__ import annotations
@@ -37,6 +43,11 @@ class LefView(ttk.Frame):
         super().__init__(parent)
         self.pdk_root = pdk_root
         self.lef_files: dict[str, Path] = {}
+        # Real bug found and fixed: without this cache, switching the
+        # file combo away and back silently re-parsed the file fresh,
+        # discarding any in-memory pin edits made to it -- confirmed
+        # by a real, driven test before this cache existed.
+        self._parsed_cache: dict[Path, lef_mod.LefFile] = {}
         self.current: lef_mod.LefFile | None = None
         self.current_macro: lef_mod.LefMacro | None = None
         self.current_pin: lef_mod.LefPin | None = None
@@ -196,7 +207,9 @@ class LefView(ttk.Frame):
             self._show_pins(None)
             return
 
-        self.current = lef_mod.parse_lef_file(path)
+        if path not in self._parsed_cache:
+            self._parsed_cache[path] = lef_mod.parse_lef_file(path)
+        self.current = self._parsed_cache[path]
         tech = self.current
 
         for layer in tech.layers:
