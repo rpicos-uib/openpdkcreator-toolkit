@@ -1,5 +1,20 @@
-"""Minimal Tk shell: a two-tab window (Inventory, Layers) over a real,
-downloaded IHP-style PDK tree.
+"""Minimal Tk shell over a real, downloaded IHP-style PDK tree, tabs
+grouped by what they actually represent rather than left flat:
+
+- **Overview** -- the real, per-tool file inventory, spanning every
+  tool/domain (including ones with no dedicated view yet, e.g.
+  libs.ref/'s cell libraries, libs.doc/).
+- **Technology** -- process/technology-definition data specifically,
+  one sub-tab per tool that defines it: **Layers** (KLayout's real
+  ``.lyp``) and **Magic Tech** (Magic's real ``.tech`` files).
+
+Deliberately no "Cells"/"Simulation" top-level group yet -- there's no
+real parser behind either domain (libs.ref/'s cell libraries and
+libs.tech/{ngspice,xschem,...}'s simulation models are both still
+inventory-only, see the Overview tab) -- adding an empty tab for a
+domain nothing here actually reads yet would show fake completeness.
+The **Technology** group above is the pattern to repeat once one
+exists (see README.md's Future Work).
 
 ``ProjectState`` is the smallest possible object ``LayersView`` (copied
 verbatim from OpenPDKCreator) needs -- just ``layers``/
@@ -16,6 +31,7 @@ from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..models import Layer
 from .layers_view import LayersView
+from .magic_tech_view import MagicTechView
 
 
 class ProjectState:
@@ -43,19 +59,19 @@ class App(ttk.Frame):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
 
-        self._build_inventory_tab()
-        self._build_layers_tab()
+        self._build_overview_tab()
+        self._build_technology_group()
 
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", side="bottom")
 
         self.load()
 
-    # -- Inventory tab ----------------------------------------------------
+    # -- Overview tab -----------------------------------------------------
 
-    def _build_inventory_tab(self):
+    def _build_overview_tab(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Inventory")
+        self.notebook.add(frame, text="Overview")
 
         columns = ("domain", "files", "size_mb", "top_extensions")
         self.inventory_tree = ttk.Treeview(frame, columns=columns, show="headings")
@@ -75,13 +91,24 @@ class App(ttk.Frame):
                 "", "end", values=(inv.tool, inv.file_count, f"{size_mb:.1f}", top_ext)
             )
 
-    # -- Layers tab ---------------------------------------------------------
+    # -- Technology group (Layers, Magic Tech) -------------------------------
 
-    def _build_layers_tab(self):
+    def _build_technology_group(self):
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Layers")
-        self.layers_view = LayersView(frame, self)
+        self.notebook.add(frame, text="Technology")
+
+        self.technology_notebook = ttk.Notebook(frame)
+        self.technology_notebook.pack(fill="both", expand=True)
+
+        layers_frame = ttk.Frame(self.technology_notebook)
+        self.technology_notebook.add(layers_frame, text="Layers")
+        self.layers_view = LayersView(layers_frame, self)
         self.layers_view.pack(fill="both", expand=True)
+
+        magic_tech_frame = ttk.Frame(self.technology_notebook)
+        self.technology_notebook.add(magic_tech_frame, text="Magic Tech")
+        self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root)
+        self.magic_tech_view.pack(fill="both", expand=True)
 
     # -- data loading ---------------------------------------------------------
 

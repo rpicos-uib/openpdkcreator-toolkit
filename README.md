@@ -22,8 +22,20 @@ pip install pyyaml    # not currently used, but matches the sibling project; har
 python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, gitignored, run once)
 python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
-python3 main.py gui          # Inventory + Layers tabs (needs a real X11/Xvnc display)
+python3 main.py gui          # Overview + Technology (Layers, Magic Tech) tabs (needs a real X11/Xvnc display)
 ```
+
+## GUI structure
+
+Tabs are grouped by what they represent, not left flat: **Overview**
+(the real, per-tool file inventory, spanning every domain including
+ones with no dedicated view yet) and **Technology** (process/
+technology-definition data specifically -- **Layers** and **Magic
+Tech** as sub-tabs, one per tool that defines it). No empty "Cells"/
+"Simulation" top-level group exists yet -- there's no real parser
+behind either domain yet (see Future Work); adding one now would show
+fake completeness. **Technology** is the pattern a future group would
+repeat once a real parser exists for it.
 
 ## What's real here (first increment)
 
@@ -77,6 +89,16 @@ python3 main.py gui          # Inventory + Layers tabs (needs a real X11/Xvnc di
   `.boundary`, `.OPC`, ...) Magic's real fabrication output has no
   reason to paint -- a real, sensible finding, not a parsing gap (zero
   Magic-only pairs: everything Magic emits is a real, known layer).
+- **`openpdkcreator/gui/magic_tech_view.py`** -- a Magic Tech tab
+  (`MagicTechView`), matching the Layers tab's Treeview-based shape:
+  a technology picker (`ihp-sg13g2` / `ihp-sg13g2-GDS`, the two real,
+  separate technologies -- the `include`d fragments have no own header
+  and aren't shown standalone) over six sub-tabs, one per real,
+  parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF
+  Layers). Read-only for now. Verified for real, driven against the
+  actual downloaded data: all six sub-tabs' row counts match
+  `magic-tech`'s own CLI output exactly, and switching technologies in
+  the picker correctly reloads every sub-tab.
 
 ## Future work
 
@@ -94,8 +116,12 @@ models, ...), not just read/display layers. Concretely, still open:
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
-- A GUI tab for Magic tech data (types/planes/contacts), matching the
-  existing Layers tab's shape -- `magic-tech` is CLI-only for now.
+- A **Cells** top-level GUI group (`libs.ref/<family>/<view>/` --
+  CDL/LEF/Liberty/Verilog/spice cell libraries) and a **Simulation**
+  one (ngspice/xschem/Qucs-S models and schematics), matching the
+  **Technology** group's pattern -- both still inventory-only today
+  (see the Overview tab), no real per-format parser exists for either
+  yet.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.
