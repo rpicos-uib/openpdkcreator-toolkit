@@ -12,13 +12,13 @@ grouped by what they actually represent rather than left flat:
   (``RulesView``/``rule_canvas.py``), the same "reuse the existing
   interface" pattern ``LayersView`` already established, just against
   a real, pre-extracted starting set instead of an empty one.
-- **Cells** -- real cell/macro data (``LefView``, currently LEF only --
-  tech-layer routing rules plus real macro/cell footprints with real
-  pins). Hosts ``LefView`` directly rather than nesting it inside
-  another single-item sub-notebook (``LefView`` already has its own
-  file picker and Layers/Macros sub-tabs) -- a sub-notebook is the
-  right move once a second real cell-data source exists (CDL/Liberty/
-  Verilog -- see README.md's Future Work), not for one.
+- **Cells** -- real cell/macro data, two sub-tabs: **LEF** (tech-layer
+  routing rules plus real macro/cell footprints with editable pins) and
+  **By Cell** (``CellHubView``/``ihp/cells.py``) -- a hierarchical,
+  cell-centric picture: pick one real cell, see which of its real views
+  (LEF/CDL/SPICE/Verilog/Liberty/GDS) actually exist across
+  ``libs.ref/<family>/*/``, and jump straight to that cell's own real
+  block inside each one.
 
 Deliberately no "Simulation" top-level group yet -- there's no real
 parser behind ngspice/xschem/Qucs-S model/schematic data yet (still
@@ -48,6 +48,7 @@ from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..models import DesignRule, Layer
+from .cell_hub_view import CellHubView
 from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
@@ -159,13 +160,24 @@ class App(ttk.Frame):
         if path.is_file():
             view_file_dialog(self, path)
 
-    # -- Cells group (LEF) --------------------------------------------------
+    # -- Cells group (LEF, By Cell) ------------------------------------------
 
     def _build_cells_group(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Cells")
-        self.lef_view = LefView(frame, self.pdk_root)
+
+        self.cells_notebook = ttk.Notebook(frame)
+        self.cells_notebook.pack(fill="both", expand=True)
+
+        lef_frame = ttk.Frame(self.cells_notebook)
+        self.cells_notebook.add(lef_frame, text="LEF")
+        self.lef_view = LefView(lef_frame, self.pdk_root)
         self.lef_view.pack(fill="both", expand=True)
+
+        cell_hub_frame = ttk.Frame(self.cells_notebook)
+        self.cells_notebook.add(cell_hub_frame, text="By Cell")
+        self.cell_hub_view = CellHubView(cell_hub_frame, self.pdk_root)
+        self.cell_hub_view.pack(fill="both", expand=True)
 
     # -- data loading ---------------------------------------------------------
 

@@ -171,3 +171,40 @@ than once per layer. The extractor doesn't attempt to resolve or
 enumerate this (that would mean actually running the Ruby DSL, not
 regex-matching it) -- it's captured honestly as the literal template
 text, not silently dropped or guessed at.
+
+## Real per-cell file organization: two different real conventions, confirmed
+
+`openpdkcreator/ihp/cells.py` (built for the **By Cell** hierarchical
+view) had to handle a real structural fact confirmed by directly
+counting real files, not assumed from one family alone: IHP's own four
+real families use *two different* real per-view file organizations for
+the same kind of view.
+
+`sg13g2_io`/`sg13g2_stdcell` pack every real cell for a given view into
+one real, combined file: one `.cdl` with all 84 real `.SUBCKT` blocks,
+one `.v` with all 84 real `module`s, one `.spice`, one `.gds`, and 6-7
+real `.lib` files (one per real PVT corner, each still containing every
+cell for that corner).
+
+`sg13g2_sram` instead ships one real file *per hard macro*: 28 real
+`.cdl` files, 28 real `.gds` files, one real `.lib` file per
+(macro, corner) pair (confirmed: 84 real `.lib` files = 28 macros x 3
+real corners each) -- and, tellingly, **zero** real `.spice` files at
+all (SRAM has no spice view in this real PDK, an honest fact
+`cells.py`'s aggregator reports as "no spice view", not a bug or a
+missing parser).
+
+One more real, worth-recording surprise: `sg13g2_sram`'s real CDL/
+Verilog files are not flat one-macro-per-file netlists -- they're full,
+real hierarchical netlists, each defining hundreds of internal real
+sub-elements (bitcells, sense amps, decoders, ...) alongside the one
+real, top-level hard macro matching the file's own name. Counted
+directly: **2338** real subckts total across all of `sg13g2_sram`'s
+real CDL files, of which only **28** have a matching real LEF macro --
+i.e. are genuinely top-level, physically instantiable cells. This is
+why `cell_hub_view.py`'s cell list defaults to "has a real LEF macro"
+rather than showing everything discovered -- the raw netlist count
+answers a different, real question ("how many subckts exist in this
+family's netlists") than the one a PDK-authoring wizard's cell browser
+should default to answering ("what are this family's real, usable
+cells").

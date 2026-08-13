@@ -17,18 +17,23 @@ same, already-proven-elsewhere regex pattern, pointed at the full,
 real, downloaded deck: a line assigning a real
 width()/space()/sep() result to a variable, cross-referenced against
 a real JSON values file, feeding a same-variable .output() call).
-No attempt at GDS parsing, LEF via-stack geometry, or Magic's
-drc/extract/cifinput/connect/compose sections (each its own real,
-separate mini rule-language) -- that's real, separate future work.
-The much larger end goal -- editing/creating/generating arbitrary PDK
-file types, not just reading/displaying them -- is explicit, tracked
-future work, not attempted here.
+Also aggregates one real cell's views across ``libs.ref/<family>/*/``
+(LEF/CDL/SPICE/Verilog/Liberty -- lightweight, real boundary-detection
+parsers for each, not full netlist/behavioral/timing parsers: cell
+name + port list + the real source line range only). No attempt at GDS
+parsing, LEF via-stack geometry, or Magic's drc/extract/cifinput/
+connect/compose sections (each its own real, separate mini
+rule-language) -- that's real, separate future work. The much larger
+end goal -- editing/creating/generating arbitrary PDK file types, not
+just reading/displaying them -- is explicit, tracked future work, not
+attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
     python3 main.py magic-tech            # real Magic .tech parse + KLayout cross-reference
     python3 main.py lef                   # real LEF parse summary (tech layers + macros)
     python3 main.py drc                   # real KLayout DRC-deck rule extraction summary
+    python3 main.py cells                 # real per-cell view aggregation, one family at a time
     python3 main.py gui                   # Overview, Technology, Cells tabs
 """
 
@@ -38,6 +43,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from openpdkcreator.ihp import cells as cells_mod
 from openpdkcreator.ihp import drc as drc_mod
 from openpdkcreator.ihp import fetch as fetch_mod
 from openpdkcreator.ihp import inventory as inventory_mod
@@ -166,6 +172,43 @@ def cmd_drc(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_cells(pdk_root: Path, family: str | None) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    families = cells_mod.discover_families(pdk_root)
+    if not families:
+        print(f"No families found under {pdk_root}/libs.ref/", file=sys.stderr)
+        return 2
+    targets = [family] if family else families
+    for fam in targets:
+        if fam not in families:
+            print(f"Unknown family {fam!r}. Real families: {', '.join(families)}", file=sys.stderr)
+            return 2
+        index = cells_mod.build_cell_index(pdk_root, fam)
+        top_level = sum(1 for cv in index.values() if cv.lef_macro is not None)
+        print(f"=== {fam}: {len(index)} real cell(s) found ({top_level} with a real LEF macro) ===")
+        for name in sorted(index):
+            cv = index[name]
+            views = []
+            if cv.lef_macro:
+                views.append("lef")
+            if cv.cdl_cell:
+                views.append("cdl")
+            if cv.spice_cell:
+                views.append("spice")
+            if cv.verilog_module:
+                views.append("verilog")
+            if cv.liberty_entries:
+                views.append(f"liberty x{len(cv.liberty_entries)}")
+            if cv.gds_present:
+                views.append("gds")
+            print(f"  {name}: {', '.join(views) if views else '(no real view recognized)'}")
+        print()
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -193,6 +236,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
+    cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
+    cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -209,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_lef(args.pdk_root.resolve())
     if args.command == "drc":
         return cmd_drc(args.pdk_root.resolve())
+    if args.command == "cells":
+        return cmd_cells(args.pdk_root.resolve(), args.family)
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

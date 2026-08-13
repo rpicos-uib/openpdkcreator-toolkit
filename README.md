@@ -1,9 +1,13 @@
 # openPDKcreator
 
-A general PDK-authoring toolkit, started from a real, complete PDK
-(IHP's SG13G2, `github.com/IHP-GmbH/IHP-Open-PDK`, Apache-2.0) rather
-than a toy example -- read/represent any PDK's real files first,
-grow toward creating/editing/generating them.
+**Final objective: a wizard to edit and create an open PDK, generally
+-- not specific to any one process.** IHP's real SG13G2
+(`github.com/IHP-GmbH/IHP-Open-PDK`, Apache-2.0) is the *current
+model* this is being built and verified against, not the permanent
+target -- a real, complete PDK instead of a toy example, so every
+parser/editor here is proven against real, messy, full-scale data from
+day one. It will eventually point at other real PDKs too; keep that in
+mind before adding anything that only makes sense for IHP specifically.
 
 A separate, independent project from
 [`OpenPDKCreator`](https://github.com/rpicos-uib/OpenPDKCreator) (the
@@ -24,6 +28,7 @@ python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
+python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gui          # Overview / Technology / Cells tabs (needs a real X11/Xvnc display)
 ```
 
@@ -47,14 +52,17 @@ Tabs are grouped by what they represent, not left flat: **Overview**
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), and **Cells** (real cell/macro
-data -- `LefView`
-directly, since LEF is currently the only real cell-data parser; a
-sub-notebook is the right move once a second one exists, e.g. CDL/
-Liberty/Verilog). No empty **Simulation** top-level group exists yet --
-there's no real parser behind ngspice/xschem/Qucs-S model/schematic
-data yet (see Future Work); adding one now would show fake
-completeness. **Technology**/**Cells** are the pattern a future group
-would repeat once a real parser exists for it.
+data -- **LEF** and **By Cell** as sub-tabs). No empty **Simulation**
+top-level group exists yet -- there's no real parser behind ngspice/
+xschem/Qucs-S model/schematic data yet (see Future Work); adding one
+now would show fake completeness. **Technology**/**Cells** are the
+pattern a future group would repeat once a real parser exists for it.
+
+**By Cell** is the hierarchical, cell-centric view: pick one real
+cell, in one place see which of its real views (LEF/CDL/SPICE/
+Verilog/Liberty/GDS) actually exist, and jump straight to that cell's
+own real block inside each -- rather than hunting across separate,
+per-tool tabs to answer "does this cell even have a Verilog view."
 
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly
@@ -63,7 +71,10 @@ these are real, downloaded third-party PDK files; an **Edit** button
 inside that dialog switches it to editable and reveals **Save**, a
 deliberate two-step confirmation before changing a real foundry file,
 not OpenPDKCreator's own always-editable dialog of the same name.
-Saving only ever touches the local, gitignored `data/` copy.
+Saving only ever touches the local, gitignored `data/` copy. **By
+Cell**'s own "View <format>" buttons use the same dialog, scrolled and
+highlighted straight to that cell's real line range within its
+(often much larger, multi-cell) real source file.
 
 ## What's real here (first increment)
 
@@ -221,6 +232,49 @@ Saving only ever touches the local, gitignored `data/` copy.
   actual data: correct row/form population, New/Delete both work,
   **View Source** opens the exact real file and highlights the right
   lines, and the live diagram/`layer_colors()` both render correctly.
+- **`openpdkcreator/ihp/netlist.py`/`verilog.py`/`liberty.py`** -- real,
+  deliberately lightweight "cell boundary" detectors: real
+  `.subckt`/`.ends` pairs for CDL/SPICE (case-insensitive -- CDL's real
+  files use `.SUBCKT`/`.ENDS`, SPICE's use lowercase, the same lesson
+  as `lef.py`'s `Via`/`ViaRULE` finding), real `module`/`endmodule`
+  pairs for Verilog, and real, brace-depth-counted `cell (NAME) { ...
+  }` groups for Liberty (unlike the other three, a Liberty cell nests
+  further real groups inside it, so a fixed closing keyword doesn't
+  exist -- confirmed by reading the real file). Each is real, bounded
+  scope: cell name + real source line range only, never a full
+  netlist/behavioral/timing parser. Verified for real: all three found
+  exactly 84 real cells in `sg13g2_stdcell`'s combined files, matching
+  LEF's own 84 macros exactly.
+- **`openpdkcreator/ihp/cells.py`** -- aggregates one real cell's views
+  across `libs.ref/<family>/*/` into one `CellViews` record, handling
+  a real, confirmed structural fact: IHP's own families use *two*
+  different real per-view file organizations for the same view kind --
+  `sg13g2_io`/`sg13g2_stdcell` pack every cell into one combined file
+  per view; `sg13g2_sram` instead ships one real file per hard macro
+  (confirmed: 28 real `.cdl` files, one `.SUBCKT` each). Both handled
+  without special-casing either, by scanning every real file under a
+  view directory rather than assuming one. Real result: 84/46/28 real,
+  LEF-backed top-level cells for stdcell/io/sram respectively (matching
+  each family's own real macro count exactly); `sg13g2_sram`'s real
+  netlists alone define **2338** real subckts once internal
+  sub-elements are included (bitcells, sense amps, ... -- only 28 of
+  which are the real, top-level hard macros), confirming the default
+  "top-level only" filter is the right call, not arbitrary. GDS
+  presence is a flag only (no real GDS parser exists -- see Future
+  Work); `sg13g2_pr` (GDS-only, confirmed) correctly indexes to zero
+  real cells, not a bug.
+- **`openpdkcreator/gui/cell_hub_view.py`** -- the **By Cell** tab
+  (`CellHubView`): a family picker, a cell list (LEF/CDL/SPICE/
+  Verilog/Liberty/GDS presence at a glance, a "Show internal sub-cells
+  too" checkbox off by default), and per-view **View** buttons that
+  open the real source file scrolled and highlighted straight to that
+  cell's real line range (`file_view_dialog.view_file_dialog`'s new
+  `focus_start_line`/`focus_end_line` parameters). Verified for real,
+  driven against the actual data: correct counts and view flags across
+  all four real families, `sg13g2_sram`'s full 2338-row "show all"
+  render in 0.18s (no real performance concern), and the CDL/Verilog
+  **View** buttons both land on and highlight the exact real
+  `sg13g2_and2_1` block inside their much larger combined files.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -244,7 +298,9 @@ models, ...), not just read/display layers. Concretely, still open:
 - Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
   `compose` sections (each its own real, separate mini rule-language --
   `drc` and `extract` in particular are the Magic equivalent of
-  KLayout's DRC Ruby DSL), plus GDS, Liberty, and LEF's own `VIA`/
+  KLayout's DRC Ruby DSL), real GDS content (still only a presence flag
+  -- `cells.py`), Liberty's own real pin/timing-arc data (still only
+  real cell *boundaries* -- `liberty.py`), and LEF's own `VIA`/
   `ViaRULE` via-stack geometry -- no generic parser for any of these
   exists yet.
 - Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
@@ -252,14 +308,17 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Write-back serialization: DRC Rules and LEF pins are now genuinely
-  *structured*-editable (add/edit/delete through a real form, not raw
-  text), but purely in-memory -- there's no "Save" that writes an
-  edited rule/pin back into a real, on-disk `.drc`/`.lef` file
-  (`file_view_dialog.py`'s own Save only ever writes a whole file's
-  raw text, never a single parsed item back into its source format).
-  Layers/Magic Tech data stay read-only in their own structured views
-  for the same reason.
+- Write-back serialization: DRC Rules, LEF pins, and Magic Types are
+  now genuinely *structured*-editable (add/edit/delete through a real
+  form, not raw text), but purely in-memory -- there's no "Save" that
+  writes an edited rule/pin/type back into a real, on-disk
+  `.drc`/`.lef`/`.tech` file (`file_view_dialog.py`'s own Save only
+  ever writes a whole file's raw text, never a single parsed item back
+  into its source format). This is the single biggest remaining gap
+  toward the stated final objective -- an editor whose edits vanish on
+  relaunch isn't really an editor yet. Layers/Magic Tech's other five
+  domains/By Cell stay read-only in their own structured views for the
+  same underlying reason.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
@@ -267,9 +326,9 @@ models, ...), not just read/display layers. Concretely, still open:
   and schematics), matching the **Technology**/**Cells** groups'
   pattern -- still inventory-only today (see the Overview tab), no real
   per-format parser exists yet.
-- A CDL/Liberty/Verilog parser to give the **Cells** tab a real second
-  sub-tab alongside LEF (at which point it becomes a sub-notebook, the
-  same shape **Technology** already uses).
+- **By Cell** editing: it's currently read-only (View only, no Edit) --
+  the natural next step once write-back serialization exists for at
+  least one of its real views.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

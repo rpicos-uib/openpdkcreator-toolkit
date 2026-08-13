@@ -19,7 +19,17 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 
-def view_file_dialog(parent: tk.Widget, path: Path) -> None:
+def view_file_dialog(
+    parent: tk.Widget, path: Path,
+    focus_start_line: int | None = None, focus_end_line: int | None = None,
+) -> None:
+    """*focus_start_line*/*focus_end_line* (1-indexed, both optional):
+    when given, scrolls to and highlights that real line range on open
+    -- used by ``cell_hub_view.py`` to jump straight to one real cell's
+    own block inside a much larger, combined per-family file (e.g. a
+    real ``.SUBCKT``/``.ends`` pair 25 lines into an 8000-line
+    ``sg13g2_stdcell.cdl``), rather than making the user hunt for it."""
+
     dialog = tk.Toplevel(parent)
     dialog.title(f"View: {path.name}")
     dialog.geometry("900x700")
@@ -45,6 +55,13 @@ def view_file_dialog(parent: tk.Widget, path: Path) -> None:
     text.insert("1.0", path.read_text(encoding="utf-8", errors="replace"))
     text.configure(state="disabled")
     text.edit_modified(False)
+
+    if focus_start_line is not None:
+        end = focus_end_line if focus_end_line is not None else focus_start_line
+        text.tag_configure("focus_range", background="#fff2a8")
+        text.tag_add("focus_range", f"{focus_start_line}.0", f"{end + 1}.0")
+        text.see(f"{end}.0")
+        text.see(f"{focus_start_line}.0")
 
     button_row = ttk.Frame(dialog)
     button_row.grid(row=3, column=0, sticky="e", padx=8, pady=8)
