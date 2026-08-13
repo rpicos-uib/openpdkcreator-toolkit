@@ -123,10 +123,15 @@ Saving only ever touches the local, gitignored `data/` copy.
   separate technologies -- the `include`d fragments have no own header
   and aren't shown standalone) over six sub-tabs, one per real,
   parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF
-  Layers), plus a **View File** button. Verified for real, driven
-  against the actual downloaded data: all six sub-tabs' row counts
-  match `magic-tech`'s own CLI output exactly, and switching
-  technologies in the picker correctly reloads every sub-tab.
+  Layers), plus a **View File** button. **Types is editable** -- a
+  list + form pane (Plane/Name/Aliases/Obsolete), New/Delete Type, the
+  same commit-on-switch pattern as everywhere else; the other five
+  domains stay read-only for now (each would need its own form).
+  Verified for real, driven against the actual downloaded data: all
+  six sub-tabs' row counts match `magic-tech`'s own CLI output exactly,
+  switching technologies correctly reloads every sub-tab, and editing a
+  real type's name/aliases/obsolete commits immediately and survives a
+  technology switch.
 - **`openpdkcreator/ihp/lef.py`** -- a real (if deliberately partial)
   LEF parser, hand-verified against all 32 of IHP's real, downloaded
   `.lef` files (a tech LEF, `sg13g2_stdcell.lef`/`sg13g2_io.lef`, and
