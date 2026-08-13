@@ -21,6 +21,7 @@ was copied and what (if anything) was adapted.
 pip install pyyaml    # not currently used, but matches the sibling project; harmless to skip for now
 python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, gitignored, run once)
 python3 main.py inventory    # real per-tool file census, printed
+python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
 python3 main.py gui          # Inventory + Layers tabs (needs a real X11/Xvnc display)
 ```
 
@@ -54,6 +55,28 @@ python3 main.py gui          # Inventory + Layers tabs (needs a real X11/Xvnc di
   actual structure against the canonical open_pdks specification
   (confirmed via open_pdks' own README: IHP genuinely follows it), with
   one real naming divergence documented, not glossed over.
+- **`openpdkcreator/ihp/magic_tech.py`** -- a real (if deliberately
+  partial) Magic `.tech` parser, hand-verified against IHP's real,
+  downloaded files: the cleanly tabular sections
+  (`tech`/`version`/`planes`/`types`/`contact`/`aliases`/`styles`) in
+  full, plus one reliable pattern pulled out of the much harder
+  `cifoutput` geometry DSL (every real `layer NAME ... calma L D`
+  recipe -- a genuine Magic-type-name to GDS-layer/datatype mapping).
+  Real `include` resolution confirmed: `ihp-sg13g2.tech` splices in 4
+  fragment files (`cifout`/`cifin`/`drc`/`extract`) as one logical
+  technology; `ihp-sg13g2-GDS.tech` is a second, genuinely separate
+  technology with its own header. `drc`/`extract`/`cifinput`/`connect`/
+  `compose`/`lef`/etc. are honestly reported as not-parsed-this-pass,
+  never silently dropped (`MagicTechnology.unparsed_sections`).
+- **`openpdkcreator/ihp/reconcile.py`** -- cross-references the Magic
+  `cifoutput` GDS mapping above against the KLayout `.lyp` layers
+  (`ihp/layers.py`), both real, independent descriptions of the same
+  fabricated GDS stream. Real result against IHP's actual data:
+  100/377 (GDS layer, datatype) pairs recognized by both; the 277
+  `.lyp`-only pairs are all annotation/QA datatypes (`.label`, `.net`,
+  `.boundary`, `.OPC`, ...) Magic's real fabrication output has no
+  reason to paint -- a real, sensible finding, not a parsing gap (zero
+  Magic-only pairs: everything Magic emits is a real, known layer).
 
 ## Future work
 
@@ -62,13 +85,17 @@ application that can create/edit/generate arbitrary PDK file types
 (Magic technology files, KLayout DRC decks, LEF, GDS, Liberty, SPICE
 models, ...), not just read/display layers. Concretely, still open:
 
-- Deep parsers for Magic `.tech`/DRC Ruby DSL, LEF, GDS, Liberty, and
-  the real KLayout DRC decks -- each a real, separate body of work; no
-  generic parser for any of them exists anywhere in this codebase yet.
+- Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
+  `compose` sections (each its own real, separate mini rule-language --
+  `drc` and `extract` in particular are the Magic equivalent of
+  KLayout's DRC Ruby DSL), plus LEF, GDS, Liberty, and the real
+  KLayout DRC decks -- no generic parser for any of these exists yet.
 - Editing/creating/generating PDK content, not just reading it.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
+- A GUI tab for Magic tech data (types/planes/contacts), matching the
+  existing Layers tab's shape -- `magic-tech` is CLI-only for now.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

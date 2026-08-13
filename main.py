@@ -4,15 +4,21 @@ represent the information, organized by tool -- reusing OpenPDKCreator's
 own Layers interface for displaying/editing real, parsed layer data.
 
 A real, deliberately-scoped first increment (see README.md's Future
-Work): an honest per-tool file inventory (no attempt at deep-parsing
-Magic/LEF/GDS -- no existing parser for those yet, that's real,
-separate future work) plus real KLayout .lyp -> Layer parsing. The
-much larger end goal -- editing/creating/generating arbitrary PDK file
-types, not just reading/displaying layers -- is explicit, tracked
-future work, not attempted here.
+Work): an honest per-tool file inventory, real KLayout .lyp -> Layer
+parsing, and a real (if partial) Magic .tech parser -- its cleanly
+tabular sections (tech/version/planes/types/contact/aliases/styles) in
+full, plus the one reliable pattern extractable from the much harder
+cifoutput geometry DSL (a real Magic-type-name -> GDS-layer/datatype
+mapping), cross-referenced against the KLayout .lyp data above. No
+attempt at LEF/GDS parsing, or at Magic's drc/extract/cifinput/connect/
+compose sections (each its own real, separate mini rule-language) --
+that's real, separate future work. The much larger end goal --
+editing/creating/generating arbitrary PDK file types, not just reading/
+displaying them -- is explicit, tracked future work, not attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
+    python3 main.py magic-tech            # real Magic .tech parse + KLayout cross-reference
     python3 main.py gui                   # Inventory + Layers tabs
 """
 
@@ -24,6 +30,9 @@ from pathlib import Path
 
 from openpdkcreator.ihp import fetch as fetch_mod
 from openpdkcreator.ihp import inventory as inventory_mod
+from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.ihp import magic_tech as magic_tech_mod
+from openpdkcreator.ihp import reconcile as reconcile_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
 
@@ -38,6 +47,54 @@ def cmd_inventory(pdk_root: Path) -> int:
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
         return 2
     inventory_mod.print_inventory(inventory_mod.scan_all(pdk_root))
+    return 0
+
+
+def cmd_magic_tech(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    tech_files = magic_tech_mod.find_tech_files(pdk_root)
+    if not tech_files:
+        print(f"No .tech files found under {pdk_root}/libs.tech/magic/", file=sys.stderr)
+        return 2
+
+    main_tech = None
+    for path in tech_files:
+        tech = magic_tech_mod.parse_tech_file(path)
+        print(f"=== {path.name} ===")
+        print(f"  name: {tech.name or '(fragment, no own tech/version header)'}  format: {tech.format}")
+        if tech.version:
+            print(f"  version {tech.version} -- {tech.description}  (requires {tech.requires})")
+        if tech.included_files:
+            print(f"  includes: {', '.join(tech.included_files)}")
+        print(
+            f"  planes:{len(tech.planes)}  types:{len(tech.types)}  "
+            f"contacts:{len(tech.contacts)}  aliases:{len(tech.aliases)}  "
+            f"styles:{len(tech.styles)}  cif_layers:{len(tech.cif_layers)}"
+        )
+        if tech.unparsed_sections:
+            print(f"  not parsed this pass: {', '.join(tech.unparsed_sections)}")
+        print()
+        if tech.included_files and main_tech is None:
+            # The one file that includes others is the real, primary
+            # technology -- the only one worth cross-referencing
+            # against the .lyp (ihp-sg13g2-GDS.tech is a genuinely
+            # separate, second technology -- see magic_tech.py's
+            # own docstring).
+            main_tech = tech
+
+    if main_tech is None:
+        return 0
+
+    lyp_path = layers_mod.find_lyp(pdk_root)
+    if lyp_path is None:
+        return 0
+    lyp_layers = layers_mod.import_layers(pdk_root, lyp_path)
+    print(f"--- Cross-reference: {main_tech.source_path.name}'s cifoutput vs. {lyp_path.name} ---")
+    report = reconcile_mod.reconcile(lyp_layers, main_tech)
+    reconcile_mod.print_report(report)
     return 0
 
 
@@ -65,6 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser = sub.add_parser("fetch", help="Download the real IHP PDK.")
     fetch_parser.add_argument("--dest", type=Path, default=fetch_mod.DEFAULT_DEST)
     sub.add_parser("inventory", help="Print a per-tool file inventory.")
+    sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
     sub.add_parser("gui", help="Open the Inventory + Layers GUI.")
     return parser
 
@@ -75,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_fetch(args.dest)
     if args.command == "inventory":
         return cmd_inventory(args.pdk_root.resolve())
+    if args.command == "magic-tech":
+        return cmd_magic_tech(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

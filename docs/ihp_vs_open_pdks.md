@@ -56,10 +56,16 @@ view), which the spec's own `...` already anticipates.
 netgen, ngspice, openems, openroad, palace, parasitics, qucs-s,
 verilog-a, xschem, xyce`. Confirmed real, representative counts (via
 `openpdkcreator/ihp/inventory.py`, run against the real download):
-`magic/` has 35 files including 6 real `.tech` files (`ihp-sg13g2.tech`,
-`ihp-sg13g2-{GDS,cifin,cifout,drc,extract}.tech` -- the technology is
-genuinely split across purpose-specific files, not one monolithic
-`.tech`); `klayout/` has 548 files including a real,
+`magic/` has 35 files including 6 real `.tech` files. Confirmed by
+actually reading them (see `openpdkcreator/ihp/magic_tech.py`): only
+2 are genuinely separate technologies -- `ihp-sg13g2.tech` (the real,
+connectivity-aware one) and `ihp-sg13g2-GDS.tech` (a second, simpler
+"raw GDS layers" one, its own real `tech`/`version` header, used for
+DRC/fill-pattern work that doesn't need connectivity). The other 4
+(`ihp-sg13g2-{cifout,cifin,drc,extract}.tech`) are real *fragments*,
+each self-wrapped in its own section keyword but spliced into
+`ihp-sg13g2.tech` via real `include NAME` statements -- not standalone
+technologies of their own. `klayout/` has 548 files including a real,
 flat (see below) `sg13g2.lyp` and 42 real `.drc` files under
 `tech/drc/` (`ihp-sg13g2.drc` plus 41 more under `rule_decks/`).
 `digital/` and `palace/` are real git submodules IHP references but
@@ -88,3 +94,26 @@ miss): **zero** `<group-members>` blocks found; all 377 real
 `import_open_pdks.py`) is confirmed correct for this specific file --
 `find_group_members()` still checks and warns for any future `.lyp`
 where that isn't true.
+
+## Magic .tech vs. KLayout .lyp: two real, independent views of the same GDS stream
+
+`openpdkcreator/ihp/magic_tech.py` parses `ihp-sg13g2.tech`'s real
+`cifoutput` section (every `layer NAME ... calma L D` recipe -- 248
+real named entries, 138 real `calma` output statements) into a
+Magic-type-name -> (GDS layer, GDS datatype) mapping, independently of
+the `.lyp`-derived one. `openpdkcreator/ihp/reconcile.py` cross-checks
+them against each other -- both describe the same real, fabricated GDS
+stream, from two different tools' own points of view.
+
+Real result: **100 of the `.lyp`'s 377 (layer, datatype) pairs** have a
+matching Magic `cifoutput` `calma` statement. The other 277 are, on
+inspection, entirely explained: `.label`, `.net`, `.boundary`, `.OPC`,
+`.iOPC`, `.noqrc`, `.pin`, `.text`, `.mask`, `.slit`, `.iprobe`,
+`.diffprb`, `.filler`, `.nofill`, and similar suffixes -- KLayout's own
+annotation/verification/QA datatypes, which Magic's real fabrication
+output has no reason to ever paint. **Zero pairs exist only in Magic's
+`cifoutput`** -- everything Magic emits is a real, already-known
+`.lyp` layer. This is a real, sensible finding about how the two
+tools' layer vocabularies differ in *scope* (KLayout enumerates every
+GDS datatype used for any purpose; Magic's `cifoutput` only defines
+what it needs to actually paint), not a parsing gap in either parser.
