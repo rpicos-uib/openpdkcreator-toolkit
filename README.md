@@ -26,6 +26,19 @@ python3 main.py lef          # real LEF parse summary: tech layers + macro/cell 
 python3 main.py gui          # Overview / Technology / Cells tabs (needs a real X11/Xvnc display)
 ```
 
+`main.py gui` needs a real X11/Xvnc display -- this host has none locally (no
+`Xvfb`/`xvfb-run`, `$DISPLAY` unset), confirmed by trying `export DISPLAY=...`
+directly and getting nothing. `./start_eda_container.sh --gui` starts (or
+reattaches to) a dedicated IIC-OSIC-TOOLS container with one, then launches
+`main.py gui` inside it, real `data/` bind-mounted through -- no manual file
+copying needed. Open the printed `http://127.0.0.1:<port>/?password=...` URL
+in a browser (the `127.0.0.1` form specifically -- see the script's own
+header comment for why `localhost` doesn't work under rootless Podman's
+`pasta` network backend). Uses its own container name and ports (distinct
+from `OpenPDKCreator`'s own `scripts/start_eda_container.sh`), so both
+projects' containers can run at once without colliding -- confirmed by
+running both side by side for real.
+
 ## GUI structure
 
 Tabs are grouped by what they represent, not left flat: **Overview**
@@ -127,6 +140,18 @@ would repeat once a real parser exists for it.
   correct counts across `sg13g2_io.lef` (22 macros)/`sg13g2_stdcell.lef`
   (84 macros)/a real SRAM macro, and selecting `sg13g2_and2_1` shows
   its exact 5 real pins.
+- **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
+  script of the same name, not copied verbatim: its own container name
+  and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
+  5902 -- `IIC-OSIC-TOOLS/start_vnc.sh` only falls back to its own
+  defaults when those env vars are unset, confirmed by reading it
+  directly) so both projects' containers coexist without colliding
+  (confirmed by running both at once for real); mounts
+  `openPDKcreator/` itself straight to `/foss/designs`, not its parent
+  (no reason to expose the rest of the monorepo). `./start_eda_container.sh
+  --gui` verified for real: container created, `main.py gui` launched
+  inside it, real `data/` visible bind-mounted through, sibling
+  project's own container unaffected.
 
 ## Future work
 
