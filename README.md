@@ -22,20 +22,24 @@ pip install pyyaml    # not currently used, but matches the sibling project; har
 python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, gitignored, run once)
 python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
-python3 main.py gui          # Overview + Technology (Layers, Magic Tech) tabs (needs a real X11/Xvnc display)
+python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
+python3 main.py gui          # Overview / Technology / Cells tabs (needs a real X11/Xvnc display)
 ```
 
 ## GUI structure
 
 Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
-ones with no dedicated view yet) and **Technology** (process/
-technology-definition data specifically -- **Layers** and **Magic
-Tech** as sub-tabs, one per tool that defines it). No empty "Cells"/
-"Simulation" top-level group exists yet -- there's no real parser
-behind either domain yet (see Future Work); adding one now would show
-fake completeness. **Technology** is the pattern a future group would
-repeat once a real parser exists for it.
+ones with no dedicated view yet), **Technology** (process/technology-
+definition data -- **Layers** and **Magic Tech** as sub-tabs, one per
+tool that defines it), and **Cells** (real cell/macro data -- `LefView`
+directly, since LEF is currently the only real cell-data parser; a
+sub-notebook is the right move once a second one exists, e.g. CDL/
+Liberty/Verilog). No empty **Simulation** top-level group exists yet --
+there's no real parser behind ngspice/xschem/Qucs-S model/schematic
+data yet (see Future Work); adding one now would show fake
+completeness. **Technology**/**Cells** are the pattern a future group
+would repeat once a real parser exists for it.
 
 ## What's real here (first increment)
 
@@ -99,6 +103,30 @@ repeat once a real parser exists for it.
   actual downloaded data: all six sub-tabs' row counts match
   `magic-tech`'s own CLI output exactly, and switching technologies in
   the picker correctly reloads every sub-tab.
+- **`openpdkcreator/ihp/lef.py`** -- a real (if deliberately partial)
+  LEF parser, hand-verified against all 32 of IHP's real, downloaded
+  `.lef` files (a tech LEF, `sg13g2_stdcell.lef`/`sg13g2_io.lef`, and
+  28 real SRAM hard-macro LEFs). Fully parses tech-LEF `LAYER`s (type/
+  direction/pitch/width/one simple spacing value/resistance), `SITE`s,
+  and real `MACRO`s (class/size/site/symmetry) with their `PIN`s
+  (direction/use/port layers+rect counts) and `OBS` layers. Found and
+  handled a real, easy-to-miss detail: this file's actual via keywords
+  are mixed-case (`Via`, `ViaRULE`), not `VIA`/`VIARULE` as the LEF
+  spec's usual all-uppercase convention might suggest -- confirmed by
+  reading the real file, not assumed; the parser matches keywords
+  case-insensitively throughout. `VIA`/`ViaRULE` bodies (real via-stack
+  geometry) are deliberately not parsed -- names recorded, bodies
+  honestly skipped. Every value hand-checked against the real source:
+  `sg13g2_a21o_1`'s 6 real pins (name/direction/use/rect-count each),
+  a real SRAM macro's 113 real pins, `sg13g2_tech.lef`'s 19 real
+  layers/70 real vias/6 real via-rules.
+- **`openpdkcreator/gui/lef_view.py`** -- a Cells tab (`LefView`): a
+  file picker over all 32 real `.lef` files, with LEF Layers and LEF
+  Macros sub-tabs (the latter: a macro list, selecting one shows its
+  real pins). Verified for real, driven against the actual data:
+  correct counts across `sg13g2_io.lef` (22 macros)/`sg13g2_stdcell.lef`
+  (84 macros)/a real SRAM macro, and selecting `sg13g2_and2_1` shows
+  its exact 5 real pins.
 
 ## Future work
 
@@ -110,18 +138,20 @@ models, ...), not just read/display layers. Concretely, still open:
 - Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
   `compose` sections (each its own real, separate mini rule-language --
   `drc` and `extract` in particular are the Magic equivalent of
-  KLayout's DRC Ruby DSL), plus LEF, GDS, Liberty, and the real
-  KLayout DRC decks -- no generic parser for any of these exists yet.
+  KLayout's DRC Ruby DSL), plus GDS, Liberty, real KLayout DRC decks,
+  and LEF's own `VIA`/`ViaRULE` via-stack geometry -- no generic
+  parser for any of these exists yet.
 - Editing/creating/generating PDK content, not just reading it.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
-- A **Cells** top-level GUI group (`libs.ref/<family>/<view>/` --
-  CDL/LEF/Liberty/Verilog/spice cell libraries) and a **Simulation**
-  one (ngspice/xschem/Qucs-S models and schematics), matching the
-  **Technology** group's pattern -- both still inventory-only today
-  (see the Overview tab), no real per-format parser exists for either
-  yet.
+- A **Simulation** top-level GUI group (ngspice/xschem/Qucs-S models
+  and schematics), matching the **Technology**/**Cells** groups'
+  pattern -- still inventory-only today (see the Overview tab), no real
+  per-format parser exists yet.
+- A CDL/Liberty/Verilog parser to give the **Cells** tab a real second
+  sub-tab alongside LEF (at which point it becomes a sub-notebook, the
+  same shape **Technology** already uses).
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

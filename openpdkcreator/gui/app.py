@@ -7,14 +7,19 @@ grouped by what they actually represent rather than left flat:
 - **Technology** -- process/technology-definition data specifically,
   one sub-tab per tool that defines it: **Layers** (KLayout's real
   ``.lyp``) and **Magic Tech** (Magic's real ``.tech`` files).
+- **Cells** -- real cell/macro data (``LefView``, currently LEF only --
+  tech-layer routing rules plus real macro/cell footprints with real
+  pins). Hosts ``LefView`` directly rather than nesting it inside
+  another single-item sub-notebook (``LefView`` already has its own
+  file picker and Layers/Macros sub-tabs) -- a sub-notebook is the
+  right move once a second real cell-data source exists (CDL/Liberty/
+  Verilog -- see README.md's Future Work), not for one.
 
-Deliberately no "Cells"/"Simulation" top-level group yet -- there's no
-real parser behind either domain (libs.ref/'s cell libraries and
-libs.tech/{ngspice,xschem,...}'s simulation models are both still
+Deliberately no "Simulation" top-level group yet -- there's no real
+parser behind ngspice/xschem/Qucs-S model/schematic data yet (still
 inventory-only, see the Overview tab) -- adding an empty tab for a
 domain nothing here actually reads yet would show fake completeness.
-The **Technology** group above is the pattern to repeat once one
-exists (see README.md's Future Work).
+**Technology**/**Cells** are the pattern to repeat once one exists.
 
 ``ProjectState`` is the smallest possible object ``LayersView`` (copied
 verbatim from OpenPDKCreator) needs -- just ``layers``/
@@ -31,6 +36,7 @@ from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..models import Layer
 from .layers_view import LayersView
+from .lef_view import LefView
 from .magic_tech_view import MagicTechView
 
 
@@ -61,6 +67,7 @@ class App(ttk.Frame):
 
         self._build_overview_tab()
         self._build_technology_group()
+        self._build_cells_group()
 
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", side="bottom")
@@ -109,6 +116,14 @@ class App(ttk.Frame):
         self.technology_notebook.add(magic_tech_frame, text="Magic Tech")
         self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root)
         self.magic_tech_view.pack(fill="both", expand=True)
+
+    # -- Cells group (LEF) --------------------------------------------------
+
+    def _build_cells_group(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Cells")
+        self.lef_view = LefView(frame, self.pdk_root)
+        self.lef_view.pack(fill="both", expand=True)
 
     # -- data loading ---------------------------------------------------------
 

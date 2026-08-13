@@ -5,21 +5,25 @@ own Layers interface for displaying/editing real, parsed layer data.
 
 A real, deliberately-scoped first increment (see README.md's Future
 Work): an honest per-tool file inventory, real KLayout .lyp -> Layer
-parsing, and a real (if partial) Magic .tech parser -- its cleanly
-tabular sections (tech/version/planes/types/contact/aliases/styles) in
-full, plus the one reliable pattern extractable from the much harder
+parsing, a real (if partial) Magic .tech parser -- its cleanly tabular
+sections (tech/version/planes/types/contact/aliases/styles) in full,
+plus the one reliable pattern extractable from the much harder
 cifoutput geometry DSL (a real Magic-type-name -> GDS-layer/datatype
-mapping), cross-referenced against the KLayout .lyp data above. No
-attempt at LEF/GDS parsing, or at Magic's drc/extract/cifinput/connect/
-compose sections (each its own real, separate mini rule-language) --
-that's real, separate future work. The much larger end goal --
-editing/creating/generating arbitrary PDK file types, not just reading/
-displaying them -- is explicit, tracked future work, not attempted here.
+mapping), cross-referenced against the KLayout .lyp data above -- and a
+real LEF parser (tech-LEF layers plus real macro/cell footprints:
+class/size/site/symmetry, PINs with direction/use/port layers+rect
+counts, OBS layers). No attempt at GDS parsing, LEF via-stack geometry,
+or Magic's drc/extract/cifinput/connect/compose sections (each its own
+real, separate mini rule-language) -- that's real, separate future
+work. The much larger end goal -- editing/creating/generating arbitrary
+PDK file types, not just reading/displaying them -- is explicit,
+tracked future work, not attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
     python3 main.py magic-tech            # real Magic .tech parse + KLayout cross-reference
-    python3 main.py gui                   # Inventory + Layers tabs
+    python3 main.py lef                   # real LEF parse summary (tech layers + macros)
+    python3 main.py gui                   # Overview, Technology, Cells tabs
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from pathlib import Path
 from openpdkcreator.ihp import fetch as fetch_mod
 from openpdkcreator.ihp import inventory as inventory_mod
 from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.ihp import lef as lef_mod
 from openpdkcreator.ihp import magic_tech as magic_tech_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
 
@@ -98,6 +103,40 @@ def cmd_magic_tech(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_lef(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    lef_files = lef_mod.find_lef_files(pdk_root)
+    if not lef_files:
+        print(f"No .lef files found under {pdk_root}/libs.ref/*/lef/", file=sys.stderr)
+        return 2
+
+    total_macros = 0
+    total_layers = 0
+    for path in lef_files:
+        parsed = lef_mod.parse_lef_file(path)
+        total_macros += len(parsed.macros)
+        total_layers += len(parsed.layers)
+        detail = []
+        if parsed.layers:
+            detail.append(f"{len(parsed.layers)} tech layer(s)")
+        if parsed.sites:
+            detail.append(f"{len(parsed.sites)} site(s)")
+        if parsed.macros:
+            pin_total = sum(len(m.pins) for m in parsed.macros)
+            detail.append(f"{len(parsed.macros)} macro(s), {pin_total} pin(s) total")
+        if parsed.via_names:
+            detail.append(f"{len(parsed.via_names)} via def(s) (bodies not parsed)")
+        if parsed.via_rule_names:
+            detail.append(f"{len(parsed.via_rule_names)} viarule(s) (bodies not parsed)")
+        print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
+
+    print(f"\n{len(lef_files)} real .lef file(s): {total_layers} tech layer(s), {total_macros} macro(s) total.")
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -123,7 +162,8 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser.add_argument("--dest", type=Path, default=fetch_mod.DEFAULT_DEST)
     sub.add_parser("inventory", help="Print a per-tool file inventory.")
     sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
-    sub.add_parser("gui", help="Open the Inventory + Layers GUI.")
+    sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
+    sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
 
@@ -135,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_inventory(args.pdk_root.resolve())
     if args.command == "magic-tech":
         return cmd_magic_tech(args.pdk_root.resolve())
+    if args.command == "lef":
+        return cmd_lef(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

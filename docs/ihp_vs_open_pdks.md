@@ -117,3 +117,27 @@ output has no reason to ever paint. **Zero pairs exist only in Magic's
 tools' layer vocabularies differ in *scope* (KLayout enumerates every
 GDS datatype used for any purpose; Magic's `cifoutput` only defines
 what it needs to actually paint), not a parsing gap in either parser.
+
+## Real LEF keyword casing note
+
+`openpdkcreator/ihp/lef.py` was checked against all 32 of IHP's real,
+downloaded `.lef` files. Most LEF keywords in these real files are
+uppercase, matching the LEF spec's usual documented convention (`LAYER`,
+`MACRO`, `PIN`, `SITE`, `PORT`, `OBS`, `CLASS`, `SIZE`, `SYMMETRY`,
+`DIRECTION`, `USE`, `RECT`, ...) -- but the real via keywords are
+mixed-case: `Via  Via1_XX DEFAULT` and `ViaRULE via1Array GENERATE`,
+never `VIA`/`VIARULE`. The LEF spec itself says keywords are
+case-insensitive; this real file is evidence a real foundry generator
+actually relies on that (a different generator script likely emitted
+the via definitions than emitted the rest of `sg13g2_tech.lef`, going
+by the formatting/spacing differences around them). The parser matches
+every keyword case-insensitively for exactly this reason, rather than
+assuming the spec's uppercase convention always holds.
+
+Also confirmed real, not a bug: two of IHP's real macro/cell LEFs
+(`sg13g2_io.lef`, `sg13g2_stdcell.lef`) define zero tech `LAYER`s (pure
+macro libraries -- the tech-specific `LAYER`/`VIA`/`ViaRULE` data lives
+only in the separate `sg13g2_tech.lef`), and `sg13g2_io.lef` defines
+**two** real `SITE`s (`sg13g2_ioSite` and `sg13g2_cornerSite` -- IO
+pads and corner cells use different row heights than core standard
+cells' `CoreSite`), not one.
