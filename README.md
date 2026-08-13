@@ -146,11 +146,29 @@ Saving only ever touches the local, gitignored `data/` copy.
   layers/70 real vias/6 real via-rules.
 - **`openpdkcreator/gui/lef_view.py`** -- a Cells tab (`LefView`): a
   file picker over all 32 real `.lef` files, with LEF Layers and LEF
-  Macros sub-tabs (the latter: a macro list, selecting one shows its
-  real pins), plus a **View File** button. Verified for real, driven
-  against the actual data: correct counts across `sg13g2_io.lef` (22
-  macros)/`sg13g2_stdcell.lef` (84 macros)/a real SRAM macro, and
-  selecting `sg13g2_and2_1` shows its exact 5 real pins.
+  Macros sub-tabs (the latter: a macro list; selecting one shows its
+  real pins, **editable** -- Name/Direction/Use via a form, New/Delete
+  Pin, the same commit-on-switch pattern `LayersView`/`RulesView`
+  already use), plus a **View File** button. Port geometry (real drawn
+  rectangles) stays display-only -- editing raw geometry is a real,
+  separate, much bigger feature. Direction/Use are free-typable
+  comboboxes, not `readonly` like `LayersView`'s/`RulesView`'s own --
+  IHP's real data only has 3 real `USE` values (`SIGNAL`/`POWER`/
+  `GROUND`) and 3 real pin `DIRECTION`s (`INPUT`/`OUTPUT`/`INOUT`,
+  confirmed by grepping the real files), but other real, standard LEF
+  PDKs can have more (e.g. `CLOCK`), so the field isn't artificially
+  closed. **A real bug found and fixed while building this**: a
+  combobox's own `<<ComboboxSelected>>` event only fires on a dropdown
+  *pick* -- a typed or programmatic value change silently never
+  committed without also tracing the variable's own `write` event
+  (confirmed by a real, driven test: `.set("POWER")` didn't take effect
+  until a later, unrelated commit-on-switch happened to also read the
+  same, by-then-updated variable). Verified for real, driven against
+  the actual data: correct counts across `sg13g2_io.lef` (22 macros)/
+  `sg13g2_stdcell.lef` (84 macros)/a real SRAM macro; editing a real
+  pin's name/use commits immediately and survives a macro switch; New/
+  Delete Pin both work, including the empty-macro edge case (delete
+  every pin, then add one back).
 - **`openpdkcreator/gui/file_view_dialog.py`** -- the shared **View
   File** dialog wired into all three file-backed tabs above: opens the
   real, selected source file read-only; its own **Edit** button
@@ -229,11 +247,14 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Editing/creating/generating PDK content in a *structured* way (e.g.
-  adding a real LEF pin through a form, not raw text) -- the real gap
-  left after `file_view_dialog.py`'s raw View/Edit/Save, which only
-  ever edits a whole file's text, never a single parsed item with
-  write-back serialization.
+- Write-back serialization: DRC Rules and LEF pins are now genuinely
+  *structured*-editable (add/edit/delete through a real form, not raw
+  text), but purely in-memory -- there's no "Save" that writes an
+  edited rule/pin back into a real, on-disk `.drc`/`.lef` file
+  (`file_view_dialog.py`'s own Save only ever writes a whole file's
+  raw text, never a single parsed item back into its source format).
+  Layers/Magic Tech data stay read-only in their own structured views
+  for the same reason.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
