@@ -7,9 +7,11 @@ picker since they were never meant to be viewed standalone).
 
 A sub-`Notebook` per real, tabular data domain (planes/types/contacts/
 aliases/styles/CIF layers) -- matching the six things
-``MagicTechnology`` actually parses. Read-only: unlike the Layers tab,
-nothing here is meant to be hand-edited yet (see this project's own
-README Future Work).
+``MagicTechnology`` actually parses. The parsed tables themselves stay
+read-only (editing them would need write-back serialization this
+project doesn't have yet -- see README's Future Work); "View File"
+opens the real, underlying ``.tech`` file directly
+(``file_view_dialog.view_file_dialog``), which *can* be edited.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import magic_tech as magic_tech_mod
+from .file_view_dialog import view_file_dialog
 
 
 class MagicTechView(ttk.Frame):
@@ -40,6 +43,8 @@ class MagicTechView(ttk.Frame):
         self.tech_combo = ttk.Combobox(top, textvariable=self.tech_var, state="readonly", width=24)
         self.tech_combo.pack(side="left", padx=(4, 12))
         self.tech_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+
+        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -63,6 +68,11 @@ class MagicTechView(ttk.Frame):
             tree.column(col, width=width, anchor="w")
         tree.pack(fill="both", expand=True)
         return tree
+
+    def _view_file(self):
+        tech = self.technologies.get(self.tech_var.get())
+        if tech is not None:
+            view_file_dialog(self, tech.source_path)
 
     # -- data ---------------------------------------------------------------
 

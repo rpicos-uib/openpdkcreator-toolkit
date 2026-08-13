@@ -21,6 +21,12 @@ inventory-only, see the Overview tab) -- adding an empty tab for a
 domain nothing here actually reads yet would show fake completeness.
 **Technology**/**Cells** are the pattern to repeat once one exists.
 
+Every real file-backed tab (Layers, Magic Tech, Cells) has a
+**View File** button opening the real, underlying file directly via
+``file_view_dialog.view_file_dialog`` -- read-only until its own
+**Edit** button is clicked, since these are real, downloaded
+third-party PDK files, not this project's own code.
+
 ``ProjectState`` is the smallest possible object ``LayersView`` (copied
 verbatim from OpenPDKCreator) needs -- just ``layers``/
 ``sorted_layers()`` -- so that tab works completely unmodified.
@@ -35,6 +41,7 @@ from tkinter import ttk
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..models import Layer
+from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
 from .magic_tech_view import MagicTechView
@@ -57,6 +64,7 @@ class App(ttk.Frame):
         self.root = root
         self.pdk_root = pdk_root
         self.project = ProjectState()
+        self.lyp_path: Path | None = None
 
         root.title(f"openPDKcreator -- {pdk_root}")
         root.geometry("1100x650")
@@ -109,6 +117,9 @@ class App(ttk.Frame):
 
         layers_frame = ttk.Frame(self.technology_notebook)
         self.technology_notebook.add(layers_frame, text="Layers")
+        layers_toolbar = ttk.Frame(layers_frame)
+        layers_toolbar.pack(fill="x", padx=8, pady=(8, 0))
+        ttk.Button(layers_toolbar, text="View File", command=self._view_lyp_file).pack(side="left")
         self.layers_view = LayersView(layers_frame, self)
         self.layers_view.pack(fill="both", expand=True)
 
@@ -116,6 +127,10 @@ class App(ttk.Frame):
         self.technology_notebook.add(magic_tech_frame, text="Magic Tech")
         self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root)
         self.magic_tech_view.pack(fill="both", expand=True)
+
+    def _view_lyp_file(self):
+        if self.lyp_path is not None:
+            view_file_dialog(self, self.lyp_path)
 
     # -- Cells group (LEF) --------------------------------------------------
 
@@ -134,6 +149,7 @@ class App(ttk.Frame):
         if lyp_path is None:
             self.status.set(f"No .lyp found under {self.pdk_root}/libs.tech/ -- has ihp/fetch.py been run?")
             return
+        self.lyp_path = lyp_path
 
         group_members = layers_mod.find_group_members(lyp_path)
         parsed = layers_mod.import_layers(self.pdk_root, lyp_path)

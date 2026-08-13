@@ -10,7 +10,10 @@ fixed set of "the real ones" to enumerate; every real ``.lef`` under
 Two sub-tabs per file: **LEF Layers** (tech-LEF routing/cut layers --
 empty for a macro-only LEF, real and correct, not a bug) and
 **LEF Macros** (a macro list; selecting one shows its real pins on the
-right). Read-only for now, matching the Magic Tech tab.
+right). The parsed tables stay read-only (no write-back serialization
+yet -- see README's Future Work); "View File" opens the real,
+selected ``.lef`` file directly (``file_view_dialog.view_file_dialog``),
+which *can* be edited.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import lef as lef_mod
+from .file_view_dialog import view_file_dialog
 
 
 class LefView(ttk.Frame):
@@ -42,6 +46,8 @@ class LefView(ttk.Frame):
         self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+
+        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -95,6 +101,11 @@ class LefView(ttk.Frame):
             self.pins_tree.heading(col, text=col.replace("_", " ").title())
             self.pins_tree.column(col, width=width, anchor="w")
         self.pins_tree.grid(row=0, column=0, sticky="nsew")
+
+    def _view_file(self):
+        path = self.lef_files.get(self.file_var.get())
+        if path is not None:
+            view_file_dialog(self, path)
 
     # -- data ---------------------------------------------------------------
 

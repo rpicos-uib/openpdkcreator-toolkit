@@ -54,6 +54,15 @@ data yet (see Future Work); adding one now would show fake
 completeness. **Technology**/**Cells** are the pattern a future group
 would repeat once a real parser exists for it.
 
+Every real file-backed tab (Layers, Magic Tech, Cells) has a
+**View File** button opening the real, underlying file directly
+(`file_view_dialog.view_file_dialog`) -- read-only at first, since
+these are real, downloaded third-party PDK files; an **Edit** button
+inside that dialog switches it to editable and reveals **Save**, a
+deliberate two-step confirmation before changing a real foundry file,
+not OpenPDKCreator's own always-editable dialog of the same name.
+Saving only ever touches the local, gitignored `data/` copy.
+
 ## What's real here (first increment)
 
 - **`openpdkcreator/ihp/fetch.py`** -- a real, depth-1, sparse-checkout
@@ -112,10 +121,10 @@ would repeat once a real parser exists for it.
   separate technologies -- the `include`d fragments have no own header
   and aren't shown standalone) over six sub-tabs, one per real,
   parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF
-  Layers). Read-only for now. Verified for real, driven against the
-  actual downloaded data: all six sub-tabs' row counts match
-  `magic-tech`'s own CLI output exactly, and switching technologies in
-  the picker correctly reloads every sub-tab.
+  Layers), plus a **View File** button. Verified for real, driven
+  against the actual downloaded data: all six sub-tabs' row counts
+  match `magic-tech`'s own CLI output exactly, and switching
+  technologies in the picker correctly reloads every sub-tab.
 - **`openpdkcreator/ihp/lef.py`** -- a real (if deliberately partial)
   LEF parser, hand-verified against all 32 of IHP's real, downloaded
   `.lef` files (a tech LEF, `sg13g2_stdcell.lef`/`sg13g2_io.lef`, and
@@ -136,10 +145,21 @@ would repeat once a real parser exists for it.
 - **`openpdkcreator/gui/lef_view.py`** -- a Cells tab (`LefView`): a
   file picker over all 32 real `.lef` files, with LEF Layers and LEF
   Macros sub-tabs (the latter: a macro list, selecting one shows its
-  real pins). Verified for real, driven against the actual data:
-  correct counts across `sg13g2_io.lef` (22 macros)/`sg13g2_stdcell.lef`
-  (84 macros)/a real SRAM macro, and selecting `sg13g2_and2_1` shows
-  its exact 5 real pins.
+  real pins), plus a **View File** button. Verified for real, driven
+  against the actual data: correct counts across `sg13g2_io.lef` (22
+  macros)/`sg13g2_stdcell.lef` (84 macros)/a real SRAM macro, and
+  selecting `sg13g2_and2_1` shows its exact 5 real pins.
+- **`openpdkcreator/gui/file_view_dialog.py`** -- the shared **View
+  File** dialog wired into all three file-backed tabs above: opens the
+  real, selected source file read-only; its own **Edit** button
+  switches it editable and reveals **Save** (writes the real, local
+  file after an explicit confirmation). Verified for real, driven
+  against the actual data across all three tabs (Layers/Magic Tech/
+  Cells): correct file opened in each case, Edit correctly flips the
+  Text widget and Save button state, and a real save-to-a-scratch-copy
+  round trip confirmed the write is byte-exact (a prepended marker
+  line, the rest of the file untouched) -- the real, fetched `data/`
+  itself was never touched by this verification.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -166,7 +186,11 @@ models, ...), not just read/display layers. Concretely, still open:
   KLayout's DRC Ruby DSL), plus GDS, Liberty, real KLayout DRC decks,
   and LEF's own `VIA`/`ViaRULE` via-stack geometry -- no generic
   parser for any of these exists yet.
-- Editing/creating/generating PDK content, not just reading it.
+- Editing/creating/generating PDK content in a *structured* way (e.g.
+  adding a real LEF pin through a form, not raw text) -- the real gap
+  left after `file_view_dialog.py`'s raw View/Edit/Save, which only
+  ever edits a whole file's text, never a single parsed item with
+  write-back serialization.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
