@@ -23,6 +23,13 @@ a real bug, found and fixed while adding cross-tab persistence, would
 otherwise silently discard any in-memory pin edits the moment the file
 combo was switched away and back (it re-parsed fresh every time,
 confirmed by a real, driven test before the cache existed).
+
+Saved pin edits (``project_io.py``) apply lazily, per file, the moment
+that file is first parsed this session (``saved_pin_overrides`` +
+``_apply_saved_overrides``) -- since only the currently-selected file
+is ever actually parsed, a saved override for a file the user hasn't
+visited yet needs to wait for that first parse rather than being
+applied all at once at startup.
 """
 
 from __future__ import annotations
@@ -52,6 +59,13 @@ class LefView(ttk.Frame):
         self.current_macro: lef_mod.LefMacro | None = None
         self.current_pin: lef_mod.LefPin | None = None
         self._suspend_trace = False
+        # relpath (matching self.lef_files' own keys) -> macro name ->
+        # saved pins, applied the moment a file is first parsed (see
+        # apply_saved_pin_overrides/project_io.py) -- lets a saved
+        # override reach a file that hasn't been visited yet this
+        # session, since only the current file combo selection is
+        # actually parsed at any given time.
+        self.saved_pin_overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
 
         self._build()
         self.load()
@@ -181,6 +195,46 @@ class LefView(ttk.Frame):
         if path is not None:
             view_file_dialog(self, path)
 
+    # -- persistence hooks (project_io.py) -----------------------------------
+
+    def commit_pending_edits(self):
+        """Flushes whatever's mid-edit in the pin form into its
+        ``LefPin`` before the caller reads/saves state."""
+
+        self._commit_form_to_pin()
+
+    def collect_pin_overrides(self) -> dict[str, dict[str, list[lef_mod.LefPin]]]:
+        """Every macro's current pin list, for every ``.lef`` file
+        parsed so far this session (files never visited via the file
+        combo are still exactly their real, on-disk starting state, so
+        there's nothing to save for them)."""
+
+        relpath_by_path = {path: relpath for relpath, path in self.lef_files.items()}
+        overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
+        for path, parsed in self._parsed_cache.items():
+            relpath = relpath_by_path.get(path)
+            if relpath is None:
+                continue
+            overrides[relpath] = {macro.name: macro.pins for macro in parsed.macros}
+        return overrides
+
+    def _apply_saved_overrides(self, relpath: str, parsed: lef_mod.LefFile):
+        macro_overrides = self.saved_pin_overrides.get(relpath)
+        if not macro_overrides:
+            return
+        macros_by_name = {macro.name: macro for macro in parsed.macros}
+        for macro_name, pins in macro_overrides.items():
+            macro = macros_by_name.get(macro_name)
+            if macro is not None:
+                macro.pins = pins
+
+    def apply_saved_pin_overrides(self, overrides: dict[str, dict[str, list[lef_mod.LefPin]]]):
+        self.saved_pin_overrides = overrides
+        for relpath, path in self.lef_files.items():
+            if path in self._parsed_cache:
+                self._apply_saved_overrides(relpath, self._parsed_cache[path])
+        self._refresh_all()
+
     # -- data ---------------------------------------------------------------
 
     def load(self):
@@ -208,7 +262,9 @@ class LefView(ttk.Frame):
             return
 
         if path not in self._parsed_cache:
-            self._parsed_cache[path] = lef_mod.parse_lef_file(path)
+            parsed = lef_mod.parse_lef_file(path)
+            self._apply_saved_overrides(self.file_var.get(), parsed)
+            self._parsed_cache[path] = parsed
         self.current = self._parsed_cache[path]
         tech = self.current
 

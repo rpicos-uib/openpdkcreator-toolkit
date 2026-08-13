@@ -200,6 +200,13 @@ class RulesView(ttk.Frame):
     def _find_rule(self, iid: str) -> DesignRule | None:
         return self._rule_by_iid.get(iid)
 
+    def commit_pending_edits(self):
+        """Flushes whatever's mid-edit in the form into its
+        ``DesignRule`` before the caller reads/saves
+        ``app.project.design_rules`` -- see ``project_io.py``."""
+
+        self._commit_form_to_rule()
+
     def _on_select(self, _event=None):
         self._commit_form_to_rule()
         selection = self.tree.selection()

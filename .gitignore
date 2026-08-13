@@ -2,6 +2,12 @@
 # never committed. See docs/ihp_vs_open_pdks.md and README.md.
 data/
 
+# This user's own saved edits (DRC Rules/Magic Types/LEF pins) -- see
+# project_io.py's own docstring for why these live separate from data/
+# and are still kept out of git (derived from real, third-party PDK
+# starting values, not this project's own original code).
+saves/
+
 __pycache__/
 *.pyc
 .venv/

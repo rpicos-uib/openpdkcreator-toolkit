@@ -22,7 +22,7 @@ was copied and what (if anything) was adapted.
 ## Quickstart
 
 ```
-pip install pyyaml    # not currently used, but matches the sibling project; harmless to skip for now
+pip install pyyaml    # required: project_io.py's save/load format
 python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, gitignored, run once)
 python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
@@ -275,6 +275,34 @@ highlighted straight to that cell's real line range within its
   render in 0.18s (no real performance concern), and the CDL/Verilog
   **View** buttons both land on and highlight the exact real
   `sg13g2_and2_1` block inside their much larger combined files.
+- **`openpdkcreator/project_io.py`** -- program-format persistence for
+  the three editable domains above (DRC Rules/Magic Types/LEF pins),
+  modeled on `OpenPDKCreator`'s own `rules_db/` (ADR 0002): a
+  save/load layer completely separate from the real, downloaded `.tech`/
+  `.lef`/`.drc` files, not a write-back into them. `File > Save Edits`
+  (`Ctrl+S`) writes `saves/<pdk name>.yaml` (gitignored, alongside but
+  independent from `data/` -- `ihp/fetch.py` can delete/re-create
+  `data/` wholesale, and these are the user's own authored edits, kept
+  safe from that). A save, once it exists, takes precedence over the
+  real just-extracted starting values for these three domains on the
+  next launch; `File > Reload from Real Files` explicitly discards both
+  the in-memory edits and the save file, re-extracting fresh -- not
+  automatic, since silently reverting a user's saved edits on every
+  restart would defeat the point. `LefPin.ports`'s nested `LefPort`
+  dataclasses need explicit reconstruction on load (`dataclasses.asdict`
+  round-trips them to plain dicts; `TypeEntry`/`DesignRule` have no
+  nested dataclasses and reconstruct via plain `**kwargs`). Verified
+  for real, driven end-to-end against the actual downloaded data: edit
+  a DRC rule's description, a Magic Type's name, and a LEF pin's
+  direction (each through its own real form, not by mutating the
+  dataclass directly -- doing that instead hit a real, instructive
+  false-negative: the form's own commit-on-switch silently reverted
+  the direct edit right back, since the still-loaded, unchanged form
+  is authoritative for whichever row is currently selected), save,
+  construct a **fresh** `App` against the same `pdk_root` (simulating a
+  real relaunch), and confirm all three edits survived; separately
+  confirmed `Reload from Real Files` discards both the edit and the
+  save file for real.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -308,17 +336,19 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Write-back serialization: DRC Rules, LEF pins, and Magic Types are
-  now genuinely *structured*-editable (add/edit/delete through a real
-  form, not raw text), but purely in-memory -- there's no "Save" that
-  writes an edited rule/pin/type back into a real, on-disk
-  `.drc`/`.lef`/`.tech` file (`file_view_dialog.py`'s own Save only
-  ever writes a whole file's raw text, never a single parsed item back
-  into its source format). This is the single biggest remaining gap
-  toward the stated final objective -- an editor whose edits vanish on
-  relaunch isn't really an editor yet. Layers/Magic Tech's other five
+- Native write-back serialization: DRC Rules, LEF pins, and Magic Types
+  are now genuinely *structured*-editable (add/edit/delete through a
+  real form, not raw text) **and** persist across a relaunch
+  (`project_io.py`, `saves/<pdk name>.yaml`) -- but that's still a
+  separate program format, not a write of the edited rule/pin/type back
+  into the real, on-disk `.drc`/`.lef`/`.tech` file itself
+  (`file_view_dialog.py`'s own Save only ever writes a whole file's raw
+  text, never a single parsed item back into its native source format).
+  A real PDK-authoring tool eventually needs that too, so a saved
+  project can be exported as an actual, loadable `.lef`/`.tech`/DRC
+  deck, not just re-read by this tool. Layers/Magic Tech's other five
   domains/By Cell stay read-only in their own structured views for the
-  same underlying reason.
+  same underlying reason (no editor -> no state to persist yet either).
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
@@ -327,8 +357,9 @@ models, ...), not just read/display layers. Concretely, still open:
   pattern -- still inventory-only today (see the Overview tab), no real
   per-format parser exists yet.
 - **By Cell** editing: it's currently read-only (View only, no Edit) --
-  the natural next step once write-back serialization exists for at
-  least one of its real views.
+  the natural next step, now that `project_io.py` has an established,
+  working pattern (in-memory structured edit + separate program-format
+  save) to extend to at least one of its real views.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

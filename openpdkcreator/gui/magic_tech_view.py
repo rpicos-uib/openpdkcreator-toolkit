@@ -146,6 +146,19 @@ class MagicTechView(ttk.Frame):
         if tech is not None:
             view_file_dialog(self, tech.source_path)
 
+    # -- persistence hooks (project_io.py) -----------------------------------
+
+    def commit_pending_edits(self):
+        """Flushes whatever's mid-edit in the Types form into its
+        ``TypeEntry`` before the caller reads/saves state -- otherwise
+        a field typed but not yet committed (no selection change since)
+        would be silently dropped from a save."""
+
+        self._commit_form_to_type()
+
+    def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
+        return {name: tech.types for name, tech in self.technologies.items()}
+
     # -- data ---------------------------------------------------------------
 
     def load(self):

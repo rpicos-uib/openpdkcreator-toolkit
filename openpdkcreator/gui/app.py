@@ -35,6 +35,18 @@ third-party PDK files, not this project's own code.
 ``ProjectState`` is the smallest possible object ``LayersView`` (copied
 verbatim from OpenPDKCreator) needs -- just ``layers``/
 ``sorted_layers()`` -- so that tab works completely unmodified.
+
+**Persistence** (``project_io.py``): DRC Rules/Magic Types/LEF pins are
+edited purely in memory by default -- closing the GUI would silently
+lose them. A **File** menu offers **Save Edits** (writes the current
+state of all three editable domains to ``saves/<pdk name>.yaml``,
+outside ``data/``, gitignored) and **Reload from Real Files** (discards
+in-memory edits and any saved file, re-extracting fresh from the real
+downloaded PDK -- for when you want to start over). On startup, a save
+file for this ``pdk_root``, if one exists, takes precedence over the
+real just-extracted starting values for those three domains only --
+Layers/Overview/the other four Magic Tech domains/cell-view discovery
+stay real-extraction-only, since nothing here edits them yet.
 """
 
 from __future__ import annotations
@@ -44,6 +56,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from .. import project_io
 from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
@@ -82,6 +95,8 @@ class App(ttk.Frame):
         root.geometry("1100x650")
         self.pack(fill="both", expand=True)
 
+        self._build_menu()
+
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
 
@@ -92,6 +107,49 @@ class App(ttk.Frame):
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", side="bottom")
 
+        self.load()
+
+    # -- menu / persistence -------------------------------------------------
+
+    def _build_menu(self):
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=False)
+        file_menu.add_command(label="Save Edits", command=self._save_project, accelerator="Ctrl+S")
+        file_menu.add_command(label="Reload from Real Files", command=self._reload_from_real_files)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.root.config(menu=menubar)
+        self.root.bind_all("<Control-s>", lambda _event: self._save_project())
+
+    def _save_project(self):
+        """Commits whatever's mid-edit in each editable tab's form,
+        then writes DRC Rules/Magic Types/LEF pins out via
+        ``project_io.save_state`` -- see this module's own docstring
+        for why these three domains specifically."""
+
+        self.rules_view.commit_pending_edits()
+        self.magic_tech_view.commit_pending_edits()
+        self.lef_view.commit_pending_edits()
+        path = project_io.save_state(
+            self.pdk_root,
+            self.project.design_rules,
+            self.magic_tech_view.collect_types_by_tech(),
+            self.lef_view.collect_pin_overrides(),
+        )
+        self.status.set(f"Saved edits to {path}")
+
+    def _reload_from_real_files(self):
+        """Discards in-memory edits and any saved file for this
+        ``pdk_root``, then re-extracts fresh from the real, downloaded
+        PDK -- the explicit "start over" action, since a saved file
+        otherwise always takes precedence on the next ``load()``."""
+
+        save_path = project_io.save_path_for(self.pdk_root)
+        if save_path.is_file():
+            save_path.unlink()
+        self.lef_view._parsed_cache.clear()
+        self.lef_view.saved_pin_overrides = {}
+        self.lef_view.load()
+        self.magic_tech_view.load()
         self.load()
 
     # -- Overview tab -----------------------------------------------------
@@ -202,7 +260,21 @@ class App(ttk.Frame):
         self.rules_view.refresh()
 
         warning = f" (WARNING: {group_members} <group-members> block(s) found -- some layers may be missing)" if group_members else ""
-        self.status.set(
+        status = (
             f"Loaded {len(parsed)} layers from {lyp_path.name}{warning}; "
             f"extracted {len(rules)} DRC rules ({len(skipped)} construct(s) not auto-extracted, see ihp/drc.py)"
         )
+
+        saved = project_io.load_state(self.pdk_root)
+        if saved is not None:
+            self.project.design_rules = saved.design_rules
+            self.rules_view.refresh()
+            for tech_name, types in saved.magic_types.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.types = types
+            self.magic_tech_view._refresh_all()
+            self.lef_view.apply_saved_pin_overrides(saved.lef_pins)
+            status += f"; restored saved edits from {project_io.save_path_for(self.pdk_root)}"
+
+        self.status.set(status)
