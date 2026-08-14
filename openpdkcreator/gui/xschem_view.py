@@ -83,18 +83,22 @@ class XschemView(ttk.Frame):
         super().__init__(parent)
         self.app = app
 
-        outer = ttk.Notebook(self)
-        outer.pack(fill="both", expand=True)
+        self.outer = ttk.Notebook(self)
+        self.outer.pack(fill="both", expand=True)
 
-        symbols_frame = ttk.Frame(outer)
-        outer.add(symbols_frame, text="Symbols")
+        symbols_frame = ttk.Frame(self.outer)
+        self.outer.add(symbols_frame, text="Symbols")
         self._symbols = _SymbolsPane(symbols_frame, app)
         self._symbols.pack(fill="both", expand=True)
 
-        schematics_frame = ttk.Frame(outer)
-        outer.add(schematics_frame, text="Schematics")
+        schematics_frame = ttk.Frame(self.outer)
+        self.outer.add(schematics_frame, text="Schematics")
         self._schematics = _SchematicsPane(schematics_frame, app)
         self._schematics.pack(fill="both", expand=True)
+
+    def load(self):
+        self._symbols.load()
+        self._schematics.load()
 
     def commit_pending_edits(self):
         self._symbols.commit_pending_edits()

@@ -1,6 +1,16 @@
 """Minimal Tk shell over a real, downloaded IHP-style PDK tree, tabs
 grouped by what they actually represent rather than left flat:
 
+- **PDK Wizard** (``gui/pdk_wizard_view.py``) -- the first tab shown,
+  a guided flowchart of every real domain below, starting from the
+  real layout definition (Layers) and forking into Digital vs.
+  Analog/Memristor paths, written toward this project's own stated end
+  goal of authoring a from-scratch memristor PDK with this same
+  generic tool -- see that module's own docstring for the full design
+  and its honestly-surfaced "can't create this from scratch yet" gaps.
+  ``App.goto(*path)`` (below) is the shared navigation helper its
+  "Go to Tab" button uses; it also drives the rest of this docstring's
+  own tab structure below.
 - **Overview** -- the real, per-tool file inventory, spanning every
   tool/domain (including ones with no dedicated view yet, e.g.
   libs.ref/'s cell libraries, libs.doc/).
@@ -126,6 +136,7 @@ from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
 from .magic_tech_view import MagicTechView
+from .pdk_wizard_view import PdkWizardView
 from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
 from .spice_models_view import SpiceModelsView
@@ -196,11 +207,14 @@ class App(ttk.Frame):
         self._build_cells_group()
         self._build_simulation_group()
         self._build_settings_tab()
+        self._build_wizard_tab()
 
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", side="bottom")
 
         self.load()
+        self.wizard_view.refresh()
+        self.notebook.select(0)
 
     def _update_title(self):
         self.root.title(f"openPDKcreator -- {self.project_name} ({self.pdk_root})")
@@ -512,6 +526,14 @@ class App(ttk.Frame):
         self.qucs_view.load()
         self.load()
 
+    # -- PDK Wizard tab -----------------------------------------------------
+
+    def _build_wizard_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.insert(0, frame, text="PDK Wizard")
+        self.wizard_view = PdkWizardView(frame, self)
+        self.wizard_view.pack(fill="both", expand=True)
+
     # -- Overview tab -----------------------------------------------------
 
     def _build_overview_tab(self):
@@ -644,6 +666,43 @@ class App(ttk.Frame):
         self.settings_notebook.add(tools_frame, text="Tools")
         self.tools_view = ToolsView(tools_frame)
         self.tools_view.pack(fill="both", expand=True)
+
+    # -- tab navigation (used by the PDK Wizard tab) -----------------------
+
+    def goto(self, *path: str):
+        """Selects the real notebook tab(s) named by *path*, e.g.
+        ``goto("Simulation", "xschem", "Symbols")`` -- walks down as
+        many nested ``ttk.Notebook`` levels as *path* has segments,
+        stopping early (silently) if a segment isn't found, so a
+        caller can pass a short path (just the top-level tab) too."""
+
+        if not path:
+            return
+        self._select_tab_by_text(self.notebook, path[0])
+        notebook = self._sub_notebook_for(path[:1])
+        for depth in range(1, len(path)):
+            if notebook is None:
+                return
+            self._select_tab_by_text(notebook, path[depth])
+            notebook = self._sub_notebook_for(path[: depth + 1])
+
+    def _sub_notebook_for(self, path: tuple[str, ...]) -> ttk.Notebook | None:
+        registry: dict[tuple[str, ...], ttk.Notebook] = {
+            ("Technology",): self.technology_notebook,
+            ("Cells",): self.cells_notebook,
+            ("Simulation",): self.simulation_notebook,
+            ("Settings",): self.settings_notebook,
+            ("Simulation", "xschem"): self.xschem_view.outer,
+            ("Simulation", "Qucs-S"): self.qucs_view.outer,
+        }
+        return registry.get(path)
+
+    @staticmethod
+    def _select_tab_by_text(notebook: ttk.Notebook, text: str):
+        for tab_id in notebook.tabs():
+            if notebook.tab(tab_id, "text") == text:
+                notebook.select(tab_id)
+                return
 
     # -- data loading ---------------------------------------------------------
 

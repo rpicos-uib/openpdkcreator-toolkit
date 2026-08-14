@@ -61,16 +61,16 @@ class QucsView(ttk.Frame):
         super().__init__(parent)
         self.app = app
 
-        outer = ttk.Notebook(self)
-        outer.pack(fill="both", expand=True)
+        self.outer = ttk.Notebook(self)
+        self.outer.pack(fill="both", expand=True)
 
-        components_frame = ttk.Frame(outer)
-        outer.add(components_frame, text="Components")
+        components_frame = ttk.Frame(self.outer)
+        self.outer.add(components_frame, text="Components")
         self._components = _ComponentsPane(components_frame, app)
         self._components.pack(fill="both", expand=True)
 
-        symbols_frame = ttk.Frame(outer)
-        outer.add(symbols_frame, text="Symbols")
+        symbols_frame = ttk.Frame(self.outer)
+        self.outer.add(symbols_frame, text="Symbols")
         self._symbols = _SymbolsPane(symbols_frame, app)
         self._symbols.pack(fill="both", expand=True)
 

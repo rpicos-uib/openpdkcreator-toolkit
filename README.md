@@ -65,6 +65,37 @@ running both side by side for real.
 
 ## GUI structure
 
+**PDK Wizard** is the first tab shown -- a guided flowchart (`gui/
+pdk_wizard_view.py`) laying out every real domain below as a diagram:
+starting from the real layout definition (**Layers**) at the top,
+forking into a **Digital** path (Verilog / Liberty / CDL-SPICE, all
+surfaced in **By Cell**) and an **Analog / Memristor** path (**User
+Models** Verilog-A, **xschem Symbols/Schematics**, **Qucs-S Symbols/
+Components**, **ngspice Models**), both converging back into **By
+Cell**, then **GDS**, then **Export / Package**. Clicking a node shows
+a detail panel (what it is, what it means for a from-scratch
+**memristor** device specifically, and its real, live status computed
+directly from whichever `pdk_root` is currently loaded -- a cheap
+directory glob, never a full parse) plus a **Go to Tab** button
+(`App.goto(*path)`, walking down as many nested `ttk.Notebook` levels
+as needed) that jumps straight there.
+
+A real, honest gap is surfaced both as a legend color and per node:
+**only xschem Symbols/Schematics and Qucs-S Symbols/Components support
+creating a brand-new file from inside this GUI today** (their own "New
+..." actions). Every other domain -- Layers, Magic Tech, DRC Rules,
+LEF, Verilog, Liberty, CDL/SPICE, ngspice Models, and User Models'
+own `.va`/`.v` files -- requires a real file to already exist on disk
+(hand-placed from a template/reference PDK, or written in an external
+editor) before this tool can load and edit it; nothing here pretends
+otherwise. A from-scratch memristor PDK genuinely starts smallest at
+**User Models** (write a `.va` compact model, drop it under
+`user_models/veriloga/` -- no template needed, and `ihp/cells.py`'s
+own By Cell aggregation picks it up automatically by name) and the
+xschem/Qucs-S symbol editors (draw a device symbol from nothing), then
+grows outward from there once a real `.lyp`/`.tech`/DRC-deck/LEF
+template is in place.
+
 Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
@@ -1097,6 +1128,43 @@ editor yet -- see Future Work.
   --gui` verified for real: container created, `main.py gui` launched
   inside it, real `data/` visible bind-mounted through, sibling
   project's own container unaffected.
+- **`openpdkcreator/gui/pdk_wizard_view.py`** -- the **PDK Wizard** tab
+  (see GUI structure above for the full design): 18 real stages laid
+  out as a static, hand-laid-out flowchart on a plain `tk.Canvas`
+  (deliberately *not* `geometry_canvas.py` -- that widget edits a real
+  device's own real coordinates, this one is a conceptual diagram with
+  no such data), starting from Layers, forking into Digital vs. Analog/
+  Memristor, converging through By Cell/GDS/Export. Each node's status
+  is computed live from whichever `pdk_root`/project is currently
+  loaded via the same lightweight `find_*`/`discover_families` glob
+  helpers every other tab already uses (never a full parse) -- verified
+  for real against two very different real states: the full, ~734 MB
+  downloaded IHP deck (every domain with real files correctly shows
+  "present", with real counts -- e.g. 377 layers, 202 xschem symbols,
+  4 cell families) and a genuinely empty `pdk_root` (every domain
+  correctly shows "not started", with the four in-GUI-creatable
+  domains -- xschem Symbols/Schematics, Qucs-S Symbols/Components --
+  and User Models distinguished from the domains with a real, honestly
+  surfaced "no create-from-scratch path yet" gap note). `App.goto(*path)`
+  (`gui/app.py`) is a new, small, shared navigation helper -- walks down
+  as many nested `ttk.Notebook` levels as given, silently stopping if a
+  level isn't found -- that the Wizard's own **Go to Tab** button uses;
+  verified for real to reach 2-level (`Technology > Layers`) and
+  3-level (`Simulation > xschem > Schematics`, `Simulation > Qucs-S >
+  Components`) targets, and to leave the button disabled (not crash)
+  for the one node with no dedicated tab (Export/Package, a File-menu
+  action). Every one of the 18 nodes was click-simulated for real
+  (select -> detail panel populates -> Go to Tab navigates) with no
+  errors; a geometry self-check confirmed no node's title text overflows
+  its own box and no two node boxes overlap. **Found and fixed one real,
+  pre-existing bug along the way**, unrelated to the Wizard itself:
+  `XschemView` (`gui/xschem_view.py`) had no `load()` method of its own
+  even though `App._reload_from_real_files` already called
+  `self.xschem_view.load()` -- "Reload from Real Files" crashed with an
+  `AttributeError` any time it was invoked; added the missing
+  `load()` (delegating to its own Symbols/Schematics panes' existing
+  `load()` methods), re-verified via the existing
+  `test_no_lef_and_reload.py`-style scenario.
 
 ## Future work
 
@@ -1582,6 +1650,18 @@ models, ...), not just read/display layers. Concretely, still open:
   work for a benefit that's mostly just avoiding ~150 lines of
   duplication. Worth re-checking again if the *data models themselves*
   (not just the code around them) start to diverge.
+- **Create-from-scratch flows for Layers/Magic Tech/DRC Rules/LEF/
+  Verilog/Liberty/CDL-SPICE/ngspice Models**, surfaced honestly (not
+  glossed over) by the **PDK Wizard** tab's own legend/gap notes: today
+  only xschem Symbols/Schematics and Qucs-S Symbols/Components have a
+  real "New..." action; every other domain needs a real starting file
+  already on disk (copied from a template/reference PDK, or hand-
+  written) before this tool can load and edit it. A brand-new,
+  from-scratch memristor PDK genuinely can't originate its own `.lyp`/
+  `.tech`/DRC-deck/`.lef` from inside this GUI yet -- each would need
+  its own "create a minimal, valid skeleton" action, mirroring
+  `xschem.py`'s `create_new_sym_file`/`xschem_sch.py`'s
+  `create_new_sch_file`.
 
 ## License
 
