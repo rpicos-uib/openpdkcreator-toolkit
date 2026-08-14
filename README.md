@@ -776,7 +776,10 @@ highlighted straight to that cell's real line range within its
   geometry managers on the same parent frame, which raises
   `TclError: cannot use geometry manager grid ... which already has
   slaves managed by pack` the moment the tab is built -- fixed by
-  switching the top toolbar row to `grid` as well.
+  switching the top toolbar row to `grid` as well. Its own three real
+  follow-ons (in-GUI port editing, batch relinking, real ngspice/OSDI
+  wiring) are done too -- see the Future Work section's own
+  user-models entry for the full real design and verification.
 - **`openpdkcreator/gui/port_editor.py`** -- `PortEditor`, a real port
   list + New/Delete Port + a Name/Direction[/Width] form, the same
   commit-on-switch pattern `PinEditor` uses -- duck-typed across CDL/
@@ -1184,14 +1187,38 @@ models, ...), not just read/display layers. Concretely, still open:
   it to the rest of the PDK, is done** -- see the
   `ihp/user_models.py`/`gui/user_models_view.py` bullet in "What's
   real here" for the full real design and verification. `main.py
-  user-models` gives the same listing on the CLI. Left as real,
-  separate future work: editing a user model's own ports/content from
-  inside the GUI (today it's authored externally, in `user_models/`,
-  and only read/linked here); batch-relinking many modules at once
-  (today it's one row at a time); and any real simulation-tool wiring
-  beyond linking (e.g. auto-generating an ngspice `.include` for a
-  linked Verilog-A model) -- this pass stops at "represented and
-  linked," not "wired into a real simulation run."
+  user-models` gives the same listing on the CLI. Its own three
+  follow-ons are now done too: **editing a model's own ports** from
+  inside **Simulation > User Models** (an **Edit Ports** button opens
+  the same real port editor CDL/SPICE/Verilog already use, then writes
+  straight back to the real, local `.v`/`.va` source via
+  `ihp/verilog_writer.py` -- unlike the real, downloaded PDK's own
+  views, a user model's own file *is* the user's live edit surface, so
+  there's no separate export step); **batch-relinking many modules at
+  once** (the tree is real Tk `extended`-select, so Ctrl/Shift-clicking
+  several rows and one **Save Link** applies the same cell name to all
+  of them; a separate **Link All Auto-Matches** button freezes every
+  row's *current* implicit name-match into an explicit, persisted link
+  in one save -- confirmed idempotent once every row already has one);
+  and **real ngspice/OSDI simulation-tool wiring** for Verilog-A
+  modules (`ihp/user_models.py`'s own `osdi_snippet`, rendered via a
+  new, generically reusable `gui/text_dialog.py` -- a read-only modal
+  for generated text with no real backing file, distinct from
+  `file_view_dialog.py`'s own real-file view/edit/save dialog) -- not a guess,
+  but IHP's own real, documented two-step workflow reproduced verbatim
+  (confirmed against `libs.tech/verilog-a/README.md`,
+  `openvaf-compile-va.sh`, and the real `osdi '...'` lines already
+  present in IHP's own `libs.tech/ngspice/.spiceinit`): compile the
+  real `.va` source to a binary OSDI module via OpenVAF, then load it
+  into ngspice with its own real `osdi` command -- ngspice has no way
+  to load raw Verilog-A source directly, so a plain digital Verilog
+  module correctly raises rather than fabricating an equivalent
+  recipe that doesn't exist in this PDK's own real toolchain.
+  Verified for real, driven in the container: a batch Save Link across
+  two selected modules, Link All Auto-Matches (and its idempotence),
+  an Edit Ports write-back confirmed by re-reading the real `.va` file
+  afterward, a real, correctly-worded OSDI snippet, and the plain-Verilog
+  rejection path.
 - **Copy-vs-share with `OpenPDKCreator`, revisited and re-confirmed**:
   diffed every genuinely-copied file against `OpenPDKCreator`'s own
   current originals rather than assuming. The core data shapes

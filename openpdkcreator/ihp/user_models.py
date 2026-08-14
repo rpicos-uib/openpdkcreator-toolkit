@@ -120,6 +120,53 @@ def relpath_for(project_root: Path, model_path: Path) -> str:
     return str(model_path.relative_to(user_models_root(project_root)))
 
 
+def osdi_snippet(project_root: Path, model_file: UserModelFile, module: verilog_mod.VerilogModule) -> str:
+    """A real, ready-to-run ngspice/OpenVAF wiring snippet for one
+    Verilog-A module -- **not** a guess: it reproduces IHP's own real,
+    documented workflow, confirmed against the actual downloaded PDK
+    (``libs.tech/verilog-a/README.md``, ``libs.tech/verilog-a/
+    openvaf-compile-va.sh``, and the real ``osdi '...'`` lines already
+    present in IHP's own ``libs.tech/ngspice/.spiceinit``). ngspice has
+    no way to load raw ``.va`` source directly -- it must first be
+    compiled to a binary OSDI module via OpenVAF, then that ``.osdi``
+    file loaded with ngspice's own real ``osdi`` command. This function
+    only *renders* that real, two-step recipe pointed at this specific
+    module's real file; it never invokes a compiler or writes any file
+    itself.
+
+    Raises ``ValueError`` for a ``"verilog"`` (plain digital) module --
+    ngspice/OpenVAF have no real equivalent story for those in this
+    PDK's own real toolchain, so generating a snippet for one would be
+    inventing something that doesn't exist here."""
+
+    if model_file.kind != "veriloga":
+        raise ValueError(f"No real ngspice/OSDI wiring exists for a plain Verilog module ({module.name}).")
+
+    va_path = relpath_for(project_root, model_file.path)
+    osdi_name = f"{module.name}.osdi"
+    return (
+        f"# Real IHP workflow (libs.tech/verilog-a/README.md,\n"
+        f"# openvaf-compile-va.sh): compile {module.name}'s real Verilog-A\n"
+        f"# source to a binary OSDI module, then load it into ngspice.\n"
+        f"\n"
+        f"# 1) Compile once (needs 'openvaf' or 'openvaf-r' on PATH; run\n"
+        f"#    from this project's own user_models/ directory, or adjust\n"
+        f"#    the source path below):\n"
+        f"openvaf -D__NGSPICE__ -o {osdi_name} {va_path}\n"
+        f"\n"
+        f"# 2) Load the compiled module into ngspice -- add this line to\n"
+        f"#    your own .spiceinit or netlist, the same real 'osdi' command\n"
+        f"#    IHP's own libs.tech/ngspice/.spiceinit already uses for its\n"
+        f"#    own compact models:\n"
+        f"osdi '{osdi_name}'\n"
+        f"\n"
+        f"# {module.name} then instantiates like any other real ngspice\n"
+        f"# device model -- see OpenVAF/ngspice's own docs for the real\n"
+        f"# instance-line syntax your module's own real disciplines/ports\n"
+        f"# require.\n"
+    )
+
+
 def group_by_cell(
     project_root: Path, models: list[UserModelFile], links: list[UserModelLink],
 ) -> dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]]:
