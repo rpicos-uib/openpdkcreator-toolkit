@@ -128,6 +128,12 @@ class XschemSymbol:
     """Every other real `K`-block field, kept raw -- see this module's
     own docstring for why."""
     pins: list[XschemPin] = field(default_factory=list)
+    all_parsed_pin_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real pin's own (start_line, end_line) as originally
+    parsed, in real file order -- unlike ``pins``, never mutated by
+    editing (New/Delete Pin); mirrors ``ihp/lef.py``'s ``LefMacro.
+    all_parsed_pin_ranges``, used by ``ihp/xschem_writer.py`` to tell a
+    real deleted pin apart from a decorative-box/comment gap."""
 
 
 def find_sym_files(pdk_root: Path) -> list[Path]:
@@ -156,12 +162,9 @@ def parse_sym_file(path: Path) -> XschemSymbol:
         direction = props.get("dir")
         if not name or not direction:
             continue  # a real, non-pin decorative box -- not an extraction gap, see this module's docstring.
-        symbol.pins.append(
-            XschemPin(
-                name=name, direction=direction,
-                start_line=_line_no_at(text, match.start()),
-                end_line=_line_no_at(text, end_pos - 1),
-            )
-        )
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        symbol.pins.append(XschemPin(name=name, direction=direction, start_line=start_line, end_line=end_line))
+        symbol.all_parsed_pin_ranges.append((start_line, end_line))
 
     return symbol

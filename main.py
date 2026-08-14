@@ -517,6 +517,77 @@ def cmd_export_lef(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_export_xschem_sym(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    sym_files = xschem_mod.find_sym_files(pdk_root)
+    if not sym_files:
+        print(f"No .sym files found under {pdk_root}/libs.tech/xschem/", file=sys.stderr)
+        return 2
+
+    symbol_cache = {path: xschem_mod.parse_sym_file(path) for path in sym_files}
+    written = export_mod.export_xschem_symbols(pdk_root, symbol_cache)
+
+    mismatches = []
+    for path in sym_files:
+        export_path = export_mod.export_path_for(pdk_root, path)
+        original = path.read_text(encoding="utf-8", errors="replace")
+        if not original.endswith("\n"):
+            original += "\n"
+        if export_path.read_text(encoding="utf-8", errors="replace") != original:
+            mismatches.append(path)
+
+    print(f"Exported {len(written)} real .sym file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(sym_files) - len(mismatches)}/{len(sym_files)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_export_xschem_sch(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    sch_files = xschem_sch_mod.find_sch_files(pdk_root)
+    if not sch_files:
+        print(f"No .sch files found under {pdk_root}/libs.tech/xschem/", file=sys.stderr)
+        return 2
+
+    xschem_root = pdk_root / "libs.tech" / "xschem"
+    schematic_cache = {path: xschem_sch_mod.parse_sch_file(path, xschem_root=xschem_root) for path in sch_files}
+    written = export_mod.export_xschem_schematics(pdk_root, schematic_cache)
+
+    mismatches = []
+    for path in sch_files:
+        export_path = export_mod.export_path_for(pdk_root, path)
+        original = path.read_text(encoding="utf-8", errors="replace")
+        if not original.endswith("\n"):
+            original += "\n"
+        if export_path.read_text(encoding="utf-8", errors="replace") != original:
+            mismatches.append(path)
+
+    print(f"Exported {len(written)} real .sch file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(sch_files) - len(mismatches)}/{len(sch_files)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_export_drc(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -788,6 +859,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("export-verilog", help="Export real, patched .v files to export/ (byte-identical with no edits).")
     sub.add_parser("export-liberty", help="Export real, patched .lib files to export/ (byte-identical with no edits).")
     sub.add_parser("export-layers", help="Export the real, patched .lyp file to export/ (byte-identical with no edits).")
+    sub.add_parser("export-xschem-sym", help="Export real, patched xschem .sym files to export/ (byte-identical with no edits).")
+    sub.add_parser("export-xschem-sch", help="Export real, patched xschem .sch files to export/ (byte-identical with no edits).")
     export_full_parser = sub.add_parser(
         "export-full", help="Export a complete, standalone PDK tree -- for round-trip fidelity testing.",
     )
@@ -836,6 +909,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_export_liberty(args.pdk_root.resolve())
     if args.command == "export-layers":
         return cmd_export_layers(args.pdk_root.resolve())
+    if args.command == "export-xschem-sym":
+        return cmd_export_xschem_sym(args.pdk_root.resolve())
+    if args.command == "export-xschem-sch":
+        return cmd_export_xschem_sch(args.pdk_root.resolve())
     if args.command == "export-full":
         return cmd_export_full(args.pdk_root.resolve(), args.dest.resolve())
     if args.command == "gui":

@@ -70,7 +70,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .xschem import _parse_kv_block, _scan_braced
+from .xschem import _line_no_at, _parse_kv_block, _scan_braced
 
 _C_HEAD_RE = re.compile(r"(?m)^C\s*\{")
 _C_TAIL_RE = re.compile(r"\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
@@ -95,6 +95,12 @@ class XschemWire:
     label: str = ""
     """Real ``lab=`` value -- the net name this wire segment belongs
     to; empty for the rare real wire with no real label."""
+    start_line: int = 0
+    end_line: int = 0
+    """This wire's own real, 1-indexed source line range (the ``N``
+    line's own header through its own closing ``}``, inclusive) --
+    ``0`` for a wire this parser can't map back to real source lines.
+    Used by ``ihp/xschem_sch_writer.py`` for write-back."""
 
 
 @dataclass
@@ -118,6 +124,12 @@ class XschemInstance:
     (relative to ``libs.tech/xschem/``), or ``None`` for one of
     xschem's own external/bundled symbols -- a real, confirmed fact,
     not a parsing gap; see this module's own docstring."""
+    start_line: int = 0
+    end_line: int = 0
+    """This instance's own real, 1-indexed source line range (the
+    ``C`` line's own header through its own closing ``}``, inclusive)
+    -- ``0`` for an instance this parser can't map back to real source
+    lines. Used by ``ihp/xschem_sch_writer.py`` for write-back."""
 
     @property
     def is_pin(self) -> bool:
@@ -127,12 +139,29 @@ class XschemInstance:
     def pin_label(self) -> str:
         return self.props.get("lab", "") if self.is_pin else ""
 
+    @pin_label.setter
+    def pin_label(self, value: str) -> None:
+        """Only meaningful for a real pin instance (``is_pin``), but
+        writable unconditionally -- editing it on a non-pin instance
+        just adds/updates a real ``lab=`` property on that instance,
+        which the GUI's own editor never actually offers (its net
+        label field is disabled for a non-pin row)."""
+        self.props["lab"] = value
+
 
 @dataclass
 class XschemSchematic:
     source_path: Path
     instances: list[XschemInstance] = field(default_factory=list)
     wires: list[XschemWire] = field(default_factory=list)
+    all_parsed_instance_ranges: list[tuple[int, int]] = field(default_factory=list)
+    all_parsed_wire_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real instance's/wire's own (start_line, end_line) as
+    originally parsed, in real file order -- unlike ``instances``/
+    ``wires``, never mutated by editing (Delete); mirrors
+    ``ihp/lef.py``'s ``LefMacro.all_parsed_pin_ranges``, used by
+    ``ihp/xschem_sch_writer.py`` to tell a real deleted entry apart
+    from a verbatim gap."""
 
     @property
     def net_names(self) -> list[str]:
@@ -182,9 +211,11 @@ def parse_sch_file(path: Path, xschem_root: Path | None = None) -> XschemSchemat
         if not tail_match:
             continue  # a real, malformed/truncated C line -- never observed; skipped rather than crashing.
         x, y, rot, flip = tail_match.groups()
-        props_content, _ = _scan_braced(text, tail_match.end() - 1)
+        props_content, props_end = _scan_braced(text, tail_match.end() - 1)
         props = _parse_kv_block(props_content)
         resolved = root / symbol_ref
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, props_end - 1)
         schematic.instances.append(
             XschemInstance(
                 symbol_ref=symbol_ref,
@@ -192,15 +223,23 @@ def parse_sch_file(path: Path, xschem_root: Path | None = None) -> XschemSchemat
                 name=props.pop("name", ""),
                 props=props,
                 resolved_path=resolved if resolved.is_file() else None,
+                start_line=start_line, end_line=end_line,
             )
         )
+        schematic.all_parsed_instance_ranges.append((start_line, end_line))
 
     for match in _N_HEAD_RE.finditer(text):
         x1, y1, x2, y2 = match.groups()
-        props_content, _ = _scan_braced(text, match.end() - 1)
+        props_content, props_end = _scan_braced(text, match.end() - 1)
         props = _parse_kv_block(props_content)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, props_end - 1)
         schematic.wires.append(
-            XschemWire(x1=_to_int(x1), y1=_to_int(y1), x2=_to_int(x2), y2=_to_int(y2), label=props.get("lab", ""))
+            XschemWire(
+                x1=_to_int(x1), y1=_to_int(y1), x2=_to_int(x2), y2=_to_int(y2), label=props.get("lab", ""),
+                start_line=start_line, end_line=end_line,
+            )
         )
+        schematic.all_parsed_wire_ranges.append((start_line, end_line))
 
     return schematic

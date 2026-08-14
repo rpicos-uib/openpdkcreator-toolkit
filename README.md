@@ -42,6 +42,8 @@ python3 main.py export-netlist   # real, patched .cdl/.spice port write-back to 
 python3 main.py export-verilog   # real, patched .v port write-back to export/ (byte-identical with no edits)
 python3 main.py export-liberty   # real, patched .lib pin/timing write-back to export/ (byte-identical with no edits)
 python3 main.py export-layers    # real, patched .lyp write-back to export/ (byte-identical with no edits)
+python3 main.py export-xschem-sym  # real, patched xschem .sym pin write-back to export/ (byte-identical with no edits)
+python3 main.py export-xschem-sch  # real, patched xschem .sch instance/wire write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
@@ -68,9 +70,11 @@ definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
 data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem** -- a
-**Symbols** sub-tab (a real symbol's own device-attribute block and
-real pin list) and a **Schematics** sub-tab (real component instances,
-their own exposed pin instances, and real wire segments); **Qucs-S**
+**Symbols** sub-tab (a real symbol's own device-attribute block,
+read-only, and an **editable** real pin list) and a **Schematics**
+sub-tab (**editable** real component instances -- name, and a real
+pin instance's own net label -- plus a real, read-only Pins summary
+and **editable** real wire labels); **Qucs-S**
 -- a **Components** sub-tab (real device definitions: models,
 parameters, netlist templates) and a **Symbols** sub-tab (real drawn-
 geometry ports, no real port names, just position/type/angle -- a
@@ -1321,6 +1325,47 @@ models, ...), not just read/display layers. Concretely, still open:
   checked real file's Instances/Pins/Wires rows and PDK/external
   resolution flags are individually correct, and `start_page.sch`
   (the real top-level exception file) parses without error.
+- **xschem Symbols and Schematics both gained real editors with
+  write-back**, matching every other structured domain's own "list +
+  form, commit-on-switch, then a real, patched export" pattern.
+  **Symbols > Pins** reuses `port_editor.PortEditor` directly, unmodified
+  -- `XschemPin`'s own real `name`/`direction` fields duck-type exactly
+  onto what `PortEditor` already expects, needing zero new editor code.
+  `ihp/xschem_writer.py` writes real edits back (name/direction only;
+  pin geometry and every other real `B`-primitive property stay
+  untouched), verified byte-identical against all 202 real files with
+  no edits, plus a real rename/redirect/add/delete round-trip.
+  **Schematics** gained **editable Instances** (real `name=`, and for a
+  real pin instance its real net label) and **Wires** (real `label=`)
+  -- Delete only, deliberately no "New Instance/Wire": a real component
+  needs a real symbol reference and real drawn position to mean
+  anything, and this project has no schematic geometry editor to place
+  one sensibly. `ihp/xschem_sch_writer.py` handles write-back, reusing
+  the same real `_C_HEAD_RE`/`_C_TAIL_RE`/`_N_HEAD_RE` matching
+  `ihp/xschem_sch.py`'s own parser already uses -- **a first-draft,
+  naive raw-character brace scan was replaced after it corrupted real
+  files during byte-identical verification**, and a second, deeper
+  real bug was found the same way: 27 real files (26 under
+  `sg13g2_tests_xyce/` plus `start_page.sch`) embed a
+  `simulator_commands_shown.sym` instance whose own multi-line
+  `value="..."`/`tclcommand="..."` text ends with a real, doubled
+  quote-then-close-brace idiom (`"\n"}`, confirmed present verbatim by
+  direct search) that even the parser's own quote-aware scanner
+  (`ihp/xschem.py`'s `_scan_braced`) cannot safely disambiguate --
+  without real xschem's own source to confirm the intended grammar,
+  two real, computable safety signals (overlapping parsed entry ranges;
+  an odd unescaped-quote count within one entry's own text -- zero
+  false positives across the whole downloaded deck) now detect every
+  real occurrence and refuse to touch exactly the affected entry (or,
+  when the mis-scan swallows a whole sibling instance, the whole file)
+  rather than risk silent corruption -- every other real entry in an
+  affected file still patches normally. Verified byte-identical against
+  all 100 real files with no edits (after both fixes), plus a real
+  rename/net-label-edit/delete round-trip, and a full, complete-PDK,
+  two-generation `export-full` smoking-gun round-trip still producing
+  zero differences. `main.py export-xschem-sym`/`export-xschem-sch`
+  and `File > Export Edited xschem Symbols/Schematics` add CLI/GUI
+  parity with every other write-back domain.
 - **User-defined Verilog/Verilog-A model inclusion, plus a way to link
   it to the rest of the PDK, is done** -- see the
   `ihp/user_models.py`/`gui/user_models_view.py` bullet in "What's

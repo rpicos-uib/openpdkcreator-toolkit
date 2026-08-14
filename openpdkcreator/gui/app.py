@@ -117,6 +117,8 @@ from ..ihp import liberty as liberty_mod
 from ..ihp import netlist as netlist_mod
 from ..ihp import user_models as user_models_mod
 from ..ihp import verilog as verilog_mod
+from ..ihp import xschem as xschem_mod
+from ..ihp import xschem_sch as xschem_sch_mod
 from ..models import DesignRule, Layer
 from .cell_hub_view import CellHubView
 from .file_view_dialog import view_file_dialog
@@ -169,6 +171,11 @@ class App(ttk.Frame):
         self.netlist_cache: dict[Path, list[netlist_mod.NetlistCell]] = {}
         self.verilog_cache: dict[Path, list[verilog_mod.VerilogModule]] = {}
         self.liberty_cache: dict[Path, list[liberty_mod.LibertyCell]] = {}
+        # Same real reason, same fix, for xschem .sym pin edits -- without
+        # this, switching files and back in the Symbols sub-tab would
+        # silently discard any in-memory pin edit.
+        self.xschem_symbol_cache: dict[Path, xschem_mod.XschemSymbol] = {}
+        self.xschem_schematic_cache: dict[Path, xschem_sch_mod.XschemSchematic] = {}
         self.user_models: list[user_models_mod.UserModelFile] = []
         self.user_model_links: list[user_models_mod.UserModelLink] = []
 
@@ -240,6 +247,17 @@ class App(ttk.Frame):
             self.liberty_cache[path] = liberty_mod.find_cells(path)
         return self.liberty_cache[path]
 
+    def get_parsed_xschem_symbol(self, path: Path) -> xschem_mod.XschemSymbol:
+        if path not in self.xschem_symbol_cache:
+            self.xschem_symbol_cache[path] = xschem_mod.parse_sym_file(path)
+        return self.xschem_symbol_cache[path]
+
+    def get_parsed_xschem_schematic(self, path: Path) -> xschem_sch_mod.XschemSchematic:
+        if path not in self.xschem_schematic_cache:
+            xschem_root = self.pdk_root / "libs.tech" / "xschem"
+            self.xschem_schematic_cache[path] = xschem_sch_mod.parse_sch_file(path, xschem_root=xschem_root)
+        return self.xschem_schematic_cache[path]
+
     def collect_lef_pin_overrides(self) -> dict[str, dict[str, list[lef_mod.LefPin]]]:
         """Every macro's current pin list, for every real ``.lef`` file
         parsed so far this session (files never visited via either the
@@ -266,6 +284,8 @@ class App(ttk.Frame):
         file_menu.add_command(label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files)
         file_menu.add_command(label="Export Edited Liberty Files (open_pdks format)", command=self._export_liberty_files)
         file_menu.add_command(label="Export Edited Layers (open_pdks format)", command=self._export_layers)
+        file_menu.add_command(label="Export Edited xschem Symbols (open_pdks format)", command=self._export_xschem_symbols)
+        file_menu.add_command(label="Export Edited xschem Schematics (open_pdks format)", command=self._export_xschem_schematics)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -370,6 +390,36 @@ class App(ttk.Frame):
         export_path = export_mod.export_layers(self.pdk_root, self.lyp_path, self.project.layers)
         self.status.set(f"Exported {len(self.project.layers)} real layer(s) to {export_path}")
 
+    def _export_xschem_symbols(self):
+        """Writes real, patched xschem ``.sym`` text (pin name/direction
+        only) for every real file parsed this session to ``export/<pdk
+        name>/...`` -- see ``export.py``'s/``ihp/xschem_writer.py``'s
+        own docstrings. Never touches the real, downloaded ``data/``
+        copy."""
+
+        self.xschem_view.commit_pending_edits()
+        written = export_mod.export_xschem_symbols(self.pdk_root, self.xschem_symbol_cache)
+        if not written:
+            self.status.set("No xschem .sym files parsed this session -- nothing to export (visit the xschem tab first).")
+            return
+        self.status.set(f"Exported {len(written)} real .sym file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
+    def _export_xschem_schematics(self):
+        """Writes real, patched xschem ``.sch`` text (instance name/
+        net-label, wire label, and deletion only) for every real file
+        parsed this session to ``export/<pdk name>/...`` -- see
+        ``export.py``'s/``ihp/xschem_sch_writer.py``'s own docstrings,
+        including the real, narrow class of entries/files that writer
+        safely refuses to touch. Never touches the real, downloaded
+        ``data/`` copy."""
+
+        self.xschem_view.commit_pending_edits()
+        written = export_mod.export_xschem_schematics(self.pdk_root, self.xschem_schematic_cache)
+        if not written:
+            self.status.set("No xschem .sch files parsed this session -- nothing to export (visit the xschem tab first).")
+            return
+        self.status.set(f"Exported {len(written)} real .sch file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
         then writes DRC Rules/Magic Types/LEF pins/the project name out
@@ -406,11 +456,14 @@ class App(ttk.Frame):
         self.netlist_cache.clear()
         self.verilog_cache.clear()
         self.liberty_cache.clear()
+        self.xschem_symbol_cache.clear()
+        self.xschem_schematic_cache.clear()
         self.set_project_name(DEFAULT_PROJECT_NAME)
         self.settings_view.refresh()
         self.lef_view.load()
         self.cell_hub_view.load()
         self.magic_tech_view.load()
+        self.xschem_view.load()
         self.load()
 
     # -- Overview tab -----------------------------------------------------
@@ -514,7 +567,7 @@ class App(ttk.Frame):
 
         xschem_frame = ttk.Frame(self.simulation_notebook)
         self.simulation_notebook.add(xschem_frame, text="xschem")
-        self.xschem_view = XschemView(xschem_frame, self.pdk_root)
+        self.xschem_view = XschemView(xschem_frame, self)
         self.xschem_view.pack(fill="both", expand=True)
 
         qucs_frame = ttk.Frame(self.simulation_notebook)

@@ -42,6 +42,10 @@ from .ihp import netlist as netlist_mod
 from .ihp import netlist_writer
 from .ihp import verilog as verilog_mod
 from .ihp import verilog_writer
+from .ihp import xschem as xschem_mod
+from .ihp import xschem_sch as xschem_sch_mod
+from .ihp import xschem_sch_writer
+from .ihp import xschem_writer
 from .models import DesignRule, Layer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -194,6 +198,40 @@ def export_liberty_files(
     return written
 
 
+def export_xschem_symbols(
+    pdk_root: Path, symbol_cache: dict[Path, xschem_mod.XschemSymbol], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.sym`` file in *symbol_cache* (the GUI passes only
+    files parsed this session; ``main.py export-xschem-sym`` passes
+    every real file, freshly parsed). Only pin name/direction are ever
+    edited -- see ``ihp/xschem_writer.py``'s own docstring. Returns the
+    real export paths written."""
+
+    written = []
+    for source_path, symbol in symbol_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        xschem_writer.export_sym_file(symbol, export_path)
+        written.append(export_path)
+    return written
+
+
+def export_xschem_schematics(
+    pdk_root: Path, schematic_cache: dict[Path, xschem_sch_mod.XschemSchematic], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.sch`` file in *schematic_cache*. Only instance
+    name/net-label, wire label, and deletion are ever edited -- see
+    ``ihp/xschem_sch_writer.py``'s own docstring, including the real,
+    narrow class of entries/files it safely refuses to touch. Returns
+    the real export paths written."""
+
+    written = []
+    for source_path, schematic in schematic_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        xschem_sch_writer.export_sch_file(schematic, export_path)
+        written.append(export_path)
+    return written
+
+
 def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     """A complete, real, standalone open_pdks-format PDK tree at
     *dest_root* -- every real file under *pdk_root* copied verbatim
@@ -201,8 +239,9 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     clone -- Liberty/GDS/docs/qa/every other real file this project has
     no editor for included, not just the small subset the other
     ``export_*`` functions above touch), then every real LEF/DRC/
-    Magic-Types/CDL/SPICE/Verilog file is re-rendered on top through
-    its own real writer, freshly parsed straight from *pdk_root* with
+    Magic-Types/CDL/SPICE/Verilog/Layers/xschem-symbol/xschem-schematic
+    file is re-rendered on top through its own real writer, freshly
+    parsed straight from *pdk_root* with
     no GUI session or edits involved -- a real no-op patch, but one
     that exercises every real writer against every real file in the
     whole PDK, not a hand-picked sample. Refuses to run if *dest_root*
@@ -253,3 +292,13 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     lyp_path = layers_mod.find_lyp(pdk_root)
     if lyp_path is not None:
         export_layers(pdk_root, lyp_path, layers_mod.import_layers(pdk_root, lyp_path), dest_root)
+
+    xschem_sym_cache = {path: xschem_mod.parse_sym_file(path) for path in xschem_mod.find_sym_files(pdk_root)}
+    export_xschem_symbols(pdk_root, xschem_sym_cache, dest_root)
+
+    xschem_root = pdk_root / "libs.tech" / "xschem"
+    xschem_sch_cache = {
+        path: xschem_sch_mod.parse_sch_file(path, xschem_root=xschem_root)
+        for path in xschem_sch_mod.find_sch_files(pdk_root)
+    }
+    export_xschem_schematics(pdk_root, xschem_sch_cache, dest_root)
