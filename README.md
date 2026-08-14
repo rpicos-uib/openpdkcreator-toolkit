@@ -96,6 +96,16 @@ precedent as everywhere else. Same `App`-owned caching
 (`App.get_parsed_liberty`) as LEF/CDL/SPICE/Verilog, so switching
 families and back never silently discards an in-progress edit.
 
+Every real list this size warrants it (Layers, DRC Rules, LEF Macros,
+By Cell, Magic Types) has a live **Filter** box (`gui/list_filter.py`
+-- one shared, case-insensitive substring helper, so all five behave
+identically rather than five subtly different implementations):
+matches update on every keystroke, an empty box shows everything, and
+a filter matching nothing clears the detail form rather than showing a
+stale one. Creating a new entry (**New Layer**/**New Rule**/**New
+Type**) always clears its own list's filter first, so the freshly
+created row is never hidden by whatever search was active.
+
 **Settings > General** holds two deliberately distinct,
 separately-labeled pairs, so they never get confused now that this
 tool generalizes beyond IHP: **This Project** (an editable **Project

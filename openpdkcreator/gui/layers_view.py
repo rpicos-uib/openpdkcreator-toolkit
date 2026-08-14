@@ -19,6 +19,7 @@ import tkinter as tk
 from tkinter import colorchooser, ttk
 
 from ..models import Layer
+from .list_filter import build_filter_row, matches
 
 PURPOSES = ("drawing", "pin", "label", "marker", "fill", "exclude")
 PLANES = ("routing", "annotation")
@@ -36,6 +37,7 @@ class LayersView(ttk.Frame):
         self.app = app
         self.current_layer: Layer | None = None
         self._suspend_trace = False
+        self._filter_query = ""
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -67,6 +69,7 @@ class LayersView(ttk.Frame):
         ttk.Button(button_row, text="▼ Move Down", command=lambda: self._move(1)).pack(
             side="left", padx=(6, 0)
         )
+        self.filter_var = build_filter_row(button_row, self._on_filter_changed)
 
         columns = ("stack_order", "name", "gds", "purpose", "status")
         self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
@@ -197,6 +200,8 @@ class LayersView(ttk.Frame):
             self.tree.delete(row)
         self._layer_by_iid = {}
         for layer in self.app.project.sorted_layers():
+            if not matches(self._filter_query, layer.name, layer.purpose, layer.status):
+                continue
             gds = "" if layer.gds_layer is None else f"{layer.gds_layer}/{layer.gds_datatype}"
             iid = self._iid(layer)
             self._layer_by_iid[iid] = layer
@@ -206,9 +211,18 @@ class LayersView(ttk.Frame):
             )
         if selected_iid and self.tree.exists(selected_iid):
             self.tree.selection_set(selected_iid)
-        elif self.app.project.layers:
-            self.tree.selection_set(self._iid(self.app.project.sorted_layers()[0]))
+        elif self._layer_by_iid:
+            self.tree.selection_set(next(iter(self._layer_by_iid)))
+        else:
+            self._load_layer_into_form(None)
+        # The stack cross-section always shows the real, complete
+        # physical stack -- filtering the list is for finding a layer,
+        # not for hiding the rest of the real stack from the diagram.
         self._redraw_stack()
+
+    def _on_filter_changed(self, query: str):
+        self._filter_query = query
+        self.refresh()
 
     def _on_select(self, _event=None):
         self._commit_form_to_layer()
@@ -272,6 +286,7 @@ class LayersView(ttk.Frame):
 
     def _new_layer(self):
         self._commit_form_to_layer()
+        self.filter_var.set("")  # a freshly-created layer must always be visible, even mid-search
         next_order = max((l.stack_order for l in self.app.project.layers), default=-1) + 1
         layer = Layer(name=f"NEWLAYER{next_order}", stack_order=next_order)
         self.app.project.layers.append(layer)

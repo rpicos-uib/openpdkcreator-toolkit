@@ -13,10 +13,11 @@ docstring for exactly what's extracted from each and why). **Types**
 is editable (a list + form pane, New/Delete Type, the same
 commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
 already use) -- every other domain stays read-only for now (each would
-need its own form; Types was the one asked for). Editing is purely
-in-memory, same as DRC Rules/LEF pins -- no write-back into the real
-``.tech`` file yet (see README's Future Work). "View File" opens the
-real, underlying ``.tech`` file directly
+need its own form; Types was the one asked for). Editing is in-memory,
+same as DRC Rules/LEF pins, with native write-back into the real
+``.tech`` file via ``ihp/magic_tech_writer.py`` (``File > Export
+Edited Magic Types``/``main.py export-magic-types``). "View File"
+opens the real, underlying ``.tech`` file directly
 (``file_view_dialog.view_file_dialog``), which *can* be edited, as raw
 text.
 """
@@ -29,6 +30,7 @@ from tkinter import ttk
 
 from ..ihp import magic_tech as magic_tech_mod
 from .file_view_dialog import view_file_dialog
+from .list_filter import build_filter_row, matches
 
 OBSOLETE_VALUES = ("", "yes")
 
@@ -40,6 +42,7 @@ class MagicTechView(ttk.Frame):
         self.technologies: dict[str, magic_tech_mod.MagicTechnology] = {}
         self.current_type: magic_tech_mod.TypeEntry | None = None
         self._suspend_trace = False
+        self._type_filter_query = ""
 
         self._build()
         self.load()
@@ -123,6 +126,7 @@ class MagicTechView(ttk.Frame):
         button_row.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         ttk.Button(button_row, text="New Type", command=self._new_type).pack(side="left")
         ttk.Button(button_row, text="Delete Type", command=self._delete_type).pack(side="left", padx=(6, 0))
+        self.type_filter_var = build_filter_row(button_row, self._on_type_filter_changed)
 
         columns = ("plane", "name", "aliases", "obsolete")
         self.types_tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
@@ -284,6 +288,15 @@ class MagicTechView(ttk.Frame):
             ", ".join(type_entry.aliases), "yes" if type_entry.obsolete else "",
         )
 
+    def _type_matches_filter(self, type_entry: magic_tech_mod.TypeEntry) -> bool:
+        return matches(
+            self._type_filter_query, type_entry.canonical_name, type_entry.plane, *type_entry.aliases,
+        )
+
+    def _on_type_filter_changed(self, query: str):
+        self._type_filter_query = query
+        self._refresh_types()
+
     def _refresh_types(self):
         for row in self.types_tree.get_children():
             self.types_tree.delete(row)
@@ -292,13 +305,14 @@ class MagicTechView(ttk.Frame):
         if tech is None:
             self._load_type_into_form(None)
             return
-        for type_entry in tech.types:
+        shown = [t for t in tech.types if self._type_matches_filter(t)]
+        for type_entry in shown:
             iid = self._type_iid(type_entry)
             self._type_by_iid[iid] = type_entry
             self.types_tree.insert("", "end", iid=iid, values=self._type_row_values(type_entry))
-        if tech.types:
-            self.types_tree.selection_set(self._type_iid(tech.types[0]))
-            self._load_type_into_form(tech.types[0])
+        if shown:
+            self.types_tree.selection_set(self._type_iid(shown[0]))
+            self._load_type_into_form(shown[0])
         else:
             self._load_type_into_form(None)
 
@@ -345,6 +359,7 @@ class MagicTechView(ttk.Frame):
         if tech is None:
             return
         self._commit_form_to_type()
+        self.type_filter_var.set("")  # a freshly-created type must always be visible, even mid-search
         default_plane = tech.planes[0].name if tech.planes else ""
         type_entry = magic_tech_mod.TypeEntry(
             plane=default_plane, canonical_name=f"newtype{len(tech.types) + 1}",

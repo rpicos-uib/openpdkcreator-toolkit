@@ -22,11 +22,12 @@ which are the real, top-level hard macros) -- a **Show internal
 sub-cells too** checkbox reveals the rest, off by default so the list
 stays genuinely browsable.
 
-**Editing**: of a selected cell's views, only its real LEF macro's pins
-are genuinely structured-editable data today (CDL/SPICE/Verilog only
-have a name + a flat port-name list -- no per-port model exists to
-edit; Liberty only has cell boundaries, no real content parsed at all
--- see README's Future Work). The **Pins** pane reuses
+**Editing**: LEF pins, CDL/SPICE/Verilog ports, and Liberty pins/
+timing arcs are all genuinely structured-editable data (see the
+Liberty/CDL/SPICE/Verilog sections below) -- Liberty's own real
+lookup-table sub-groups (``cell_rise``/``cell_fall``/...) are the one
+domain still deliberately read-only, see README's Future Work. The
+**Pins** pane reuses
 ``pin_editor.PinEditor``, the same widget the **LEF** tab's own "LEF
 Macros" sub-tab uses -- and, critically, the exact same in-memory
 ``LefMacro`` object: both tabs parse through ``App.get_parsed_lef``,
@@ -81,6 +82,7 @@ from ..ihp import netlist as netlist_mod
 from ..ihp import verilog as verilog_mod
 from .file_view_dialog import view_file_dialog
 from .liberty_dialog import edit_liberty_dialog
+from .list_filter import build_filter_row, matches
 from .pin_editor import PinEditor
 from .port_dialog import edit_ports_dialog
 
@@ -95,6 +97,7 @@ class CellHubView(ttk.Frame):
         self.families: list[str] = []
         self.cell_index: dict[str, cells_mod.CellViews] = {}
         self.current_cell: cells_mod.CellViews | None = None
+        self._filter_query = ""
 
         self._build()
         self.load()
@@ -115,6 +118,7 @@ class CellHubView(ttk.Frame):
             top, text="Show internal sub-cells too", variable=self.show_all_var,
             command=self._refresh_cells,
         ).pack(side="left")
+        build_filter_row(top, self._on_filter_changed)
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True, padx=(12, 0))
@@ -250,6 +254,8 @@ class CellHubView(ttk.Frame):
             cv = self.cell_index[name]
             if not show_all and cv.lef_macro is None:
                 continue
+            if not matches(self._filter_query, name):
+                continue
             shown += 1
             self.cells_tree.insert(
                 "", "end", iid=name,
@@ -277,6 +283,10 @@ class CellHubView(ttk.Frame):
             self._show_cell(self.cell_index[first])
         else:
             self._show_cell(None)
+
+    def _on_filter_changed(self, query: str):
+        self._filter_query = query
+        self._refresh_cells()
 
     def _on_cell_select(self, _event=None):
         selection = self.cells_tree.selection()

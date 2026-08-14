@@ -36,6 +36,7 @@ from tkinter import ttk
 
 from ..ihp import lef as lef_mod
 from .file_view_dialog import view_file_dialog
+from .list_filter import build_filter_row, matches
 from .pin_editor import PinEditor
 
 
@@ -47,6 +48,7 @@ class LefView(ttk.Frame):
         self.lef_files: dict[str, Path] = {}
         self.current: lef_mod.LefFile | None = None
         self.current_macro: lef_mod.LefMacro | None = None
+        self._macro_filter_query = ""
 
         self._build()
         self.load()
@@ -96,14 +98,17 @@ class LefView(ttk.Frame):
 
         left = ttk.Frame(frame)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        left.rowconfigure(0, weight=1)
+        left.rowconfigure(1, weight=1)
         left.columnconfigure(0, weight=1)
+        filter_row = ttk.Frame(left)
+        filter_row.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        build_filter_row(filter_row, self._on_macro_filter_changed, label="Filter macros:")
         macro_columns = ("name", "class", "size", "site", "pins", "obs_layers")
         self.macros_tree = ttk.Treeview(left, columns=macro_columns, show="headings")
         for col, width in zip(macro_columns, (220, 110, 100, 90, 50, 120)):
             self.macros_tree.heading(col, text=col.replace("_", " ").title())
             self.macros_tree.column(col, width=width, anchor="w")
-        self.macros_tree.grid(row=0, column=0, sticky="nsew")
+        self.macros_tree.grid(row=1, column=0, sticky="nsew")
         self.macros_tree.bind("<<TreeviewSelect>>", self._on_macro_select)
 
         self.pin_editor = PinEditor(frame, on_change=self._on_pin_editor_change)
@@ -162,7 +167,8 @@ class LefView(ttk.Frame):
                     layer.resistance,
                 ),
             )
-        for macro in tech.macros:
+        shown_macros = [m for m in tech.macros if self._macro_matches_filter(m)]
+        for macro in shown_macros:
             size = f"{macro.size[0]} x {macro.size[1]}" if macro.size else ""
             self.macros_tree.insert(
                 "", "end", iid=macro.name,
@@ -172,16 +178,23 @@ class LefView(ttk.Frame):
         summary = (
             f"version {tech.version} | db_microns:{tech.database_microns} | "
             f"mfg_grid:{tech.manufacturing_grid} | layers:{len(tech.layers)} sites:{len(tech.sites)} "
-            f"macros:{len(tech.macros)} vias:{len(tech.via_names)} (bodies not parsed) "
+            f"macros:{len(shown_macros)}/{len(tech.macros)} vias:{len(tech.via_names)} (bodies not parsed) "
             f"viarules:{len(tech.via_rule_names)} (bodies not parsed)"
         )
         self.summary_var.set(summary)
 
-        if tech.macros:
-            self.macros_tree.selection_set(tech.macros[0].name)
-            self._show_macro(tech.macros[0])
+        if shown_macros:
+            self.macros_tree.selection_set(shown_macros[0].name)
+            self._show_macro(shown_macros[0])
         else:
             self._show_macro(None)
+
+    def _macro_matches_filter(self, macro: lef_mod.LefMacro) -> bool:
+        return matches(self._macro_filter_query, macro.name, macro.macro_class, macro.site)
+
+    def _on_macro_filter_changed(self, query: str):
+        self._macro_filter_query = query
+        self._refresh_all()
 
     def _on_macro_select(self, _event=None):
         if self.current is None:

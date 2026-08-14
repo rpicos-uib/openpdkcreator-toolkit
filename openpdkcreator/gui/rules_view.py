@@ -26,6 +26,7 @@ from tkinter import ttk
 from ..models import DesignRule
 from ..schema import CHECK_TYPES, CHECK_TYPE_ORDER
 from . import rule_canvas
+from .list_filter import build_filter_row, matches
 
 NET_QUALIFIERS = ("all", "different_net", "not_applicable")
 STATUSES = ("placeholder", "confirmed")
@@ -45,6 +46,7 @@ class RulesView(ttk.Frame):
         self.current_rule: DesignRule | None = None
         self._suspend_trace = False
         self._rule_id_is_auto = False
+        self._filter_query = ""
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=2)
@@ -71,6 +73,7 @@ class RulesView(ttk.Frame):
         ttk.Button(button_row, text="View Source", command=self._view_source).pack(
             side="left", padx=(6, 0)
         )
+        self.filter_var = build_filter_row(button_row, self._on_filter_changed)
 
         columns = ("rule_id", "check_type", "applies_to", "value", "status")
         self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
@@ -189,13 +192,28 @@ class RulesView(ttk.Frame):
             self.tree.delete(row)
         self._rule_by_iid = {}
         for rule in self.app.project.design_rules:
+            if not self._rule_matches_filter(rule):
+                continue
             iid = self._iid(rule)
             self._rule_by_iid[iid] = rule
             self.tree.insert("", "end", iid=iid, values=self._row_values(rule))
         if selected_iid and self.tree.exists(selected_iid):
             self.tree.selection_set(selected_iid)
-        elif self.app.project.design_rules:
-            self.tree.selection_set(self._iid(self.app.project.design_rules[0]))
+        elif self._rule_by_iid:
+            self.tree.selection_set(next(iter(self._rule_by_iid)))
+        else:
+            self._load_rule_into_form(None)
+
+    def _rule_matches_filter(self, rule: DesignRule) -> bool:
+        spec = CHECK_TYPES[rule.check_type]
+        return matches(
+            self._filter_query, rule.rule_id, rule.description, spec.label,
+            *rule.layers, rule.classification, rule.owner, rule.condition,
+        )
+
+    def _on_filter_changed(self, query: str):
+        self._filter_query = query
+        self.refresh()
 
     def _find_rule(self, iid: str) -> DesignRule | None:
         return self._rule_by_iid.get(iid)
@@ -375,6 +393,7 @@ class RulesView(ttk.Frame):
 
     def _new_rule(self):
         self._commit_form_to_rule()
+        self.filter_var.set("")  # a freshly-created rule must always be visible, even mid-search
         n = len(self.app.project.design_rules) + 1
         rule = DesignRule(
             rule_id=f"NEW.RULE.{n}", description="New rule", check_type=CHECK_TYPE_ORDER[0]
