@@ -1005,9 +1005,33 @@ models, ...), not just read/display layers. Concretely, still open:
   file-picker/Treeview pattern once one does. ngspice's own real
   `.LIB name ... .ENDL` PVT-corner blocks (a real `.param NAME = value`
   list per corner) are also real, separate future work.
-- Revisit copying vs. sharing code with `OpenPDKCreator` if the two
-  projects' core models (`Layer`, the tool registry) diverge enough to
-  need reconciling.
+- **Copy-vs-share with `OpenPDKCreator`, revisited and re-confirmed**:
+  diffed every genuinely-copied file against `OpenPDKCreator`'s own
+  current originals rather than assuming. The core data shapes
+  (`models.Layer`, `models.DesignRule`) are still byte-for-byte
+  identical -- a real, still-valid shared seam -- but everything
+  *around* them has diverged in concrete, structural ways since this
+  project started: `schema.py`'s `CHECK_TYPES` there has grown a
+  `csv_check_type` field this project never needed plus two entirely
+  separate registries (`PARAMETER_TYPES`, `DEVICE_EXTRACTION_TYPES`)
+  for memristor-specific compact-model data this project has no
+  equivalent of; `eda_tools.py`'s own `LaunchGuidance` gained a new
+  `requires_path` field here (see the Magic/KLayout launch-guidance
+  entry above) that `OpenPDKCreator`'s copy doesn't have, and each
+  project's `TOOL_REGISTRY` now points real launch guidance at
+  genuinely different real files (`openmempdk.lyp` vs. `sg13g2.lyp`);
+  `layers_view.py` gained a live filter/search box here (see the GUI
+  structure section) with no equivalent upstream. **Verdict: keep
+  copying.** The still-shared surface (two dataclasses) is too small
+  to justify a shared-package dependency between two projects whose
+  actual missions -- one memristor-specific end product, one general
+  multi-PDK authoring tool -- keep pulling the surrounding code in
+  different directions; introducing a shared library now would mean
+  either splitting `schema.py`'s registries apart or forcing one
+  project's `LaunchGuidance` shape onto the other, real refactoring
+  work for a benefit that's mostly just avoiding ~150 lines of
+  duplication. Worth re-checking again if the *data models themselves*
+  (not just the code around them) start to diverge.
 
 ## License
 
