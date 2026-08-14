@@ -50,14 +50,33 @@ each harder, mini-rule-language section rather than a full interpreter:
   separate future work; ``device`` in particular is its own real
   transistor-model mini-language.
 
-``cifinput``/``lef``/``mzrouter``/``wiring``/``router``/``plowing``/
-``plot`` are still deliberately NOT parsed this pass -- ``cifinput``'s
-own real recipes are geometry-boolean chains (``and``/``and-not``/
-``grow``/``shrink``) whose *first* line alone (unlike ``cifoutput``'s
-*final* ``calma`` line) isn't a complete, honest fact about the
-resulting Magic type, so it needs its own, separate real design pass,
-not a quick reuse of the ``cifoutput`` pattern. These are reported, by
-name, in ``MagicTechnology.unparsed_sections``, never silently dropped.
+- ``cifinput``: two real, cleanly tabular facts pulled out of the
+  section, its own real geometry-boolean recipe blocks (``layer``/
+  ``templayer`` ... ``and``/``and-not``/``grow``/``shrink``/``labels``/
+  ``copyup``) still deliberately NOT interpreted -- their *first* line
+  alone (unlike ``cifoutput``'s *final* ``calma`` line) isn't a
+  complete, honest fact about the resulting Magic type, so fully
+  modeling them remains real, separate future work. The two real facts
+  that *are* extracted, in full: every real ``ignore LAYERNAME``
+  statement (23 real entries, a simple, unambiguous "this GDS/CIF
+  layer is ignored on read" fact), and a real, standalone
+  ``calma NAME L D`` table (133 real entries, confirmed by reading the
+  real file to sit together in one flat block, *not* nested inside any
+  preceding boolean recipe -- unlike ``cifoutput``'s own per-recipe
+  ``calma L D`` lines, which omit the name and inherit it from the
+  enclosing ``layer``/``templayer`` block, `cifinput`'s own real
+  ``calma`` lines carry their own name token directly, a genuinely
+  different real shape requiring its own regex, not a reuse of
+  ``cifoutput``'s). Two of those 133 real entries use a literal ``*``
+  as their datatype (``calma BOUND 189 *``) -- a real wildcard,
+  confirmed by reading the file, kept as ``None`` rather than silently
+  dropped or coerced to a fake integer.
+
+``lef``/``mzrouter``/``wiring``/``router``/``plowing``/``plot`` are
+still deliberately NOT parsed this pass. Every section name found
+(directly or via include) that this pass doesn't fully parse is
+reported in ``MagicTechnology.unparsed_sections``, never silently
+dropped.
 """
 
 from __future__ import annotations
@@ -76,6 +95,8 @@ _SECTION_START_RE = re.compile(r"^(" + "|".join(_ALL_KNOWN_SECTIONS) + r")\s*$")
 _INCLUDE_RE = re.compile(r"^include\s+(\S+)\s*$")
 _LAYER_BLOCK_START_RE = re.compile(r"^\s*(?:layer|templayer)\s+(\S+)")
 _CALMA_RE = re.compile(r"^\s*calma\s+(\d+)\s+(\d+)")
+_CIFINPUT_IGNORE_RE = re.compile(r"^\s*ignore\s+(\S+)")
+_CIFINPUT_CALMA_RE = re.compile(r"^\s*calma\s+(\S+)\s+(\d+)\s+(\d+|\*)")
 _COMPOSE_VERBS = ("compose", "decompose", "paint")
 _WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
@@ -145,6 +166,26 @@ class CifLayer:
 
     name: str
     gds_pairs: list[tuple[int, int]] = field(default_factory=list)
+
+
+@dataclass
+class CifInputLayerHint:
+    """One real 'calma NAME L D' statement from the cifinput section --
+    unlike cifoutput's own per-recipe CifLayer, this real statement's
+    own NAME token is self-contained, not inherited from an enclosing
+    'layer'/'templayer' recipe block (confirmed real: all 133 real
+    entries sit together in one flat, standalone table, immediately
+    after the last real recipe block, not nested inside any of them).
+    A real Magic-type-name to real GDS-layer/datatype hint used for
+    CIF/GDS-read layer recognition -- the reverse direction of
+    cifoutput's own real mapping."""
+
+    name: str
+    gds_layer: int
+    gds_datatype: int | None
+    """``None`` for a real wildcard datatype (the file's own literal
+    ``*``, confirmed real -- e.g. ``calma BOUND 189 *`` -- meaning "any
+    datatype", not a parsing gap)."""
 
 
 @dataclass
@@ -221,6 +262,11 @@ class MagicTechnology:
     aliases: list[AliasEntry] = field(default_factory=list)
     styles: list[StyleEntry] = field(default_factory=list)
     cif_layers: list[CifLayer] = field(default_factory=list)
+    cifinput_ignored_layers: list[str] = field(default_factory=list)
+    """Real 'ignore LAYERNAME' statements from the cifinput section."""
+    cifinput_layer_hints: list[CifInputLayerHint] = field(default_factory=list)
+    """Real, standalone 'calma NAME L D' statements from the cifinput
+    section -- see ``CifInputLayerHint``'s own docstring."""
     compose: list[ComposeStatement] = field(default_factory=list)
     connect: list[ConnectRule] = field(default_factory=list)
     drc_checks: list[MagicDrcCheck] = field(default_factory=list)
@@ -469,6 +515,30 @@ def _parse_cifoutput_layers(lines: list[str]) -> list[CifLayer]:
     return list(by_name.values())
 
 
+def _parse_cifinput_ignored_layers(lines: list[str]) -> list[str]:
+    names = []
+    for line in lines:
+        match = _CIFINPUT_IGNORE_RE.match(line)
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def _parse_cifinput_layer_hints(lines: list[str]) -> list[CifInputLayerHint]:
+    hints = []
+    for line in lines:
+        match = _CIFINPUT_CALMA_RE.match(line)
+        if match:
+            datatype_raw = match.group(3)
+            hints.append(
+                CifInputLayerHint(
+                    name=match.group(1), gds_layer=int(match.group(2)),
+                    gds_datatype=None if datatype_raw == "*" else int(datatype_raw),
+                )
+            )
+    return hints
+
+
 def _parse_compose(lines: list[str]) -> list[ComposeStatement]:
     entries = []
     for line in lines:
@@ -601,13 +671,15 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.aliases = _parse_aliases(sections.get("aliases", []))
     tech.styles = _parse_styles(sections.get("styles", []))
     tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
+    tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))
+    tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))
     tech.compose = _parse_compose(sections.get("compose", []))
     tech.connect = _parse_connect(sections.get("connect", []))
     tech.drc_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.extract_resist = _parse_extract_resist(sections.get("extract", []))
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
 
-    parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "compose", "connect", "drc", "extract"}
+    parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)
 
     return tech

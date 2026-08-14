@@ -72,6 +72,7 @@ class MagicTechView(ttk.Frame):
         self.aliases_tree = self._make_tab(sub, "Aliases", ("name", "members"), (200, 560))
         self.styles_tree = self._make_tab(sub, "Styles", ("type_name", "style_names"), (160, 560))
         self.cif_tree = self._make_tab(sub, "CIF Layers", ("name", "gds_pairs"), (200, 400))
+        self._build_cifinput_tab(sub)
         self.compose_tree = self._make_tab(sub, "Compose", ("verb", "arg1", "arg2", "arg3"), (100, 140, 140, 140))
         self.connect_tree = self._make_tab(sub, "Connect", ("types_a", "types_b"), (330, 330))
         self.drc_tree = self._make_tab(
@@ -104,6 +105,31 @@ class MagicTechView(ttk.Frame):
             self.extract_plane_order_tree.heading(col, text=col.title())
             self.extract_plane_order_tree.column(col, width=width, anchor="w")
         self.extract_plane_order_tree.grid(row=1, column=1, sticky="nsew")
+
+    def _build_cifinput_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="CIF Input")
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=2)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Ignored layers (real, on CIF/GDS read):").grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
+        self.cifinput_ignore_tree = ttk.Treeview(frame, columns=("layer",), show="headings")
+        self.cifinput_ignore_tree.heading("layer", text="Layer")
+        self.cifinput_ignore_tree.column("layer", width=200, anchor="w")
+        self.cifinput_ignore_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+
+        ttk.Label(frame, text="Layer hints (real, standalone 'calma NAME L D' table):").grid(
+            row=0, column=1, sticky="w"
+        )
+        hint_columns = ("name", "gds_layer", "gds_datatype")
+        self.cifinput_hints_tree = ttk.Treeview(frame, columns=hint_columns, show="headings")
+        for col, width in zip(hint_columns, (200, 90, 90)):
+            self.cifinput_hints_tree.heading(col, text=col.replace("_", " ").title())
+            self.cifinput_hints_tree.column(col, width=width, anchor="w")
+        self.cifinput_hints_tree.grid(row=1, column=1, sticky="nsew")
 
     def _make_tab(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -221,6 +247,7 @@ class MagicTechView(ttk.Frame):
         for tree in (
             self.planes_tree, self.contacts_tree,
             self.aliases_tree, self.styles_tree, self.cif_tree,
+            self.cifinput_ignore_tree, self.cifinput_hints_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
         ):
@@ -246,6 +273,11 @@ class MagicTechView(ttk.Frame):
         for cif_layer in tech.cif_layers:
             pairs = ", ".join(f"{layer}/{datatype}" for layer, datatype in cif_layer.gds_pairs)
             self.cif_tree.insert("", "end", values=(cif_layer.name, pairs))
+        for layer_name in tech.cifinput_ignored_layers:
+            self.cifinput_ignore_tree.insert("", "end", values=(layer_name,))
+        for hint in tech.cifinput_layer_hints:
+            datatype = "*" if hint.gds_datatype is None else hint.gds_datatype
+            self.cifinput_hints_tree.insert("", "end", values=(hint.name, hint.gds_layer, datatype))
         for statement in tech.compose:
             self.compose_tree.insert("", "end", values=(statement.verb, *statement.args))
         for rule in tech.connect:

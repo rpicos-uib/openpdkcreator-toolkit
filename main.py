@@ -29,11 +29,13 @@ bounding box + per-layer shape count via KLayout's own real Python
 API, ``klayout.db``, lazily imported so every other command here still
 runs without it installed). Magic's own ``compose``/``connect``
 sections are fully parsed, and one real pattern each is pulled out of
-its harder ``drc`` (``width``/``spacing``, 166 real checks) and
-``extract`` (``resist``/``planeorder``, 44 real entries)
-mini-rule-languages -- see ``ihp/magic_tech.py``'s own docstring for
-exact real coverage and what's still not attempted (``cifinput``,
-``device``, the rest of ``drc``/``extract``). LEF's own real
+its harder ``drc`` (``width``/``spacing``, 166 real checks),
+``extract`` (``resist``/``planeorder``, 44 real entries), and
+``cifinput`` (``ignore``/standalone ``calma`` hints, 156 real entries
+combined) mini-rule-languages -- see ``ihp/magic_tech.py``'s own
+docstring for exact real coverage and what's still not attempted
+(``device``, the rest of ``drc``/``extract``, ``cifinput``'s own real
+geometry-boolean recipes). LEF's own real
 ``VIA``/``ViaRULE`` via-stack geometry is also parsed (real layer/rect
 geometry for a fixed via, real enclosure/spacing/resistance for a
 generated one -- ``ihp/lef.py``); no attempt at Liberty's own real
@@ -134,6 +136,11 @@ def cmd_magic_tech(pdk_root: Path) -> int:
             f"styles:{len(tech.styles)}  cif_layers:{len(tech.cif_layers)}  "
             f"compose:{len(tech.compose)}  connect:{len(tech.connect)}"
         )
+        if tech.cifinput_ignored_layers or tech.cifinput_layer_hints:
+            print(
+                f"  cifinput_ignored:{len(tech.cifinput_ignored_layers)}  "
+                f"cifinput_layer_hints:{len(tech.cifinput_layer_hints)}"
+            )
         print(
             f"  drc_checks:{len(tech.drc_checks)} ({len(tech.drc_skipped)} real line(s) not matched)  "
             f"extract_resist:{len(tech.extract_resist)}  extract_plane_order:{len(tech.extract_plane_order)}"

@@ -171,9 +171,23 @@ highlighted straight to that cell's real line range within its
   downloaded files: the cleanly tabular sections
   (`tech`/`version`/`planes`/`types`/`contact`/`aliases`/`styles`/
   `compose`/`connect`) in full, plus one reliable pattern pulled out of
-  each of three much harder mini-rule-language sections:
+  each of four much harder mini-rule-language sections:
   - `cifoutput`: every real `layer NAME ... calma L D` recipe -- a
     genuine Magic-type-name to GDS-layer/datatype mapping.
+  - `cifinput`: two real, cleanly tabular facts -- every real `ignore
+    LAYERNAME` statement (23 real entries) and a real, standalone
+    `calma NAME L D` table (133 real entries, confirmed by reading the
+    file to sit together in one flat block, not nested inside any
+    boolean recipe -- a genuinely different real shape from
+    `cifoutput`'s own per-recipe `calma L D`, which omits the name and
+    inherits it from the enclosing block, so it needed its own regex).
+    Two of those 133 real entries use a literal `*` wildcard datatype
+    (`calma BOUND 189 *`) -- kept as `None`, not silently dropped or
+    coerced to a fake integer. The section's own real geometry-boolean
+    recipe blocks (`and`/`and-not`/`grow`/`shrink`) are still not
+    interpreted -- their *first* line alone isn't a complete, honest
+    fact the way `cifoutput`'s *final* `calma` line is, so fully
+    modeling them stays real, separate future work.
   - `drc`: the two dominant, cleanly tabular real statement kinds,
     `width`/`spacing` -- 166 of the real section's statements (65/65
     `width`, 101/102 `spacing`; the one real miss is a genuine defect
@@ -194,17 +208,12 @@ highlighted straight to that cell's real line range within its
   Real `include` resolution confirmed: `ihp-sg13g2.tech` splices in 4
   fragment files (`cifout`/`cifin`/`drc`/`extract`) as one logical
   technology; `ihp-sg13g2-GDS.tech` is a second, genuinely separate
-  technology with its own header. `cifinput`/`lef`/`mzrouter`/`wiring`/
-  `router`/`plowing`/`plot`, and everything in `drc`/`extract` beyond
-  the patterns above (`surround`/`edge4way`/`device`/505 real
+  technology with its own header. `lef`/`mzrouter`/`wiring`/`router`/
+  `plowing`/`plot`, and everything in `drc`/`extract` beyond the
+  patterns above (`surround`/`edge4way`/`device`/505 real
   parasitic-capacitance-coefficient lines/...) are honestly reported as
   not-parsed-this-pass, never silently dropped
   (`MagicTechnology.unparsed_sections`, `MagicTechnology.drc_skipped`).
-  `cifinput` specifically was left for its own future pass rather than
-  reusing `cifoutput`'s pattern: its real recipes are geometry-boolean
-  chains (`and`/`and-not`/`grow`/`shrink`) whose *first* line alone
-  isn't a complete, honest fact the way `cifoutput`'s *final* `calma`
-  line is.
 - **`openpdkcreator/ihp/reconcile.py`** -- cross-references the Magic
   `cifoutput` GDS mapping above against the KLayout `.lyp` layers
   (`ihp/layers.py`), both real, independent descriptions of the same
@@ -218,18 +227,20 @@ highlighted straight to that cell's real line range within its
   (`MagicTechView`), matching the Layers tab's Treeview-based shape:
   a technology picker (`ihp-sg13g2` / `ihp-sg13g2-GDS`, the two real,
   separate technologies -- the `include`d fragments have no own header
-  and aren't shown standalone) over ten sub-tabs, one per real, parsed
-  data domain (Planes/Types/Contacts/Aliases/Styles/CIF Layers/
-  Compose/Connect/**DRC (Magic)**/Extract -- the last four new, real
-  content from `ihp/magic_tech.py`'s own `compose`/`connect`/`drc`/
-  `extract` extraction described above), plus a **View File** button.
-  **Types is editable** -- a list + form pane (Plane/Name/Aliases/
-  Obsolete), New/Delete Type, the same commit-on-switch pattern as
-  everywhere else; every other domain stays read-only for now (each
-  would need its own form). Verified for real, driven against the
-  actual downloaded data: all ten sub-tabs' row counts match
-  `magic-tech`'s own CLI output exactly (39 compose/20 connect/166 DRC
-  checks/30 resist), switching technologies correctly reloads every
+  and aren't shown standalone) over eleven sub-tabs, one per real,
+  parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF Layers/
+  **CIF Input**/Compose/Connect/**DRC (Magic)**/Extract -- CIF Input
+  shows the section's own two real, extracted facts side by side
+  (ignored layers; the standalone `calma` layer-hint table, `*`
+  wildcard datatypes shown as `*`, not a fake `0`) -- plus a **View
+  File** button. **Types is editable** -- a list + form pane
+  (Plane/Name/Aliases/Obsolete), New/Delete Type, the same
+  commit-on-switch pattern as everywhere else; every other domain
+  stays read-only for now (each would need its own form). Verified for
+  real, driven against the actual downloaded data: all eleven sub-tabs'
+  row counts match `magic-tech`'s own CLI output exactly (39
+  compose/20 connect/166 DRC checks/30 resist/23 cifinput-ignored/133
+  cifinput-hints), switching technologies correctly reloads every
   sub-tab, editing a real type's name/aliases/obsolete commits
   immediately and survives a technology switch, and a spot-checked real
   DRC row (`Act.a`) shows the correct converted `0.15` micron value.
@@ -841,12 +852,15 @@ application that can create/edit/generate arbitrary PDK file types
 (Magic technology files, KLayout DRC decks, LEF, GDS, Liberty, SPICE
 models, ...), not just read/display layers. Concretely, still open:
 
-- `cifinput` (Magic's own real GDS-import geometry-boolean mini
-  language -- deliberately not attempted alongside `compose`/`connect`/
-  `drc`/`extract`, since its recipes don't reduce to one honest,
-  standalone fact the way `cifoutput`'s final `calma` line does -- see
-  `magic_tech.py`'s own docstring), the much larger real remainder of
-  `extract` (505 real parasitic-capacitance-coefficient lines --
+- `cifinput`'s own real geometry-boolean recipe blocks (`layer`/
+  `templayer` ... `and`/`and-not`/`grow`/`shrink`/`labels`/`copyup` --
+  the section's two cleanly tabular real facts, `ignore` statements and
+  the standalone `calma` layer-hint table, are now extracted; the
+  recipes themselves still aren't, since their *first* line alone
+  doesn't reduce to one honest, standalone fact the way `cifoutput`'s
+  *final* `calma` line does -- see `magic_tech.py`'s own docstring),
+  the much larger real remainder of `extract` (505 real
+  parasitic-capacitance-coefficient lines --
   `defaultoverlap`/`defaultsideoverlap`/`defaultareacap`/
   `defaultperimeter`/`defaultsidewall` -- plus `device`, its own real
   transistor-model mini-language), the much larger real remainder of
