@@ -40,6 +40,9 @@ from .ihp import magic_tech as magic_tech_mod
 from .ihp import magic_tech_writer
 from .ihp import netlist as netlist_mod
 from .ihp import netlist_writer
+from .ihp import qucs_component_writer
+from .ihp import qucs_sym as qucs_sym_mod
+from .ihp import qucs_sym_writer
 from .ihp import verilog as verilog_mod
 from .ihp import verilog_writer
 from .ihp import xschem as xschem_mod
@@ -232,6 +235,38 @@ def export_xschem_schematics(
     return written
 
 
+def export_qucs_symbols(
+    pdk_root: Path, symbol_cache: dict[Path, qucs_sym_mod.QucsSymbolGeometry], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real Qucs-S ``.sym`` file in *symbol_cache*. Only real
+    ``PortSym`` x/y/type/angle/condition are ever edited -- see
+    ``ihp/qucs_sym_writer.py``'s own docstring. Returns the real
+    export paths written."""
+
+    written = []
+    for source_path, geometry in symbol_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        qucs_sym_writer.export_symbol_file(geometry, export_path)
+        written.append(export_path)
+    return written
+
+
+def export_qucs_components(
+    pdk_root: Path, component_cache: dict[Path, qucs_sym_mod.QucsComponent], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real Qucs-S component ``.xml`` file in *component_cache*.
+    Only a real Parameter's own ``default_value``/``equation`` is ever
+    edited -- see ``ihp/qucs_component_writer.py``'s own docstring.
+    Returns the real export paths written."""
+
+    written = []
+    for source_path, component in component_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        qucs_component_writer.export_component_file(component, export_path)
+        written.append(export_path)
+    return written
+
+
 def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     """A complete, real, standalone open_pdks-format PDK tree at
     *dest_root* -- every real file under *pdk_root* copied verbatim
@@ -239,9 +274,9 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     clone -- Liberty/GDS/docs/qa/every other real file this project has
     no editor for included, not just the small subset the other
     ``export_*`` functions above touch), then every real LEF/DRC/
-    Magic-Types/CDL/SPICE/Verilog/Layers/xschem-symbol/xschem-schematic
-    file is re-rendered on top through its own real writer, freshly
-    parsed straight from *pdk_root* with
+    Magic-Types/CDL/SPICE/Verilog/Layers/xschem-symbol/xschem-schematic/
+    Qucs-S-symbol/Qucs-S-component file is re-rendered on top through
+    its own real writer, freshly parsed straight from *pdk_root* with
     no GUI session or edits involved -- a real no-op patch, but one
     that exercises every real writer against every real file in the
     whole PDK, not a hand-picked sample. Refuses to run if *dest_root*
@@ -302,3 +337,13 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
         for path in xschem_sch_mod.find_sch_files(pdk_root)
     }
     export_xschem_schematics(pdk_root, xschem_sch_cache, dest_root)
+
+    qucs_symbol_cache = {
+        path: qucs_sym_mod.parse_symbol_geometry(path) for path in qucs_sym_mod.find_symbol_geometry_files(pdk_root)
+    }
+    export_qucs_symbols(pdk_root, qucs_symbol_cache, dest_root)
+
+    qucs_component_cache = {
+        path: qucs_sym_mod.parse_component_file(path) for path in qucs_sym_mod.find_component_files(pdk_root)
+    }
+    export_qucs_components(pdk_root, qucs_component_cache, dest_root)

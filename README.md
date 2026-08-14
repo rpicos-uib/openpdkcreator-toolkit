@@ -31,6 +31,8 @@ python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.sub
 python3 main.py xschem       # real xschem .sym symbol summary: device type + pin list
 python3 main.py xschem-sch   # real xschem .sch schematic summary: instances/pins/wires
 python3 main.py qucs         # real Qucs-S component .xml/symbol .sym summary
+python3 main.py export-qucs-sym        # real, patched Qucs-S .sym write-back to export/ (byte-identical with no edits)
+python3 main.py export-qucs-component  # real, patched Qucs-S component .xml write-back to export/ (byte-identical with no edits)
 python3 main.py user-models  # list user_models/ Verilog/Verilog-A modules and their real cell links
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
@@ -76,10 +78,11 @@ sub-tab (**editable** real component instances -- name, and a real
 pin instance's own net label -- plus a real, read-only Pins summary
 and **editable** real wire labels); **Qucs-S**
 -- a **Components** sub-tab (real device definitions: models,
-parameters, netlist templates) and a **Symbols** sub-tab (real drawn-
-geometry ports, no real port names, just position/type/angle -- a
-genuinely different tag syntax from xschem's own `.sym`, confirmed,
-not a quick reuse); **User Models** -- user-authored Verilog/Verilog-A
+read-only; **editable** real Parameter default_value/equation) and a
+**Symbols** sub-tab (**editable** real drawn-geometry ports -- no real
+port names, just position/type/angle -- a genuinely different tag
+syntax from xschem's own `.sym`, confirmed, not a quick reuse);
+**User Models** -- user-authored Verilog/Verilog-A
 modules under `user_models/`, editable link to a real cell), and
 **Settings** (project-level settings -- not any one tool's PDK content
 -- **General** and **Tools** as sub-tabs). **Technology**/**Cells**/
@@ -1280,6 +1283,57 @@ models, ...), not just read/display layers. Concretely, still open:
   spot-checked real component (`nmos.xml`) and its own real symbol
   (`Mos.sym`, all 8 real ports correctly hinted `D`/`G`/`S`/`B` across
   its two real `nmos`/`pmos` variants) both render correctly.
+- **Qucs-S Components and Symbols both gained real editors with
+  write-back.** **Components > Parameters**: a real Parameter's own
+  `default_value`/`equation` is editable; `ihp/qucs_component_writer.py`
+  patches it via a real, surgical text scan for each real
+  `<Parameter ...>` opening tag's own real character span (confirmed
+  real: not always a single physical line -- a long real `equation=`
+  value can wrap the tag across several, e.g. `rhigh.xml`'s own real
+  `R` parameter). Standard `xml.etree.ElementTree` stays for *reading*
+  only; write-back deliberately avoids a full ElementTree
+  re-serialization, the same real risk (reformatting attribute
+  order/quoting/whitespace) that already ruled out ElementTree for
+  KLayout's own real `.lyp` write-back. Real Parameters are matched to
+  their own real file position strictly by order (no other stable real
+  identity exists, and this project's own editor never adds/deletes/
+  reorders one). **Symbols > Ports**: real `PortSym`
+  `x`/`y`/`type`/`angle`/`condition` are editable (the real, partial
+  `hint` comment stays read-only, preserved verbatim); New/Delete Port
+  supported. `ihp/qucs_sym_writer.py` handles write-back, reusing the
+  same "unchanged -> keep the real original line verbatim" discipline
+  `ihp/verilog_writer.py` already established -- **a real, column-
+  alignment formatting bug was found and fixed by this project's own
+  byte-identical check**: some real files pad extra spaces between
+  attributes for visual alignment (`Varicap.sym`'s own real ports,
+  confirmed), which a naive always-regenerate approach silently
+  collapsed even for an untouched port; fixed by only ever
+  regenerating a port's own line when it's genuinely edited. **A
+  second, more consequential real bug was found the same way**: 5 real
+  files (`cap_cmim.xml`/`cap_rfcmim.xml`/`svaricap.xml`/
+  `Capacitor.sym`/`rfcmim.sym`) use real, consistent CRLF (`\r\n`) line
+  endings -- `Path.read_text()`'s own universal-newline translation
+  (relied on by every writer here) silently discards this real
+  distinction before a writer ever sees it, and, just as with the
+  earlier real trailing-newline bug, every writer's own narrower
+  per-file test happened to read *both* sides through the same
+  translation, masking the exact difference it should have caught;
+  only `main.py export-full`'s own smoking-gun round-trip test (a raw,
+  untranslated `diff -rq --no-dereference`) caught it. Fixed once,
+  shared (`ihp/text_utils.py`'s new `restore_crlf_if_needed`, checking
+  the real source file's own raw bytes directly), not per-writer.
+  `gui/qucs_view.py` gained real forms for both (New/Delete Port for
+  Symbols; Components' own read-only Overview/Netlists sub-tabs
+  unchanged), and both share the parent `App`'s own per-file cache
+  (`get_parsed_qucs_symbol`/`get_parsed_qucs_component`), the same
+  "switching files and back never discards an edit" discipline
+  everywhere else. `main.py export-qucs-sym`/`export-qucs-component`
+  and their own `File` menu entries add CLI/GUI parity. Verified for
+  real, driven in the container: byte-identical no-edit export for all
+  22 `.sym` + 34 `.xml` files (confirmed via raw bytes, not
+  `read_text()`, after the CRLF fix), real edit/add/delete round-trips
+  for both domains, and a full, complete-PDK, two-generation
+  `export-full` smoking-gun round-trip producing zero differences.
 - **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
   symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
   all 100 real, downloaded `.sch` files (99 real, one level under a

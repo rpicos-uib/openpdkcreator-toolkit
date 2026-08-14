@@ -88,6 +88,10 @@ class QucsPort:
     transistor's drain) -- a real, honestly partial annotation, not a
     substitute for the real port name this format simply doesn't
     carry (see this module's own docstring)."""
+    line_no: int = 0
+    """This port's own real, 1-indexed source line number -- ``0`` for
+    a port added this session. Used by ``ihp/qucs_sym_writer.py`` for
+    write-back."""
 
 
 @dataclass
@@ -100,6 +104,11 @@ class QucsSymbolGeometry:
     summary; the non-port primitives' own geometry is not parsed
     further, the same "structure, not graphics" precedent
     ``ihp/xschem.py``'s own ``.sym`` parser already established."""
+    all_parsed_port_line_nos: list[int] = field(default_factory=list)
+    """Every real port's own line number as originally parsed, in real
+    file order -- unlike ``ports``, never mutated by editing (New/
+    Delete Port); used by ``ihp/qucs_sym_writer.py`` to tell a real
+    deleted port apart from a non-port-primitive/comment gap."""
 
 
 @dataclass
@@ -143,7 +152,7 @@ def parse_symbol_geometry(path: Path) -> QucsSymbolGeometry:
     text = path.read_text(encoding="utf-8", errors="replace")
     geometry = QucsSymbolGeometry(source_path=path)
 
-    for line in text.splitlines():
+    for line_no, line in enumerate(text.splitlines(), start=1):
         match = _PRIMITIVE_LINE_RE.match(line.strip())
         if not match:
             continue
@@ -160,8 +169,10 @@ def parse_symbol_geometry(path: Path) -> QucsSymbolGeometry:
                 x=_to_int(el.get("x", "0")), y=_to_int(el.get("y", "0")),
                 port_type=el.get("type", ""), angle=_to_int(el.get("angle", "0")),
                 condition=el.get("condition", ""), hint=match.group(2) or "",
+                line_no=line_no,
             )
         )
+        geometry.all_parsed_port_line_nos.append(line_no)
 
     return geometry
 
