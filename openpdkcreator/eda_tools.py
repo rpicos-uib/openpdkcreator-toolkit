@@ -10,12 +10,26 @@ from that one's (a single memristor PDK). The tool registry itself
 (detection/install guidance) is untouched, fully generic, and did not
 need adapting. The two PDK-specific `LaunchGuidance` entries (Magic/
 KLayout, originally pre-pointed at `openmempdk`'s own single tech/
-layer-properties file) were dropped -- this project has no single such
-file yet (IHP's own real Magic setup alone is five separate `.tech`
-files, not one), so guessing a mapping here would be worse than the
-honest bare-binary fallback every other tool already uses. See
-docs/ihp_vs_open_pdks.md and Future Work in the project README for
-re-adding this once a real mapping is designed.
+layer-properties file) were dropped when this project started, since
+IHP's own real Magic setup is five separate `.tech` files, not one --
+guessing a mapping then would have been worse than the honest
+bare-binary fallback every other tool uses.
+
+Both are now re-added, pointed at real files this project has since
+downloaded and read, not guessed: **Magic** launches with IHP's own
+real, official startup script, `libs.tech/magic/ihp-sg13g2.magicrc` --
+the exact invocation (`magic -d XR -rcfile ...`) IHP's own
+`libs.tech/magic/README.md` documents verbatim, not derived or
+inferred. **KLayout** launches with IHP's own real
+`libs.tech/klayout/tech/sg13g2.lyp` loaded via `-l`, a real, stable
+KLayout CLI flag ("layer properties file") -- honestly scoped to what
+it actually does: real layer names/colors/styles for anything opened
+afterward, not the full real DRC-deck/technology registration (no
+single-flag KLayout startup switch for that was found/verified here).
+Both guidances carry a real `requires_path` -- `resolve_launch` falls
+back to a bare, unconfigured launch if the real file isn't there
+(`ihp/fetch.py` hasn't run yet, or a non-default `--dest` was used),
+rather than launching either tool with a flag pointed at nothing.
 
 Usable two ways:
 
@@ -59,6 +73,15 @@ from pathlib import Path
 # openpdkcreator/eda_tools.py -> project root.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# ihp/fetch.py's own real, default sparse-checkout destination
+# (DEFAULT_DEST = PROJECT_ROOT / "data" / "ihp-sg13g2") -- the real
+# clone lands one level deeper, at .../ihp-sg13g2/ihp-sg13g2/, since
+# the sparse checkout preserves the upstream repo's own top-level
+# directory name. LaunchGuidance.requires_path entries below assume
+# this default; a custom `fetch --dest` falls back to a bare launch
+# (see `resolve_launch`), never a broken pre-pointed flag.
+_DEFAULT_PDK_ROOT = "{repo_root}/data/ihp-sg13g2/ihp-sg13g2"
+
 
 @dataclass(frozen=True)
 class InstallGuidance:
@@ -88,11 +111,11 @@ class LaunchGuidance:
     never `shell=True`); it never installs, downloads, or writes
     anything outside a throwaway temp file for `startup_script`.
 
-    Deliberately left unpopulated for every tool in this project's
-    registry so far (see the module docstring for why) -- a tool with
-    no `launch` here is still started via `resolve_launch`'s
-    bare-binary fallback, just with nothing pre-configured, rather than
-    guessing at a setup this project doesn't actually have yet.
+    Populated for Magic/KLayout (see the module docstring for the real
+    sources each pre-points at); every other tool's registry entry
+    still has no `launch` here -- started via `resolve_launch`'s
+    bare-binary fallback, nothing pre-configured, rather than guessing
+    at a setup this project doesn't actually have real files for yet.
     """
 
     argv: tuple[str, ...] = ()
@@ -113,6 +136,14 @@ class LaunchGuidance:
     note: str = ""
     """Shown to the user before launching: what's actually pre-configured,
     so a real command is never run silently unannounced."""
+
+    requires_path: str = ""
+    """A real, `{repo_root}`-substituted path that must exist on disk
+    for this guidance to apply -- e.g. the real PDK file it pre-points
+    at. `resolve_launch` silently falls back to a bare-binary launch if
+    it's missing (``ihp/fetch.py`` hasn't run yet, or a custom
+    ``--dest`` was used), rather than launching the tool with a flag
+    pointed at nothing."""
 
 
 @dataclass(frozen=True)
@@ -208,6 +239,14 @@ TOOL_REGISTRY: tuple[Tool, ...] = (
                   "./configure && make && make install.",
             docs_url="http://opencircuitdesign.com/magic/",
         ),
+        launch=LaunchGuidance(
+            argv=("-d", "XR", "-rcfile", f"{_DEFAULT_PDK_ROOT}/libs.tech/magic/ihp-sg13g2.magicrc"),
+            requires_path=f"{_DEFAULT_PDK_ROOT}/libs.tech/magic/ihp-sg13g2.magicrc",
+            note="Launches with IHP's own real, official startup script "
+                 "(ihp-sg13g2.magicrc) -- loads the real, flattened ihp-sg13g2.tech "
+                 "technology and device generator. The exact invocation "
+                 "libs.tech/magic/README.md documents verbatim, not derived.",
+        ),
     ),
     Tool(
         id="klayout", name="KLayout", category="drc",
@@ -220,6 +259,15 @@ TOOL_REGISTRY: tuple[Tool, ...] = (
                   "current .deb/.rpm/AppImage directly from the KLayout downloads page "
                   "instead of the distro package.",
             docs_url="https://www.klayout.de/build.html",
+        ),
+        launch=LaunchGuidance(
+            argv=("-l", f"{_DEFAULT_PDK_ROOT}/libs.tech/klayout/tech/sg13g2.lyp"),
+            requires_path=f"{_DEFAULT_PDK_ROOT}/libs.tech/klayout/tech/sg13g2.lyp",
+            note="Launches with IHP's own real sg13g2.lyp layer-properties file loaded "
+                 "(-l, a real, stable KLayout flag) -- real layer names/colors/styles for "
+                 "anything opened afterward. Only layer *display* is pre-configured this "
+                 "way; the real DRC deck (libs.tech/klayout/tech/drc/) still has to be run "
+                 "manually (Macros > DRC, or File > Run Script).",
         ),
     ),
     Tool(
@@ -414,6 +462,8 @@ def resolve_launch(
 
     guidance = tool.launch
     if guidance is None:
+        return [binary_path], repo_root
+    if guidance.requires_path and not Path(guidance.requires_path.format(repo_root=repo_root)).is_file():
         return [binary_path], repo_root
 
     argv = [binary_path] + [arg.format(repo_root=repo_root) for arg in guidance.argv]

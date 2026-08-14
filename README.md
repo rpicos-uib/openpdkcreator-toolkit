@@ -161,10 +161,19 @@ highlighted straight to that cell's real line range within its
 - **`openpdkcreator/gui/layers_view.py`** -- OpenPDKCreator's own
   Layers tab, copied verbatim, displaying the real parsed layers above.
 - **`openpdkcreator/eda_tools.py`** -- OpenPDKCreator's own FOSS
-  EDA-toolchain checker/installer/launcher, copied with one small,
-  honest simplification (its two PDK-specific "pre-pointed" launch
-  entries for Magic/KLayout were dropped -- see the module's own
-  docstring for why).
+  EDA-toolchain checker/installer/launcher. Its two PDK-specific
+  "pre-pointed" launch entries for Magic/KLayout (originally pointed
+  at `openmempdk`'s own single tech/layer-properties file) were
+  dropped when this project started, then re-added once real files
+  existed to point at instead of guessing: Magic launches with IHP's
+  own real, official `ihp-sg13g2.magicrc` via the exact invocation
+  IHP's own `libs.tech/magic/README.md` documents verbatim; KLayout
+  launches with IHP's own real `sg13g2.lyp` via `-l` -- see the
+  module's own docstring for exactly what's pre-configured and what
+  isn't. A new `LaunchGuidance.requires_path` field makes
+  `resolve_launch` fall back to a bare, unconfigured launch if the
+  real file isn't there (`ihp/fetch.py` hasn't run, or a non-default
+  `--dest`), rather than launching with a flag pointed at nothing.
 - **`docs/ihp_vs_open_pdks.md`** -- a real, sourced comparison of IHP's
   actual structure against the canonical open_pdks specification
   (confirmed via open_pdks' own README: IHP genuinely follows it), with
@@ -977,9 +986,17 @@ models, ...), not just read/display layers. Concretely, still open:
   planned this pass); Liberty's own real lookup-table sub-groups stay
   unmodeled for the same bounded-scope reason as everywhere else, not
   because a pin/timing-arc editor doesn't exist anymore.
-- Re-add "pre-pointed" Magic/KLayout launch guidance in
-  `eda_tools.py` once a real mapping to IHP's actual multi-file tech
-  setup (6 real `.tech` files, not 1) is designed, not guessed.
+- "Pre-pointed" Magic/KLayout launch guidance is back in
+  `eda_tools.py`, pointed at real files this project has since
+  downloaded and read: Magic launches with IHP's own real, official
+  `libs.tech/magic/ihp-sg13g2.magicrc` via the exact invocation
+  IHP's own `README.md` documents verbatim (`-d XR -rcfile ...`);
+  KLayout launches with IHP's own real `sg13g2.lyp` layer-properties
+  file via `-l`, a real, stable KLayout flag -- honestly scoped to
+  layer display only, not the full real DRC-deck/technology
+  registration (no single-flag KLayout switch for that was
+  found/verified). Both fall back to a bare, unconfigured launch if
+  the real file isn't there yet (`LaunchGuidance.requires_path`).
 - The **Simulation** top-level GUI group now exists with its first
   real sub-tab (**ngspice Models** -- `ihp/spice_models.py`, real
   `.model`/`.subckt` extraction); xschem/Qucs-S schematic data stays
