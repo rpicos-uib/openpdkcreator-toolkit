@@ -23,10 +23,14 @@ parsers for each, not full netlist/behavioral/timing parsers: cell
 name + port list + the real source line range only; GDS -- real
 bounding box + per-layer shape count via KLayout's own real Python API,
 ``klayout.db``, lazily imported so every other command here still runs
-without it installed). No attempt at LEF via-stack geometry, or Magic's
-drc/extract/cifinput/connect/compose sections (each its own real,
-separate mini rule-language) -- that's real, separate future work. The
-much larger end goal -- editing/creating/generating arbitrary PDK file
+without it installed). Magic's own ``compose``/``connect`` sections are
+fully parsed, and one real pattern each is pulled out of its harder
+``drc`` (``width``/``spacing``, 166 real checks) and ``extract``
+(``resist``/``planeorder``, 44 real entries) mini-rule-languages --
+see ``ihp/magic_tech.py``'s own docstring for exact real coverage and
+what's still not attempted (``cifinput``, ``device``, the rest of
+``drc``/``extract``). No attempt at LEF via-stack geometry. The much
+larger end goal -- editing/creating/generating arbitrary PDK file
 types, not just reading/displaying them -- is explicit, tracked future
 work, not attempted here.
 
@@ -94,8 +98,15 @@ def cmd_magic_tech(pdk_root: Path) -> int:
         print(
             f"  planes:{len(tech.planes)}  types:{len(tech.types)}  "
             f"contacts:{len(tech.contacts)}  aliases:{len(tech.aliases)}  "
-            f"styles:{len(tech.styles)}  cif_layers:{len(tech.cif_layers)}"
+            f"styles:{len(tech.styles)}  cif_layers:{len(tech.cif_layers)}  "
+            f"compose:{len(tech.compose)}  connect:{len(tech.connect)}"
         )
+        print(
+            f"  drc_checks:{len(tech.drc_checks)} ({len(tech.drc_skipped)} real line(s) not matched)  "
+            f"extract_resist:{len(tech.extract_resist)}  extract_plane_order:{len(tech.extract_plane_order)}"
+        )
+        for skipped_line in tech.drc_skipped:
+            print(f"    not matched: {skipped_line}")
         if tech.unparsed_sections:
             print(f"  not parsed this pass: {', '.join(tech.unparsed_sections)}")
         print()

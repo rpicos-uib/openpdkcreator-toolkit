@@ -5,17 +5,20 @@ separate technologies; the fragment files ``include``d into
 ``ihp-sg13g2.tech`` have no own header/name and are skipped in the
 picker since they were never meant to be viewed standalone).
 
-A sub-`Notebook` per real, tabular data domain (planes/types/contacts/
-aliases/styles/CIF layers) -- matching the six things
-``MagicTechnology`` actually parses. **Types** is editable (a list +
-form pane, New/Delete Type, the same commit-on-switch pattern
-``LayersView``/``RulesView``/``LefView`` already use) -- the other five
-domains stay read-only for now (each would need its own form; Types
-was the one asked for). Editing is purely in-memory, same as DRC Rules/
-LEF pins -- no write-back into the real ``.tech`` file yet (see
-README's Future Work). "View File" opens the real, underlying
-``.tech`` file directly (``file_view_dialog.view_file_dialog``), which
-*can* be edited, as raw text.
+A sub-`Notebook` per real, tabular data domain -- planes/types/
+contacts/aliases/styles/CIF layers, plus **Compose**/**Connect**/
+**DRC (Magic)**/**Extract** (real ``compose``/``connect``/``drc``/
+``extract`` section content -- see ``ihp/magic_tech.py``'s own
+docstring for exactly what's extracted from each and why). **Types**
+is editable (a list + form pane, New/Delete Type, the same
+commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
+already use) -- every other domain stays read-only for now (each would
+need its own form; Types was the one asked for). Editing is purely
+in-memory, same as DRC Rules/LEF pins -- no write-back into the real
+``.tech`` file yet (see README's Future Work). "View File" opens the
+real, underlying ``.tech`` file directly
+(``file_view_dialog.view_file_dialog``), which *can* be edited, as raw
+text.
 """
 
 from __future__ import annotations
@@ -66,6 +69,38 @@ class MagicTechView(ttk.Frame):
         self.aliases_tree = self._make_tab(sub, "Aliases", ("name", "members"), (200, 560))
         self.styles_tree = self._make_tab(sub, "Styles", ("type_name", "style_names"), (160, 560))
         self.cif_tree = self._make_tab(sub, "CIF Layers", ("name", "gds_pairs"), (200, 400))
+        self.compose_tree = self._make_tab(sub, "Compose", ("verb", "arg1", "arg2", "arg3"), (100, 140, 140, 140))
+        self.connect_tree = self._make_tab(sub, "Connect", ("types_a", "types_b"), (330, 330))
+        self.drc_tree = self._make_tab(
+            sub, "DRC (Magic)", ("check_type", "layers", "value_um", "rule_ids", "message"),
+            (80, 220, 80, 100, 300),
+        )
+        self._build_extract_tab(sub)
+
+    def _build_extract_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="Extract")
+        frame.columnconfigure(0, weight=2)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Sheet resistance (real per-layer, milliohms/square):").grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
+        resist_columns = ("layer_spec", "milliohms_per_square")
+        self.extract_resist_tree = ttk.Treeview(frame, columns=resist_columns, show="headings")
+        for col, width in zip(resist_columns, (260, 180)):
+            self.extract_resist_tree.heading(col, text=col.replace("_", " ").title())
+            self.extract_resist_tree.column(col, width=width, anchor="w")
+        self.extract_resist_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+
+        ttk.Label(frame, text="Plane order:").grid(row=0, column=1, sticky="w")
+        order_columns = ("name", "order")
+        self.extract_plane_order_tree = ttk.Treeview(frame, columns=order_columns, show="headings")
+        for col, width in zip(order_columns, (160, 60)):
+            self.extract_plane_order_tree.heading(col, text=col.title())
+            self.extract_plane_order_tree.column(col, width=width, anchor="w")
+        self.extract_plane_order_tree.grid(row=1, column=1, sticky="nsew")
 
     def _make_tab(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -182,6 +217,8 @@ class MagicTechView(ttk.Frame):
         for tree in (
             self.planes_tree, self.contacts_tree,
             self.aliases_tree, self.styles_tree, self.cif_tree,
+            self.compose_tree, self.connect_tree, self.drc_tree,
+            self.extract_resist_tree, self.extract_plane_order_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -205,11 +242,28 @@ class MagicTechView(ttk.Frame):
         for cif_layer in tech.cif_layers:
             pairs = ", ".join(f"{layer}/{datatype}" for layer, datatype in cif_layer.gds_pairs)
             self.cif_tree.insert("", "end", values=(cif_layer.name, pairs))
+        for statement in tech.compose:
+            self.compose_tree.insert("", "end", values=(statement.verb, *statement.args))
+        for rule in tech.connect:
+            self.connect_tree.insert("", "end", values=(rule.types_a, rule.types_b))
+        for check in tech.drc_checks:
+            layers_text = " | ".join(",".join(group) for group in check.layer_args)
+            self.drc_tree.insert(
+                "", "end",
+                values=(check.check_type, layers_text, f"{check.value_um:g}", check.rule_ids_raw or "", check.message),
+            )
+        for resist in tech.extract_resist:
+            self.extract_resist_tree.insert("", "end", values=(resist.layer_spec, resist.milliohms_per_square))
+        for name, order in tech.extract_plane_order:
+            self.extract_plane_order_tree.insert("", "end", values=(name, order))
 
         summary = (
             f"format {tech.format} | v{tech.version} -- {tech.description} | "
             f"planes:{len(tech.planes)} types:{len(tech.types)} contacts:{len(tech.contacts)} "
-            f"aliases:{len(tech.aliases)} styles:{len(tech.styles)} cif_layers:{len(tech.cif_layers)}"
+            f"aliases:{len(tech.aliases)} styles:{len(tech.styles)} cif_layers:{len(tech.cif_layers)} "
+            f"compose:{len(tech.compose)} connect:{len(tech.connect)} "
+            f"drc_checks:{len(tech.drc_checks)}({len(tech.drc_skipped)} skipped) "
+            f"extract_resist:{len(tech.extract_resist)}"
         )
         if tech.included_files:
             summary += f" | includes: {', '.join(tech.included_files)}"

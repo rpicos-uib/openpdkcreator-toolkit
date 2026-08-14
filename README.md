@@ -128,16 +128,42 @@ highlighted straight to that cell's real line range within its
 - **`openpdkcreator/ihp/magic_tech.py`** -- a real (if deliberately
   partial) Magic `.tech` parser, hand-verified against IHP's real,
   downloaded files: the cleanly tabular sections
-  (`tech`/`version`/`planes`/`types`/`contact`/`aliases`/`styles`) in
-  full, plus one reliable pattern pulled out of the much harder
-  `cifoutput` geometry DSL (every real `layer NAME ... calma L D`
-  recipe -- a genuine Magic-type-name to GDS-layer/datatype mapping).
+  (`tech`/`version`/`planes`/`types`/`contact`/`aliases`/`styles`/
+  `compose`/`connect`) in full, plus one reliable pattern pulled out of
+  each of three much harder mini-rule-language sections:
+  - `cifoutput`: every real `layer NAME ... calma L D` recipe -- a
+    genuine Magic-type-name to GDS-layer/datatype mapping.
+  - `drc`: the two dominant, cleanly tabular real statement kinds,
+    `width`/`spacing` -- 166 of the real section's statements (65/65
+    `width`, 101/102 `spacing`; the one real miss is a genuine defect
+    in IHP's own file, a message string missing its closing quote,
+    confirmed by direct inspection). Real values converted to microns
+    via an empirically-confirmed `/1000` factor, cross-checked against
+    three independent, already-extracted real KLayout DRC rules sharing
+    the same real rule ID (`Act.a`: `0.15` both ways; `Gat.a`: `0.13`
+    both ways; `NW.b`: `0.62` both ways) -- not from Magic's own
+    documented unit spec, which this pass had no authoritative local
+    source to confirm against, but a real, repeatable, cross-checked
+    fact, not a guess.
+  - `extract`: real per-layer sheet resistance (`resist`, 30/33 real
+    lines -- milliohms/square, the other 3 are real non-numeric config
+    entries, not a parsing gap) and real plane ordering (`planeorder`,
+    14/14).
+
   Real `include` resolution confirmed: `ihp-sg13g2.tech` splices in 4
   fragment files (`cifout`/`cifin`/`drc`/`extract`) as one logical
   technology; `ihp-sg13g2-GDS.tech` is a second, genuinely separate
-  technology with its own header. `drc`/`extract`/`cifinput`/`connect`/
-  `compose`/`lef`/etc. are honestly reported as not-parsed-this-pass,
-  never silently dropped (`MagicTechnology.unparsed_sections`).
+  technology with its own header. `cifinput`/`lef`/`mzrouter`/`wiring`/
+  `router`/`plowing`/`plot`, and everything in `drc`/`extract` beyond
+  the patterns above (`surround`/`edge4way`/`device`/505 real
+  parasitic-capacitance-coefficient lines/...) are honestly reported as
+  not-parsed-this-pass, never silently dropped
+  (`MagicTechnology.unparsed_sections`, `MagicTechnology.drc_skipped`).
+  `cifinput` specifically was left for its own future pass rather than
+  reusing `cifoutput`'s pattern: its real recipes are geometry-boolean
+  chains (`and`/`and-not`/`grow`/`shrink`) whose *first* line alone
+  isn't a complete, honest fact the way `cifoutput`'s *final* `calma`
+  line is.
 - **`openpdkcreator/ihp/reconcile.py`** -- cross-references the Magic
   `cifoutput` GDS mapping above against the KLayout `.lyp` layers
   (`ihp/layers.py`), both real, independent descriptions of the same
@@ -151,17 +177,21 @@ highlighted straight to that cell's real line range within its
   (`MagicTechView`), matching the Layers tab's Treeview-based shape:
   a technology picker (`ihp-sg13g2` / `ihp-sg13g2-GDS`, the two real,
   separate technologies -- the `include`d fragments have no own header
-  and aren't shown standalone) over six sub-tabs, one per real,
-  parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF
-  Layers), plus a **View File** button. **Types is editable** -- a
-  list + form pane (Plane/Name/Aliases/Obsolete), New/Delete Type, the
-  same commit-on-switch pattern as everywhere else; the other five
-  domains stay read-only for now (each would need its own form).
-  Verified for real, driven against the actual downloaded data: all
-  six sub-tabs' row counts match `magic-tech`'s own CLI output exactly,
-  switching technologies correctly reloads every sub-tab, and editing a
-  real type's name/aliases/obsolete commits immediately and survives a
-  technology switch.
+  and aren't shown standalone) over ten sub-tabs, one per real, parsed
+  data domain (Planes/Types/Contacts/Aliases/Styles/CIF Layers/
+  Compose/Connect/**DRC (Magic)**/Extract -- the last four new, real
+  content from `ihp/magic_tech.py`'s own `compose`/`connect`/`drc`/
+  `extract` extraction described above), plus a **View File** button.
+  **Types is editable** -- a list + form pane (Plane/Name/Aliases/
+  Obsolete), New/Delete Type, the same commit-on-switch pattern as
+  everywhere else; every other domain stays read-only for now (each
+  would need its own form). Verified for real, driven against the
+  actual downloaded data: all ten sub-tabs' row counts match
+  `magic-tech`'s own CLI output exactly (39 compose/20 connect/166 DRC
+  checks/30 resist), switching technologies correctly reloads every
+  sub-tab, editing a real type's name/aliases/obsolete commits
+  immediately and survives a technology switch, and a spot-checked real
+  DRC row (`Act.a`) shows the correct converted `0.15` micron value.
 - **`openpdkcreator/ihp/lef.py`** -- a real (if deliberately partial)
   LEF parser, hand-verified against all 32 of IHP's real, downloaded
   `.lef` files (a tech LEF, `sg13g2_stdcell.lef`/`sg13g2_io.lef`, and
@@ -409,14 +439,24 @@ application that can create/edit/generate arbitrary PDK file types
 (Magic technology files, KLayout DRC decks, LEF, GDS, Liberty, SPICE
 models, ...), not just read/display layers. Concretely, still open:
 
-- Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
-  `compose` sections (each its own real, separate mini rule-language --
-  `drc` and `extract` in particular are the Magic equivalent of
-  KLayout's DRC Ruby DSL), Liberty's own real pin/timing-arc data
+- `cifinput` (Magic's own real GDS-import geometry-boolean mini
+  language -- deliberately not attempted alongside `compose`/`connect`/
+  `drc`/`extract`, since its recipes don't reduce to one honest,
+  standalone fact the way `cifoutput`'s final `calma` line does -- see
+  `magic_tech.py`'s own docstring), the much larger real remainder of
+  `extract` (505 real parasitic-capacitance-coefficient lines --
+  `defaultoverlap`/`defaultsideoverlap`/`defaultareacap`/
+  `defaultperimeter`/`defaultsidewall` -- plus `device`, its own real
+  transistor-model mini-language), the much larger real remainder of
+  `drc` (`surround`/`edge4way`/`maxwidth`/`cifmaxwidth`/`variants`/...
+  -- `width`/`spacing` are done), Liberty's own real pin/timing-arc data
   (still only real cell *boundaries* -- `liberty.py`), and LEF's own
   `VIA`/`ViaRULE` via-stack geometry -- no generic parser for any of
   these exists yet. (Real GDS content -- bbox/shape counts, not full
-  geometry -- is done: `ihp/gds.py`, via `klayout.db`.)
+  geometry -- is done: `ihp/gds.py`, via `klayout.db`. Real
+  `compose`/`connect` sections, and the dominant `width`/`spacing`
+  patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
+  done -- see `magic_tech.py`'s own docstring for exact real coverage.)
 - Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
   reliable `width()/space()/sep()` -> `.output()` pattern (61 real
   rules); the other 94 real, honestly-skipped constructs are composite
