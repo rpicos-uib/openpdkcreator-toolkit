@@ -7,15 +7,20 @@ since -- unlike Magic's two real technologies -- there's no small,
 fixed set of "the real ones" to enumerate; every real ``.lef`` under
 ``libs.ref/`` is shown.
 
-Two sub-tabs per file: **LEF Layers** (tech-LEF routing/cut layers --
-empty for a macro-only LEF, real and correct, not a bug) and
-**LEF Macros** (a macro list; selecting one shows its real pins on the
+Three sub-tabs per file: **LEF Layers** (tech-LEF routing/cut layers --
+empty for a macro-only LEF, real and correct, not a bug), **LEF
+Macros** (a macro list; selecting one shows its real pins on the
 right via the shared ``pin_editor.PinEditor`` widget -- the same one
 ``cell_hub_view.py``'s **By Cell** tab embeds, so a pin edited from
 either tab is the exact same in-memory object, visible and consistent
-in both). "View File" opens the real, selected ``.lef`` file directly
-(``file_view_dialog.view_file_dialog``), which *can* also be edited,
-as raw text.
+in both), and **Vias** (real ``VIA``/``ViaRULE`` via-stack geometry --
+each real layer's own rect count for a fixed ``VIA``, or its own real
+enclosure/spacing/resistance for a ``ViaRULE GENERATE`` -- read-only,
+no editor exists for via geometry, matching every other real,
+display-only domain here; see ``ihp/lef.py``'s own docstring for the
+exact real body structure). "View File" opens the real, selected
+``.lef`` file directly (``file_view_dialog.view_file_dialog``), which
+*can* also be edited, as raw text.
 
 Real parsing + persistence live one level up, on ``App`` itself
 (``app.get_parsed_lef``/``app.lef_cache``/``app.lef_pin_overrides``),
@@ -38,6 +43,26 @@ from ..ihp import lef as lef_mod
 from .file_view_dialog import view_file_dialog
 from .list_filter import build_filter_row, matches
 from .pin_editor import PinEditor
+
+
+def _format_via_layers(layers: list[lef_mod.LefViaLayerGeometry]) -> str:
+    return " | ".join(f"{layer.layer}({len(layer.rects)} rect(s))" for layer in layers)
+
+
+def _format_via_rule_layers(layers: list[lef_mod.LefViaRuleLayer]) -> str:
+    parts = []
+    for layer in layers:
+        bits = []
+        if layer.enclosure is not None:
+            bits.append(f"enc {layer.enclosure[0]}x{layer.enclosure[1]}")
+        if layer.rect is not None:
+            bits.append("rect")
+        if layer.spacing is not None:
+            bits.append(f"sp {layer.spacing[0]}x{layer.spacing[1]}")
+        if layer.resistance is not None:
+            bits.append(f"r{layer.resistance}")
+        parts.append(f"{layer.layer}({', '.join(bits)})" if bits else layer.layer)
+    return " | ".join(parts)
 
 
 class LefView(ttk.Frame):
@@ -78,6 +103,11 @@ class LefView(ttk.Frame):
             (140, 90, 90, 70, 70, 70, 140),
         )
         self._build_macros_tab(sub)
+        self.vias_tree = self._make_tree(
+            sub, "Vias",
+            ("kind", "name", "default_generate", "resistance", "layers"),
+            (80, 140, 100, 90, 420),
+        )
 
     def _make_tree(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -145,6 +175,8 @@ class LefView(ttk.Frame):
             self.layers_tree.delete(row)
         for row in self.macros_tree.get_children():
             self.macros_tree.delete(row)
+        for row in self.vias_tree.get_children():
+            self.vias_tree.delete(row)
 
         path = self.lef_files.get(self.file_var.get())
         if path is None:
@@ -174,12 +206,29 @@ class LefView(ttk.Frame):
                 "", "end", iid=macro.name,
                 values=(macro.name, macro.macro_class, size, macro.site, len(macro.pins), ", ".join(macro.obs_layers)),
             )
+        for via in tech.vias:
+            self.vias_tree.insert(
+                "", "end",
+                values=(
+                    "VIA", via.name, "DEFAULT" if via.is_default else "",
+                    via.resistance if via.resistance is not None else "",
+                    _format_via_layers(via.layers),
+                ),
+            )
+        for via_rule in tech.via_rules:
+            self.vias_tree.insert(
+                "", "end",
+                values=(
+                    "VIARULE", via_rule.name, "GENERATE" if via_rule.is_generate else "",
+                    "", _format_via_rule_layers(via_rule.layers),
+                ),
+            )
 
         summary = (
             f"version {tech.version} | db_microns:{tech.database_microns} | "
             f"mfg_grid:{tech.manufacturing_grid} | layers:{len(tech.layers)} sites:{len(tech.sites)} "
-            f"macros:{len(shown_macros)}/{len(tech.macros)} vias:{len(tech.via_names)} (bodies not parsed) "
-            f"viarules:{len(tech.via_rule_names)} (bodies not parsed)"
+            f"macros:{len(shown_macros)}/{len(tech.macros)} vias:{len(tech.vias)} "
+            f"viarules:{len(tech.via_rules)}"
         )
         self.summary_var.set(summary)
 

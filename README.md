@@ -245,11 +245,21 @@ highlighted straight to that cell's real line range within its
   spec's usual all-uppercase convention might suggest -- confirmed by
   reading the real file, not assumed; the parser matches keywords
   case-insensitively throughout. `VIA`/`ViaRULE` bodies (real via-stack
-  geometry) are deliberately not parsed -- names recorded, bodies
-  honestly skipped. Every value hand-checked against the real source:
+  geometry) are also parsed, not just named: a real fixed `Via NAME
+  DEFAULT` block's own layer/rect list (a real layer name can
+  legitimately repeat with a different rect -- confirmed real in IHP's
+  own double-cut vias, e.g. `Via1_DC1B`'s two real `LAYER Via1`
+  entries, kept as an ordered list rather than merged into a dict), and
+  a real `ViaRULE NAME GENERATE` block's own per-layer enclosure/rect/
+  spacing/resistance. Every value hand-checked against the real source:
   `sg13g2_a21o_1`'s 6 real pins (name/direction/use/rect-count each),
   a real SRAM macro's 113 real pins, `sg13g2_tech.lef`'s 19 real
-  layers/70 real vias/6 real via-rules. Also tracks each real
+  layers/70 real vias (242 real rects total, cross-checked against
+  grep ground truth exactly)/6 real via-rules (`via1Array`'s own real
+  layer geometry hand-verified field-by-field against the source
+  file). Displayed in the LEF tab's own **Vias** sub-tab, read-only (no
+  editor for via geometry exists, matching every other display-only
+  domain). Also tracks each real
   `MACRO`/`PIN` block's own real, 1-indexed source line range
   (`start_line`/`end_line`) -- added specifically for
   `ihp/lef_writer.py`'s own write-back, which needs to locate exactly
@@ -827,20 +837,22 @@ models, ...), not just read/display layers. Concretely, still open:
   `defaultperimeter`/`defaultsidewall` -- plus `device`, its own real
   transistor-model mini-language), the much larger real remainder of
   `drc` (`surround`/`edge4way`/`maxwidth`/`cifmaxwidth`/`variants`/...
-  -- `width`/`spacing` are done), Liberty's own real lookup-table
+  -- `width`/`spacing` are done), and Liberty's own real lookup-table
   sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
   `fall_transition`, each its own nested `index_1`/`index_2`/`values`
   multi-dimensional data -- deliberately left unparsed even though
   pin/timing-arc scalar data is now done, same "bounded, not a full
-  parser" precedent as everywhere else), and LEF's own `VIA`/`ViaRULE`
-  via-stack geometry -- no generic parser for any of these exists yet.
-  (Real GDS content -- bbox/shape counts, not full geometry -- is
-  done: `ihp/gds.py`, via `klayout.db`. Real `compose`/`connect`
-  sections, and the dominant `width`/`spacing` patterns in `drc`, and
-  `resist`/`planeorder` in `extract`, are also done -- see
-  `magic_tech.py`'s own docstring for exact real coverage. Liberty's
-  own real pin/timing-arc scalar data -- direction/capacitance/
-  function per pin, related_pin/timing_type/timing_sense/when per
+  parser" precedent as everywhere else) -- no generic parser for either
+  of these exists yet. (Real GDS content -- bbox/shape counts, not full
+  geometry -- is done: `ihp/gds.py`, via `klayout.db`. Real
+  `compose`/`connect` sections, and the dominant `width`/`spacing`
+  patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
+  done -- see `magic_tech.py`'s own docstring for exact real coverage.
+  LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
+  `ihp/lef.py`, displayed read-only in the LEF tab's own **Vias**
+  sub-tab. Liberty's own real pin/timing-arc scalar data --
+  direction/capacitance/function per pin, related_pin/timing_type/
+  timing_sense/when per
   timing arc -- is also done: `ihp/liberty.py`.)
 - Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
   reliable `width()/space()/sep()` -> `.output()` pattern (61 real

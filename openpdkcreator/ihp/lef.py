@@ -21,11 +21,31 @@ Scoped like ``magic_tech.py``: a real, useful subset in full --
 ``LAYER`` (type/direction/pitch/width/one simple spacing value/
 resistance), ``SITE``, ``MACRO`` (class/size/site/symmetry) with real
 ``PIN`` (direction/use/port layers+rect counts) and ``OBS`` (layers
-touched) sub-blocks -- and an honest, deliberate skip of ``VIA``/
-``ViaRULE`` bodies (real via-stack geometry, its own real, separate
-parsing effort) and ``PROPERTYDEFINITIONS`` (kept as a name list only)
--- names recorded, bodies never silently pretended-parsed.
-"""
+touched) sub-blocks, and ``VIA``/``ViaRULE`` (real via-stack geometry
+-- see below) -- and an honest, deliberate skip of
+``PROPERTYDEFINITIONS`` (kept as a name list only) -- names recorded,
+body never silently pretended-parsed.
+
+**``VIA``/``ViaRULE`` real body structure**, confirmed by reading
+IHP's actual tech LEF, not assumed from the spec: a real fixed-geometry
+``Via NAME DEFAULT`` block holds an optional, real via-level
+``RESISTANCE`` (always *before* any real ``LAYER`` line in every one of
+its 70 real occurrences here, never per-layer -- checked directly, not
+assumed) followed by one or more real ``LAYER name ;`` / ``RECT x1 y1
+x2 y2 ;`` pairs -- the *same real layer name can legitimately repeat*
+with a different real rect (confirmed real: IHP's own double-cut vias,
+e.g. ``Via1_DC1B``, declare ``LAYER Via1`` twice for two separate real
+cut rects), so layers are kept as an ordered list, never a dict keyed
+by name. A real ``ViaRULE NAME GENERATE`` block instead holds one real
+``LAYER name ;`` sub-block per real layer, each with its own real
+``ENCLOSURE dx dy ;`` (the two real metal layers) or real ``RECT``/
+``SPACING w BY h ;``/``RESISTANCE`` (the one real cut layer) --
+confirmed real: never both ``ENCLOSURE`` and ``RECT`` on the same real
+layer. Both block kinds close on a real, name-echoing ``END NAME``
+line at real, *indentation-tolerant* position (this file's own real
+formatting is inconsistent -- some real ``END`` lines are flush-left,
+others indented -- handled the same generic, whitespace-stripped way
+every other block close already is here)."""
 
 from __future__ import annotations
 
@@ -97,6 +117,41 @@ class LefMacro:
 
 
 @dataclass
+class LefViaLayerGeometry:
+    layer: str
+    rects: list[tuple[float, float, float, float]] = field(default_factory=list)
+    """Real (x1, y1, x2, y2) micron rects for this layer within the
+    via -- more than one when the same real layer name repeats inside
+    one real via (a real multi-cut via, e.g. ``Via1_DC1B``)."""
+
+
+@dataclass
+class LefVia:
+    name: str
+    is_default: bool = False
+    resistance: float | None = None
+    layers: list[LefViaLayerGeometry] = field(default_factory=list)
+
+
+@dataclass
+class LefViaRuleLayer:
+    layer: str
+    enclosure: tuple[float, float] | None = None
+    rect: tuple[float, float, float, float] | None = None
+    spacing: tuple[float, float] | None = None
+    """Real ``SPACING w BY h`` -- the cut layer's own real array
+    pitch, not a simple single-value spacing."""
+    resistance: float | None = None
+
+
+@dataclass
+class LefViaRule:
+    name: str
+    is_generate: bool = False
+    layers: list[LefViaRuleLayer] = field(default_factory=list)
+
+
+@dataclass
 class LefFile:
     source_path: Path
     version: str = ""
@@ -105,10 +160,11 @@ class LefFile:
     layers: list[LefLayer] = field(default_factory=list)
     sites: list[LefSite] = field(default_factory=list)
     macros: list[LefMacro] = field(default_factory=list)
-    via_names: list[str] = field(default_factory=list)
-    """Real VIA block names found -- bodies deliberately not parsed
-    (real, separate via-stack geometry -- see this module's docstring)."""
-    via_rule_names: list[str] = field(default_factory=list)
+    vias: list[LefVia] = field(default_factory=list)
+    """Real VIA blocks, including their own real via-stack geometry --
+    see this module's own docstring for the real body structure."""
+    via_rules: list[LefViaRule] = field(default_factory=list)
+    """Real ViaRULE GENERATE blocks -- see this module's own docstring."""
 
 
 def find_lef_files(pdk_root: Path) -> list[Path]:
@@ -178,6 +234,13 @@ def _try_size(tokens: list[str]) -> tuple[float, float] | None:
     return (w, h) if w is not None and h is not None else None
 
 
+def _try_rect(tokens: list[str]) -> tuple[float, float, float, float] | None:
+    if len(tokens) < 5:
+        return None
+    values = [_try_float(t) for t in tokens[1:5]]
+    return (values[0], values[1], values[2], values[3]) if all(v is not None for v in values) else None
+
+
 def parse_lef_file(path: Path) -> LefFile:
     lef = LefFile(source_path=path)
     stack: list[dict] = []
@@ -216,6 +279,10 @@ def parse_lef_file(path: Path) -> LefFile:
                 pin_obj = frame["obj"]
                 stack[-1]["obj"].pins.append(pin_obj)
                 stack[-1]["obj"].all_parsed_pin_ranges.append((pin_obj.start_line, pin_obj.end_line))
+            elif kind == "via":
+                lef.vias.append(frame["obj"])
+            elif kind == "viarule":
+                lef.via_rules.append(frame["obj"])
             continue
 
         if keyword == "UNITS" and not has_semicolon and kind == "root":
@@ -233,10 +300,15 @@ def parse_lef_file(path: Path) -> LefFile:
         if keyword == "MACRO" and kind == "root":
             stack.append({"kind": "macro", "obj": LefMacro(name=tokens[1], start_line=line_no)})
             continue
-        if keyword in ("VIA", "VIARULE") and kind == "root":
+        if keyword == "VIA" and kind == "root":
             name = tokens[1] if len(tokens) > 1 else ""
-            (lef.via_names if keyword == "VIA" else lef.via_rule_names).append(name)
-            stack.append({"kind": "skip", "obj": None})
+            is_default = len(tokens) > 2 and tokens[2].upper() == "DEFAULT"
+            stack.append({"kind": "via", "obj": LefVia(name=name, is_default=is_default)})
+            continue
+        if keyword == "VIARULE" and kind == "root":
+            name = tokens[1] if len(tokens) > 1 else ""
+            is_generate = len(tokens) > 2 and tokens[2].upper() == "GENERATE"
+            stack.append({"kind": "viarule", "obj": LefViaRule(name=name, is_generate=is_generate)})
             continue
         if keyword == "PIN" and kind == "macro":
             stack.append({"kind": "pin", "obj": LefPin(name=tokens[1], start_line=line_no)})
@@ -273,5 +345,34 @@ def parse_lef_file(path: Path) -> LefFile:
             macro_obj = stack[-2]["obj"]
             if tokens[1] not in macro_obj.obs_layers:
                 macro_obj.obs_layers.append(tokens[1])
+        elif kind == "via" and keyword == "LAYER" and len(tokens) > 1:
+            frame["obj"].layers.append(LefViaLayerGeometry(layer=tokens[1]))
+        elif kind == "via" and keyword == "RECT":
+            rect = _try_rect(tokens)
+            if rect is not None and frame["obj"].layers:
+                frame["obj"].layers[-1].rects.append(rect)
+        elif kind == "via" and keyword == "RESISTANCE" and not frame["obj"].layers and len(tokens) > 1:
+            # Real, confirmed via every one of IHP's own 70 real Via
+            # blocks: RESISTANCE only ever appears once, before any
+            # LAYER line -- a real via-level value, never per-layer.
+            frame["obj"].resistance = _try_float(tokens[1])
+        elif kind == "viarule" and keyword == "LAYER" and len(tokens) > 1:
+            frame["obj"].layers.append(LefViaRuleLayer(layer=tokens[1]))
+        elif kind == "viarule" and frame["obj"].layers:
+            via_rule_layer = frame["obj"].layers[-1]
+            if keyword == "ENCLOSURE" and len(tokens) >= 3:
+                dx, dy = _try_float(tokens[1]), _try_float(tokens[2])
+                if dx is not None and dy is not None:
+                    via_rule_layer.enclosure = (dx, dy)
+            elif keyword == "RECT":
+                rect = _try_rect(tokens)
+                if rect is not None:
+                    via_rule_layer.rect = rect
+            elif keyword == "SPACING":
+                size = _try_size(tokens)
+                if size is not None:
+                    via_rule_layer.spacing = size
+            elif keyword == "RESISTANCE" and len(tokens) > 1:
+                via_rule_layer.resistance = _try_float(tokens[1])
 
     return lef

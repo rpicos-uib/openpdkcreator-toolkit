@@ -32,8 +32,11 @@ its harder ``drc`` (``width``/``spacing``, 166 real checks) and
 ``extract`` (``resist``/``planeorder``, 44 real entries)
 mini-rule-languages -- see ``ihp/magic_tech.py``'s own docstring for
 exact real coverage and what's still not attempted (``cifinput``,
-``device``, the rest of ``drc``/``extract``). No attempt at LEF
-via-stack geometry or Liberty lookup-table content. Real,
+``device``, the rest of ``drc``/``extract``). LEF's own real
+``VIA``/``ViaRULE`` via-stack geometry is also parsed (real layer/rect
+geometry for a fixed via, real enclosure/spacing/resistance for a
+generated one -- ``ihp/lef.py``); no attempt at Liberty's own real
+lookup-table content. Real,
 open_pdks-format write-back now exists for every currently
 structured-editable domain -- LEF pins (``export-lef``/
 ``ihp/lef_writer.py``), DRC Rules (``export-drc``/``ihp/drc_writer.py``
@@ -184,10 +187,11 @@ def cmd_lef(pdk_root: Path) -> int:
         if parsed.macros:
             pin_total = sum(len(m.pins) for m in parsed.macros)
             detail.append(f"{len(parsed.macros)} macro(s), {pin_total} pin(s) total")
-        if parsed.via_names:
-            detail.append(f"{len(parsed.via_names)} via def(s) (bodies not parsed)")
-        if parsed.via_rule_names:
-            detail.append(f"{len(parsed.via_rule_names)} viarule(s) (bodies not parsed)")
+        if parsed.vias:
+            rect_total = sum(len(layer.rects) for via in parsed.vias for layer in via.layers)
+            detail.append(f"{len(parsed.vias)} via def(s), {rect_total} rect(s) total")
+        if parsed.via_rules:
+            detail.append(f"{len(parsed.via_rules)} viarule(s)")
         print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
 
     print(f"\n{len(lef_files)} real .lef file(s): {total_layers} tech layer(s), {total_macros} macro(s) total.")
