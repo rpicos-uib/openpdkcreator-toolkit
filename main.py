@@ -29,7 +29,7 @@ bounding box + per-layer shape count via KLayout's own real Python
 API, ``klayout.db``, lazily imported so every other command here still
 runs without it installed). Magic's own ``compose``/``connect``
 sections are fully parsed, and one real pattern each is pulled out of
-its harder ``drc`` (``width``/``spacing``, 166 real checks),
+its harder ``drc`` (``width``/``spacing``/``maxwidth``, 192 real checks),
 ``extract`` (``resist``/``planeorder``, 44 real entries), and
 ``cifinput`` (``ignore``/standalone ``calma`` hints, 156 real entries
 combined) mini-rule-languages -- see ``ihp/magic_tech.py``'s own

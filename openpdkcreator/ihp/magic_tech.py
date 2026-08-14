@@ -23,20 +23,38 @@ each harder, mini-rule-language section rather than a full interpreter:
   statement -- the Magic-type-name to real-GDS-layer/datatype mapping,
   cross-referenceable against ``ihp/layers.py``'s own KLayout ``.lyp``
   layer list (``ihp/reconcile.py``).
-- ``drc``: the two dominant, cleanly tabular real statement kinds --
-  ``width <layers> <value> "message"`` and
-  ``spacing <layer1> <layer2> <value> ... "message"`` (167 of the real
-  section's statements combined, confirmed against the real file: 65/65
-  ``width`` and 101/102 ``spacing`` lines match -- the one real
-  exception is a genuine defect in IHP's own file, a message string
-  missing its closing quote, confirmed by direct inspection, not a
-  parser bug). ``value`` is raw file units; empirically confirmed
-  (cross-referenced against three independent, already-extracted real
-  KLayout DRC rules sharing the same real rule ID -- Act.a, Gat.a,
-  NW.b) that dividing by 1000 gives the real micron value Magic itself
-  reports -- not from Magic's own documented unit spec, which this
-  pass had no authoritative local source to confirm against, but a
-  real, repeatable, cross-checked empirical fact.
+- ``drc``: the three dominant, cleanly tabular real statement kinds --
+  ``width <layers> <value> "message"``,
+  ``spacing <layer1> <layer2> <value> ... "message"``, and
+  ``maxwidth <layer> <value> <mode> [exceptions] "message"`` (192 of
+  the real section's statements combined, confirmed against the real
+  file: 65/65 ``width``, 101/102 ``spacing``, and 26/26 ``maxwidth``
+  lines match -- the one real ``spacing`` exception is a genuine
+  defect in IHP's own file, a message string missing its closing
+  quote, confirmed by direct inspection, not a parser bug). All three
+  share the exact same real message-quoting shape, so ``maxwidth``
+  reuses ``width``'s own regex structure exactly (skip any filler
+  tokens -- ``mode``, an optional real exception-list like
+  ``glass,pillar,solder`` -- up to the quoted message, same as
+  ``width``/``spacing`` already do, rather than asserting what each
+  filler token means). ``value`` is raw file units; empirically
+  confirmed for ``width``/``spacing`` (cross-referenced against three
+  independent, already-extracted real KLayout DRC rules sharing the
+  same real rule ID -- Act.a, Gat.a, NW.b) that dividing by 1000 gives
+  the real micron value Magic itself reports -- not from Magic's own
+  documented unit spec, which this pass had no authoritative local
+  source to confirm against, but a real, repeatable, cross-checked
+  empirical fact; the same factor is applied to ``maxwidth`` too, on
+  the reasonable inference that one real file's one real section
+  shares one real internal unit scale, not a fresh independent
+  confirmation of that specific check kind.
+  ``surround``/``edge4way``/``variants``/``widespacing``/``angles``/
+  ``cifwidth``/``cifspacing``/``cifmaxwidth``/... remain real, separate
+  future work -- their own real shapes are less uniform (variable
+  argument counts, nested real layer-boolean expressions like
+  ``~(alldiffhv,allpoly,*pdiff,*nsd,*ntap)/a``, or, for ``variants``, a
+  real conditional-scoping directive rather than a check at all), so
+  extending the ``width``-style pattern to them isn't a safe reuse.
 - ``extract``: real per-layer sheet-resistance values
   (``resist <layer-spec> <value>``, milliohms/square per the file's own
   comment -- 30 of 33 real lines; the other 3 are real non-numeric
@@ -108,6 +126,7 @@ _CIFINPUT_CALMA_RE = re.compile(r"^\s*calma\s+(\S+)\s+(\d+)\s+(\d+|\*)")
 _COMPOSE_VERBS = ("compose", "decompose", "paint")
 _WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
+_MAXWIDTH_RE = re.compile(r'^maxwidth\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _TRAILING_PARENS_RE = re.compile(r"\(([^()]+)\)\s*$")
 _RESIST_RE = re.compile(r"^resist\s+(\S+)\s+(-?\d+)\s*$")
 _PLANEORDER_RE = re.compile(r"^planeorder\s+(\S+)\s+(\d+)\s*$")
@@ -678,6 +697,18 @@ def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[str]]
             id_match = _TRAILING_PARENS_RE.search(message)
             checks.append(MagicDrcCheck(
                 check_type="spacing", layer_args=[layer1.split(","), layer2.split(",")],
+                value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
+                rule_ids_raw=id_match.group(1) if id_match else None,
+            ))
+        elif stripped.startswith("maxwidth "):
+            match = _MAXWIDTH_RE.match(stripped)
+            if match is None:
+                skipped.append(stripped)
+                continue
+            layers_raw, value, message = match.groups()
+            id_match = _TRAILING_PARENS_RE.search(message)
+            checks.append(MagicDrcCheck(
+                check_type="maxwidth", layer_args=[layers_raw.split(",")],
                 value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
                 rule_ids_raw=id_match.group(1) if id_match else None,
             ))

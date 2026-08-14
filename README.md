@@ -188,18 +188,24 @@ highlighted straight to that cell's real line range within its
     interpreted -- their *first* line alone isn't a complete, honest
     fact the way `cifoutput`'s *final* `calma` line is, so fully
     modeling them stays real, separate future work.
-  - `drc`: the two dominant, cleanly tabular real statement kinds,
-    `width`/`spacing` -- 166 of the real section's statements (65/65
-    `width`, 101/102 `spacing`; the one real miss is a genuine defect
-    in IHP's own file, a message string missing its closing quote,
-    confirmed by direct inspection). Real values converted to microns
-    via an empirically-confirmed `/1000` factor, cross-checked against
-    three independent, already-extracted real KLayout DRC rules sharing
-    the same real rule ID (`Act.a`: `0.15` both ways; `Gat.a`: `0.13`
-    both ways; `NW.b`: `0.62` both ways) -- not from Magic's own
-    documented unit spec, which this pass had no authoritative local
-    source to confirm against, but a real, repeatable, cross-checked
-    fact, not a guess.
+  - `drc`: the three dominant, cleanly tabular real statement kinds,
+    `width`/`spacing`/`maxwidth` -- 192 of the real section's
+    statements (65/65 `width`, 101/102 `spacing`, 26/26 `maxwidth`; the
+    one real `spacing` miss is a genuine defect in IHP's own file, a
+    message string missing its closing quote, confirmed by direct
+    inspection). `maxwidth` reuses `width`'s own regex structure
+    exactly -- same real message-quoting shape, filler tokens (mode, an
+    optional real exception list like `glass,pillar,solder`) skipped
+    the same way, not asserted. Real values converted to microns via an
+    empirically-confirmed `/1000` factor, cross-checked against three
+    independent, already-extracted real KLayout DRC rules sharing the
+    same real rule ID (`Act.a`: `0.15` both ways; `Gat.a`: `0.13` both
+    ways; `NW.b`: `0.62` both ways) -- not from Magic's own documented
+    unit spec, which this pass had no authoritative local source to
+    confirm against, but a real, repeatable, cross-checked fact for
+    `width`/`spacing`; the same factor is applied to `maxwidth` on the
+    reasonable inference that one real file's one section shares one
+    real internal unit scale, not a fresh independent confirmation.
   - `extract`: real per-layer sheet resistance (`resist`, 30/33 real
     lines -- milliohms/square, the other 3 are real non-numeric config
     entries, not a parsing gap) and real plane ordering (`planeorder`,
@@ -251,7 +257,7 @@ highlighted straight to that cell's real line range within its
   else; every other domain stays read-only for now (each would need
   its own form). Verified for real, driven against the actual
   downloaded data: all thirteen sub-tabs' row counts match
-  `magic-tech`'s own CLI output exactly (39 compose/20 connect/166 DRC
+  `magic-tech`'s own CLI output exactly (39 compose/20 connect/192 DRC
   checks/30 resist/23 cifinput-ignored/133 cifinput-hints/506 extract
   cap coefficients/50 extract devices), switching technologies
   correctly reloads every sub-tab, editing a real type's
@@ -877,8 +883,13 @@ models, ...), not just read/display layers. Concretely, still open:
   `antenna`/`disconnect`/`substrate` -- its real parasitic-capacitance
   coefficients and `device` statements are now done, see
   `magic_tech.py`'s own docstring), the much larger real remainder of
-  `drc` (`surround`/`edge4way`/`maxwidth`/`cifmaxwidth`/`variants`/...
-  -- `width`/`spacing` are done), and Liberty's own real lookup-table
+  `drc` (`surround`/`edge4way`/`cifmaxwidth`/`variants`/`widespacing`/
+  `angles`/`cifwidth`/`cifspacing`/... -- `width`/`spacing`/`maxwidth`
+  are done; the remainder's own real shapes are less uniform -- variable
+  argument counts, nested real layer-boolean expressions, or, for
+  `variants`, a real conditional-scoping directive rather than a check
+  at all -- so extending the `width`-style pattern to them isn't a safe
+  reuse), and Liberty's own real lookup-table
   sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
   `fall_transition`, each its own nested `index_1`/`index_2`/`values`
   multi-dimensional data -- deliberately left unparsed even though
