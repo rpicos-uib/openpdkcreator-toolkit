@@ -1054,7 +1054,16 @@ models, ...), not just read/display layers. Concretely, still open:
   honestly-skipped constructs are multi-step composite/derived checks
   (angle/acute-corner checks, antenna-ratio accumulation, density
   windows, ...) with no single reliable, generic pattern left to
-  extract.
+  extract -- re-checked a second time (not just assumed still true):
+  real `.without_bbox_width()` occurs exactly once deck-wide (not worth
+  a pattern), and every real method-chain shape used across the
+  remaining skipped constructs was tallied deck-wide with no one shape
+  dominating the way `width`/`space`/`sep`/`enclosed` did. Some (e.g.
+  real `NW.b1`) could in principle resolve via real data-flow tracing
+  through arbitrary `.join()`/`.and()`/... composition, but that's
+  real, separate, higher-risk future work -- a wrong trace would
+  silently attach the wrong value to a rule, unlike an honestly-skipped
+  one.
 - Native write-back serialization: **done for every currently
   structured-editable domain** -- LEF pins (`ihp/lef_writer.py`,
   verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,

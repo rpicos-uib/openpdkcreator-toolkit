@@ -22,6 +22,26 @@ own real semantics exactly), each traced back to a real
 description)`` call. Every non-matching construct (composite checks,
 unrecognized methods, conditional/looped generation) is counted and
 reported by file:line, never silently dropped.
+
+**A second-round search for a third extractable pattern, real, not
+assumed to be futile**: every one of the 86 real remaining skipped
+constructs was checked for a single-method, single-value shape as
+clean as ``.enclosed()``'s own. None exists: real
+``.without_bbox_width()`` occurs exactly once across the entire real
+deck (not worth a dedicated pattern); the rest are genuinely
+heterogeneous multi-step boolean composition (real, varying
+combinations of ``.join()``/``.and()``/``.interacting()``/
+``.with_bbox_max()``/``.not_interacting()``/...), confirmed by
+tallying every real method-chain shape used deck-wide -- no one shape
+dominates the skipped set the way width/space/sep/enclosed did. Some
+skipped cases (e.g. real ``NW.b1``: two real ``space()``/``sep()``
+results, both tracing to the *same* real ``drc_rules`` value, then
+``.join()``ed and ``.and()``ed before ``.output()``) could in
+principle still resolve to one real, correct value via data-flow
+tracing through arbitrary composition -- but that's real, separate,
+higher-risk future work (a wrong trace would silently attach the wrong
+numeric value to a rule, unlike an honestly-skipped one), not a safe
+reuse of the current line-local regex approach.
 """
 
 from __future__ import annotations
