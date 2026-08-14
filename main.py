@@ -140,10 +140,11 @@ def cmd_magic_tech(pdk_root: Path) -> int:
             f"styles:{len(tech.styles)}  cif_layers:{len(tech.cif_layers)}  "
             f"compose:{len(tech.compose)}  connect:{len(tech.connect)}"
         )
-        if tech.cifinput_ignored_layers or tech.cifinput_layer_hints:
+        if tech.cifinput_ignored_layers or tech.cifinput_layer_hints or tech.cifinput_recipes:
             print(
                 f"  cifinput_ignored:{len(tech.cifinput_ignored_layers)}  "
-                f"cifinput_layer_hints:{len(tech.cifinput_layer_hints)}"
+                f"cifinput_layer_hints:{len(tech.cifinput_layer_hints)}  "
+                f"cifinput_recipes:{len(tech.cifinput_recipes)}"
             )
         print(
             f"  drc_checks:{len(tech.drc_checks)}  drc_angle_checks:{len(tech.drc_angle_checks)} "

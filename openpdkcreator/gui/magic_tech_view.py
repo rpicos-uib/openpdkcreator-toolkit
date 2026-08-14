@@ -6,12 +6,12 @@ separate technologies; the fragment files ``include``d into
 picker since they were never meant to be viewed standalone).
 
 A sub-`Notebook` per real, tabular data domain -- planes/types/
-contacts/aliases/styles/CIF layers/**CIF Input**, plus
-**Compose**/**Connect**/**DRC (Magic)**/**Extract**/**Extract
-Coefficients**/**Extract Devices** (real ``cifinput``/``compose``/
-``connect``/``drc``/``extract`` section content -- see
-``ihp/magic_tech.py``'s own docstring for exactly what's extracted
-from each and why). **Types**
+contacts/aliases/styles/CIF layers/**CIF Input**/**CIF Input
+Recipes**, plus **Compose**/**Connect**/**DRC (Magic)**/**Extract**/
+**Extract Coefficients**/**Extract Devices**/**Extract Misc** (real
+``cifinput``/``compose``/``connect``/``drc``/``extract`` section
+content -- see ``ihp/magic_tech.py``'s own docstring for exactly
+what's extracted from each and why). **Types**
 is editable (a list + form pane, New/Delete Type, the same
 commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
 already use) -- every other domain stays read-only for now (each would
@@ -75,6 +75,9 @@ class MagicTechView(ttk.Frame):
         self.styles_tree = self._make_tab(sub, "Styles", ("type_name", "style_names"), (160, 560))
         self.cif_tree = self._make_tab(sub, "CIF Layers", ("name", "gds_pairs"), (200, 400))
         self._build_cifinput_tab(sub)
+        self.cifinput_recipes_tree = self._make_tab(
+            sub, "CIF Input Recipes", ("name", "kind", "base_layers", "ops"), (140, 90, 160, 460),
+        )
         self.compose_tree = self._make_tab(sub, "Compose", ("verb", "arg1", "arg2", "arg3"), (100, 140, 140, 140))
         self.connect_tree = self._make_tab(sub, "Connect", ("types_a", "types_b"), (330, 330))
         self.drc_tree = self._make_tab(
@@ -264,7 +267,7 @@ class MagicTechView(ttk.Frame):
         for tree in (
             self.planes_tree, self.contacts_tree,
             self.aliases_tree, self.styles_tree, self.cif_tree,
-            self.cifinput_ignore_tree, self.cifinput_hints_tree,
+            self.cifinput_ignore_tree, self.cifinput_hints_tree, self.cifinput_recipes_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
             self.extract_coeff_tree, self.extract_devices_tree, self.extract_misc_tree,
@@ -296,6 +299,15 @@ class MagicTechView(ttk.Frame):
         for hint in tech.cifinput_layer_hints:
             datatype = "*" if hint.gds_datatype is None else hint.gds_datatype
             self.cifinput_hints_tree.insert("", "end", values=(hint.name, hint.gds_layer, datatype))
+        for recipe in tech.cifinput_recipes:
+            ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
+            self.cifinput_recipes_tree.insert(
+                "", "end",
+                values=(
+                    recipe.name, "templayer" if recipe.is_templayer else "layer",
+                    ",".join(recipe.base_layers), ops_text,
+                ),
+            )
         for statement in tech.compose:
             self.compose_tree.insert("", "end", values=(statement.verb, *statement.args))
         for rule in tech.connect:

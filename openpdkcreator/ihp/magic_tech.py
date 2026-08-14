@@ -93,27 +93,38 @@ each harder, mini-rule-language section rather than a full interpreter:
   token count), but too small and heterogeneous individually to
   justify five separate types.
 
-- ``cifinput``: two real, cleanly tabular facts pulled out of the
-  section, its own real geometry-boolean recipe blocks (``layer``/
-  ``templayer`` ... ``and``/``and-not``/``grow``/``shrink``/``labels``/
-  ``copyup``) still deliberately NOT interpreted -- their *first* line
-  alone (unlike ``cifoutput``'s *final* ``calma`` line) isn't a
-  complete, honest fact about the resulting Magic type, so fully
-  modeling them remains real, separate future work. The two real facts
-  that *are* extracted, in full: every real ``ignore LAYERNAME``
-  statement (23 real entries, a simple, unambiguous "this GDS/CIF
-  layer is ignored on read" fact), and a real, standalone
-  ``calma NAME L D`` table (133 real entries, confirmed by reading the
-  real file to sit together in one flat block, *not* nested inside any
-  preceding boolean recipe -- unlike ``cifoutput``'s own per-recipe
-  ``calma L D`` lines, which omit the name and inherit it from the
-  enclosing ``layer``/``templayer`` block, `cifinput`'s own real
-  ``calma`` lines carry their own name token directly, a genuinely
-  different real shape requiring its own regex, not a reuse of
-  ``cifoutput``'s). Two of those 133 real entries use a literal ``*``
-  as their datatype (``calma BOUND 189 *``) -- a real wildcard,
-  confirmed by reading the file, kept as ``None`` rather than silently
-  dropped or coerced to a fake integer.
+- ``cifinput``: three real facts pulled out of the section in full.
+  Every real ``ignore LAYERNAME`` statement (23 real entries, a
+  simple, unambiguous "this GDS/CIF layer is ignored on read" fact),
+  and a real, standalone ``calma NAME L D`` table (133 real entries,
+  confirmed by reading the real file to sit together in one flat
+  block, *not* nested inside any preceding boolean recipe -- unlike
+  ``cifoutput``'s own per-recipe ``calma L D`` lines, which omit the
+  name and inherit it from the enclosing ``layer``/``templayer``
+  block, `cifinput`'s own real ``calma`` lines carry their own name
+  token directly, a genuinely different real shape requiring its own
+  regex, not a reuse of ``cifoutput``'s). Two of those 133 real
+  entries use a literal ``*`` as their datatype (``calma BOUND 189
+  *``) -- a real wildcard, confirmed by reading the file, kept as
+  ``None`` rather than silently dropped or coerced to a fake integer.
+  Third, the section's own real geometry-boolean recipe blocks
+  (``layer``/``templayer NAME <base> ...`` followed by real
+  ``and``/``and-not``/``or``/``grow``/``shrink``/``labels``/
+  ``copyup``/``not-square``/``mask-hints``/... op lines) are also now
+  extracted, into ``CifInputRecipe`` -- an honest, complete real
+  *record* of each recipe (name, real ``templayer``-vs-``layer``
+  distinction, base layer(s), every real op line in real order), not
+  a working boolean-geometry interpreter: the ops are recorded, never
+  evaluated or composed. **A real structural fact confirmed while
+  building this, not assumed**: a real Magic type's own recipe can be
+  built across more than one real, textually-separated block sharing
+  the same NAME (e.g. real ``nwell`` has two real, separate
+  ``layer nwell ...`` blocks with two different real base layers) --
+  the same real fact ``cifoutput``'s own ``CifLayer`` already merges
+  for its own real DNWELL; matched the same way here (188 real,
+  unique recipe names across 211 real block occurrences, every real
+  occurrence's own base layer and ops accumulated in real file order,
+  none silently overwritten or dropped).
 
 ``lef``/``mzrouter``/``wiring``/``router``/``plowing``/``plot`` are
 still deliberately NOT parsed this pass. Every section name found
@@ -140,6 +151,7 @@ _LAYER_BLOCK_START_RE = re.compile(r"^\s*(?:layer|templayer)\s+(\S+)")
 _CALMA_RE = re.compile(r"^\s*calma\s+(\d+)\s+(\d+)")
 _CIFINPUT_IGNORE_RE = re.compile(r"^\s*ignore\s+(\S+)")
 _CIFINPUT_CALMA_RE = re.compile(r"^\s*calma\s+(\S+)\s+(\d+)\s+(\d+|\*)")
+_CIFINPUT_RECIPE_START_RE = re.compile(r"^\s*(layer|templayer)\s+(\S+)\s+(\S+)\s*$")
 _COMPOSE_VERBS = ("compose", "decompose", "paint")
 _WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
@@ -242,6 +254,57 @@ class CifInputLayerHint:
     """``None`` for a real wildcard datatype (the file's own literal
     ``*``, confirmed real -- e.g. ``calma BOUND 189 *`` -- meaning "any
     datatype", not a parsing gap)."""
+
+
+@dataclass
+class CifInputOp:
+    """One real op line inside a real cifinput recipe block (e.g.
+    ``and NWELL``, ``grow 1140``, ``not-square``) -- kept fully raw
+    (``verb`` + the line's own remaining raw text), same 'don't guess
+    semantics' discipline as ``ComposeStatement``. Real verbs are not
+    an enumerated, closed set (``and``/``and-not``/``or``/``grow``/
+    ``shrink``/``labels``/``copyup``/``not-square``/``mask-hints``/...
+    all confirmed real) -- whichever real word starts the real line."""
+
+    verb: str
+    args: str
+
+
+@dataclass
+class CifInputRecipe:
+    """One real Magic type's worth of ``layer NAME <base>`` /
+    ``templayer NAME <base>`` recipe content from the cifinput
+    section, plus every real op line following each such block (or the
+    section's own real ``ignore``/standalone ``calma`` content,
+    explicitly excluded -- see this module's own docstring) -- an
+    honest, complete real *record* of what each recipe says, not a
+    working boolean-geometry interpreter: the ops are never evaluated
+    or composed here.
+
+    **A real Magic type's own recipe can be built across more than one
+    real, textually-separated block with the same NAME** (confirmed
+    real -- e.g. real ``nwell`` has two real, separate ``layer nwell
+    ...`` blocks at different points in the file, each with its own
+    real base layer: ``NWELL,WELLPIN`` and, later, ``schottkyarea``) --
+    the same real structural fact ``cifoutput``'s own ``CifLayer``
+    already merges (its own real DNWELL, built across two real
+    ``layer DNWELL ...`` blocks). Matched here the same way:
+    ``base_layers``/``ops`` accumulate across every real occurrence, in
+    real file order, rather than only the first being kept and later
+    real occurrences silently overwriting or duplicating it."""
+
+    name: str
+    is_templayer: bool
+    """A real ``templayer`` is Magic's own real, intermediate/working
+    layer (not directly emitted); a real ``layer`` is a real,
+    permanent one -- confirmed real distinction, not asserted
+    semantics beyond the keyword itself."""
+    base_layers: list[str] = field(default_factory=list)
+    """Raw, e.g. "NWELL,WELLPIN" -- one real entry per real block
+    occurrence, in real file order, not decomposed further."""
+    ops: list[CifInputOp] = field(default_factory=list)
+    """Every real op line, concatenated across every real block
+    occurrence for this name, in real file order."""
 
 
 @dataclass
@@ -395,6 +458,9 @@ class MagicTechnology:
     cifinput_layer_hints: list[CifInputLayerHint] = field(default_factory=list)
     """Real, standalone 'calma NAME L D' statements from the cifinput
     section -- see ``CifInputLayerHint``'s own docstring."""
+    cifinput_recipes: list[CifInputRecipe] = field(default_factory=list)
+    """Real 'layer'/'templayer' geometry-boolean recipe blocks -- see
+    ``CifInputRecipe``'s own docstring."""
     compose: list[ComposeStatement] = field(default_factory=list)
     connect: list[ConnectRule] = field(default_factory=list)
     drc_checks: list[MagicDrcCheck] = field(default_factory=list)
@@ -681,6 +747,37 @@ def _parse_cifinput_layer_hints(lines: list[str]) -> list[CifInputLayerHint]:
     return hints
 
 
+def _parse_cifinput_recipes(lines: list[str]) -> list[CifInputRecipe]:
+    by_name: dict[str, CifInputRecipe] = {}
+    order: list[str] = []
+    current: CifInputRecipe | None = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        block_match = _CIFINPUT_RECIPE_START_RE.match(line)
+        if block_match:
+            kind, name, base = block_match.groups()
+            current = by_name.get(name)
+            if current is None:
+                current = CifInputRecipe(name=name, is_templayer=(kind == "templayer"))
+                by_name[name] = current
+                order.append(name)
+            current.base_layers.append(base)
+            continue
+        if current is None:
+            continue
+        # The section's own real 'ignore'/standalone 'calma' content
+        # is not part of any recipe (see this module's own docstring)
+        # -- explicitly excluded rather than swept in as bogus 'ops'
+        # of whichever recipe happened to be open last.
+        if _CIFINPUT_IGNORE_RE.match(stripped) or _CIFINPUT_CALMA_RE.match(stripped):
+            continue
+        parts = stripped.split(None, 1)
+        current.ops.append(CifInputOp(verb=parts[0], args=parts[1] if len(parts) > 1 else ""))
+    return [by_name[name] for name in order]
+
+
 def _parse_compose(lines: list[str]) -> list[ComposeStatement]:
     entries = []
     for line in lines:
@@ -885,6 +982,7 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
     tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))
     tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))
+    tech.cifinput_recipes = _parse_cifinput_recipes(sections.get("cifinput", []))
     tech.compose = _parse_compose(sections.get("compose", []))
     tech.connect = _parse_connect(sections.get("connect", []))
     tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
