@@ -11,12 +11,16 @@ this project's LEF model doesn't capture), DRC Rules
 (``ihp/drc_writer.py``'s own docstring explains the real
 ``.drc``-script-vs-JSON-config split), Magic Types
 (``ihp/magic_tech_writer.py``), CDL/SPICE/Verilog ports
-(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), and Liberty
+(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), Liberty
 pin/timing-arc data (``ihp/liberty_writer.py``'s own docstring explains
 the per-field diffing discipline; the real lookup-table sub-groups
-stay untouched, unmodeled). Every other real, non-editable domain
-(GDS, Layers, ...) has no write-back because there's no editor for it
-either -- see README's own Future Work.
+stay untouched, unmodeled), and Layers (``ihp/layers_writer.py`` --
+only ``name``/``gds_layer``/``gds_datatype``/``frame_color``/
+``fill_color`` have any real ``.lyp`` counterpart; every other
+editable ``Layer`` field is this project's own metadata, saved via
+``project_io.py`` instead). Every other real, non-editable domain
+(GDS, Magic Tech's other domains, ...) has no write-back because
+there's no editor for it either -- see README's own Future Work.
 """
 
 from __future__ import annotations
@@ -26,6 +30,8 @@ from pathlib import Path
 
 from .ihp import drc as drc_mod
 from .ihp import drc_writer
+from .ihp import layers as layers_mod
+from .ihp import layers_writer
 from .ihp import lef as lef_mod
 from .ihp import lef_writer
 from .ihp import liberty as liberty_mod
@@ -36,7 +42,7 @@ from .ihp import netlist as netlist_mod
 from .ihp import netlist_writer
 from .ihp import verilog as verilog_mod
 from .ihp import verilog_writer
-from .models import DesignRule
+from .models import DesignRule, Layer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXPORT_ROOT = PROJECT_ROOT / "export"
@@ -159,6 +165,19 @@ def export_verilog_files(
     return written
 
 
+def export_layers(
+    pdk_root: Path, lyp_path: Path, layers: list[Layer], dest_root: Path | None = None,
+) -> Path:
+    """The one real ``.lyp`` file this project ever has loaded at once
+    (unlike every other domain here, Layers has no per-file cache --
+    ``App.lyp_path``/``App.project.layers`` are already singular).
+    Returns the real export path written."""
+
+    export_path = export_path_for(pdk_root, lyp_path, dest_root)
+    layers_writer.export_lyp_file(layers, lyp_path, export_path)
+    return export_path
+
+
 def export_liberty_files(
     pdk_root: Path, liberty_cache: dict[Path, list[liberty_mod.LibertyCell]], dest_root: Path | None = None,
 ) -> list[Path]:
@@ -230,3 +249,7 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
 
     liberty_cache = {path: liberty_mod.find_cells(path) for path in pdk_root.glob("libs.ref/*/lib/*.lib")}
     export_liberty_files(pdk_root, liberty_cache, dest_root)
+
+    lyp_path = layers_mod.find_lyp(pdk_root)
+    if lyp_path is not None:
+        export_layers(pdk_root, lyp_path, layers_mod.import_layers(pdk_root, lyp_path), dest_root)

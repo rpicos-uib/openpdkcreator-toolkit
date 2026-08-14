@@ -6,6 +6,23 @@ proved this logic against real, fetched open_pdks-format `.lyp` files
 docs/ADR/0017-multi-project-support-and-open-pdks-import.md in that
 project.
 
+**Text-based, not ``ElementTree``-based** -- switched from the
+original ``ElementTree`` implementation so each real ``<properties>``
+block's own real, 1-indexed source line range could be tracked
+(stdlib ``ElementTree`` doesn't expose source line numbers; only
+``lxml`` does), needed by ``ihp/layers_writer.py``'s own real,
+surgical write-back. Confirmed real and fully uniform before switching,
+not assumed: all 377 real ``<properties>`` blocks in IHP's own
+``sg13g2.lyp`` are exactly 16 real lines each, same 14-tag field order
+(``frame-color``/``fill-color``/``frame-brightness``/
+``fill-brightness``/``dither-pattern``/``line-style``/``valid``/
+``visible``/``transparent``/``width``/``marked``/``animation``/
+``name``/``source``) -- the parser below tracks real
+``<properties>``/``</properties>`` nesting depth (matching, not
+assuming, correct block boundaries) but still only extracts flat,
+top-level tag values, the same known limitation the original
+``ElementTree`` flat scan had.
+
 Deliberately a flat ``<properties>`` scan, not a recursive one: real
 KLayout `.lyp` files *can* nest layers inside `<group-members>` blocks
 (common for grouped metal stacks), which a flat scan would silently
@@ -20,10 +37,13 @@ silently trusting the flat scan is always correct.
 from __future__ import annotations
 
 import datetime
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from ..models import Layer
+
+_TAG_LINE_RE = re.compile(r"^\s*<([\w-]+)>(.*)</\1>\s*$")
 
 
 def find_lyp(pdk_root: Path) -> Path | None:
@@ -57,6 +77,39 @@ def _parse_source(source: str) -> tuple[int | None, int | None]:
         return None, None
 
 
+def find_layer_blocks(lyp_path: Path) -> list[tuple[int, int, dict[str, str]]]:
+    """Every real top-level ``<properties>`` block's own real,
+    1-indexed, inclusive ``(start_line, end_line)`` line range plus its
+    flat tag->text field dict -- the shared real-position scan both
+    ``import_layers`` (below) and ``ihp/layers_writer.py`` use, so the
+    two never independently re-derive (and risk disagreeing about)
+    the same real block boundaries."""
+
+    lines = lyp_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    blocks: list[tuple[int, int, dict[str, str]]] = []
+    depth = 0
+    start_line = 0
+    fields: dict[str, str] = {}
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+        if stripped == "<properties>":
+            if depth == 0:
+                start_line = line_no
+                fields = {}
+            depth += 1
+            continue
+        if stripped == "</properties>":
+            depth -= 1
+            if depth == 0:
+                blocks.append((start_line, line_no, fields))
+            continue
+        if depth == 1:
+            match = _TAG_LINE_RE.match(raw_line)
+            if match:
+                fields[match.group(1)] = match.group(2)
+    return blocks
+
+
 def import_layers(pdk_root: Path, lyp_path: Path) -> list[Layer]:
     """Every real top-level `<properties>` block's name/source/
     frame-color/fill-color -- the reliable subset every real entry has.
@@ -66,32 +119,29 @@ def import_layers(pdk_root: Path, lyp_path: Path) -> list[Layer]:
     with far more distinct trailing segments than a small, fixed
     "purpose" enum could ever enumerate."""
 
-    tree = ET.parse(lyp_path)
     layers: list[Layer] = []
     today = datetime.date.today().isoformat()
     rel = lyp_path.relative_to(pdk_root) if pdk_root in lyp_path.parents else lyp_path
-    for props in tree.getroot().findall("properties"):
-        name_el = props.find("name")
-        source_el = props.find("source")
-        if name_el is None or source_el is None or not (name_el.text or "").strip():
+    for start_line, end_line, fields in find_layer_blocks(lyp_path):
+        name = fields.get("name", "").strip()
+        source = fields.get("source", "").strip()
+        if not name or not source:
             continue
-        if not (source_el.text or "").strip():
-            continue
-        gds_layer, gds_datatype = _parse_source(source_el.text.strip())
-        frame_el = props.find("frame-color")
-        fill_el = props.find("fill-color")
+        gds_layer, gds_datatype = _parse_source(source)
         layers.append(
             Layer(
-                name=name_el.text.strip(),
+                name=name,
                 gds_layer=gds_layer,
                 gds_datatype=gds_datatype,
                 purpose="drawing",
-                frame_color=(frame_el.text or "#7f7f7f").strip() if frame_el is not None and frame_el.text else "#7f7f7f",
-                fill_color=(fill_el.text or "#d9d9d9").strip() if fill_el is not None and fill_el.text else "#d9d9d9",
+                frame_color=fields.get("frame-color", "").strip() or "#7f7f7f",
+                fill_color=fields.get("fill-color", "").strip() or "#d9d9d9",
                 status="placeholder",
                 notes=f"Imported from {rel} on {today}. Real GDS layer/datatype/color; "
                       f"plane/stack_order/streamout_allowed not derivable from a .lyp "
                       f"and still need a human decision.",
+                start_line=start_line,
+                end_line=end_line,
             )
         )
     return layers

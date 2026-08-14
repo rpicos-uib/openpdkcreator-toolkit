@@ -13,6 +13,12 @@ research this session: no field or default is memristor-specific).
 Copied rather than shared -- see the project README for why -- so this
 project is free to extend either as real, non-memristor PDK complexity
 demands, without touching the other project's own, ADR-gated schema.
+
+``Layer.start_line``/``end_line`` are this project's own addition (not
+present upstream), added for ``ihp/layers_writer.py``'s own real
+write-back -- the same "track a real source position on the dataclass
+itself" pattern every other editable domain here already uses (e.g.
+``ihp/lef.py``'s ``LefPin``).
 """
 
 from __future__ import annotations
@@ -39,6 +45,15 @@ class Layer:
     streamout_allowed: bool | None = None
     notes: str = ""
     status: str = STATUS_PLACEHOLDER
+    start_line: int = 0
+    """Real, 1-indexed source line of this layer's own real
+    ``<properties>`` block in a real ``.lyp`` file (``ihp/layers.py``'s
+    own ``import_layers``) -- ``0`` for a layer with no real source
+    position (created this session, or not from a ``.lyp`` at all).
+    Used by ``ihp/layers_writer.py`` to patch just this layer's own
+    real text back in place on export."""
+    end_line: int = 0
+    """Real, 1-indexed, inclusive closing line of the same block."""
 
     def is_placeholder(self) -> bool:
         return (

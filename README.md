@@ -37,6 +37,7 @@ python3 main.py export-magic-types   # real, patched Magic Types write-back to e
 python3 main.py export-netlist   # real, patched .cdl/.spice port write-back to export/ (byte-identical with no edits)
 python3 main.py export-verilog   # real, patched .v port write-back to export/ (byte-identical with no edits)
 python3 main.py export-liberty   # real, patched .lib pin/timing write-back to export/ (byte-identical with no edits)
+python3 main.py export-layers    # real, patched .lyp write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
@@ -157,9 +158,46 @@ highlighted straight to that cell's real line range within its
   `import_open_pdks.py`), confirmed against IHP's real, downloaded
   `sg13g2.lyp`: 377 real layers, byte-accurate name/GDS-layer/GDS-
   datatype/frame-color/fill-color, hand-checked for `<group-members>`
-  nesting (none found -- see `docs/ihp_vs_open_pdks.md`).
+  nesting (none found -- see `docs/ihp_vs_open_pdks.md`). Switched from
+  `ElementTree` to a real, text-based, line-tracking parser
+  (`find_layer_blocks`) so each real `<properties>` block's own real
+  source line range could be tracked -- stdlib `ElementTree` doesn't
+  expose line numbers -- needed for `ihp/layers_writer.py`'s own real
+  write-back. Confirmed real and fully uniform before switching, not
+  assumed: all 377 real blocks are exactly 16 real lines each, same
+  14-tag field order; the new parser tracks real nesting depth so it
+  still finds the correct real block boundaries rather than assuming
+  no nesting exists.
+- **`openpdkcreator/ihp/layers_writer.py`** -- real, surgical
+  write-back for Layers, the same discipline as every other writer
+  here: only four of a real layer's fields have any real `.lyp`
+  counterpart at all (`name`, `gds_layer`/`gds_datatype` together as
+  the real `<source>L/D</source>` text, `frame_color`, `fill_color`) --
+  every other editable field (`purpose`/`plane`/`stack_order`/
+  `streamout_allowed`/`notes`/`status`) is this project's own metadata
+  with no real `.lyp` counterpart, so it stays `project_io.py`-only,
+  never written back, the same precedent `ihp/drc_writer.py` already
+  established for `DesignRule`'s own project-only fields. A real,
+  found-before-shipping bug: the first version of `_render_new_layer_block`
+  (for a brand-new layer added via **New Layer**) never emitted
+  `frame-color`/`fill-color` at all -- caught immediately by a real,
+  driven round-trip test asserting the new layer's own edited color
+  survived export, before it could ship. Verified for real:
+  byte-identical no-edit round-trip against the real 377-layer
+  `sg13g2.lyp`; real, driven edit round-trips (color edit, rename, new
+  layer, deleted layer) each confirmed correct with every other real
+  layer in the file provably unchanged; re-verified via `main.py
+  export-full`'s own smoking-gun round-trip test across the entire
+  real PDK.
 - **`openpdkcreator/gui/layers_view.py`** -- OpenPDKCreator's own
-  Layers tab, copied verbatim, displaying the real parsed layers above.
+  Layers tab, copied (now with a live filter box added here -- see the
+  GUI structure section), displaying the real parsed layers above.
+  **File > Export Edited Layers** (`app.py`) writes real, patched
+  `.lyp` text reflecting whatever's currently in
+  `self.project.layers` -- unlike every other writable domain here,
+  Layers has no per-file cache to check first (the tab commits every
+  field live, no pending-edit state, and there's only ever one real
+  `.lyp` loaded per session).
 - **`openpdkcreator/eda_tools.py`** -- OpenPDKCreator's own FOSS
   EDA-toolchain checker/installer/launcher. Its two PDK-specific
   "pre-pointed" launch entries for Magic/KLayout (originally pointed
@@ -878,15 +916,19 @@ highlighted straight to that cell's real line range within its
   `.lib` file parsed this session (`App.get_parsed_liberty`'s own
   cache for the GUI; every real file, freshly parsed, for the CLI and
   `export-full`) with any in-memory pin/timing-arc edits patched in.
+- **`main.py export-layers`** / **File > Export Edited Layers**
+  (`app.py`) -- exports the one real `.lyp` file this project ever has
+  loaded at once (`ihp/layers_writer.py`), with any in-memory
+  name/GDS-layer/GDS-datatype/color edits patched in.
 
 Native write-back serialization is now complete for every currently
 structured-editable domain -- LEF pins, DRC Rules, Magic Types,
-CDL/SPICE/Verilog ports, and Liberty pin/timing-arc data -- and
+CDL/SPICE/Verilog ports, Liberty pin/timing-arc data, and Layers -- and
 independently re-verified faithful across the entire real PDK via
 `main.py export-full`'s own smoking-gun round-trip test, not just
-per-writer sample tests. Everything still read-only (Layers, Magic
-Tech's other five domains, GDS) has no write-back for the same reason
-it has no editor yet -- see Future Work.
+per-writer sample tests. Everything still read-only (Magic Tech's
+other domains, GDS) has no write-back for the same reason it has no
+editor yet -- see Future Work.
 - **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
   sub-tab (`ToolsView`): real, live status of every tool in
   `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
@@ -970,22 +1012,24 @@ models, ...), not just read/display layers. Concretely, still open:
   Types (`ihp/magic_tech_writer.py`, verified against both real
   technologies' `.tech` files), CDL/SPICE/Verilog ports
   (`ihp/netlist_writer.py`/`ihp/verilog_writer.py`, verified against
-  all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files), and
-  Liberty pin/timing-arc data (`ihp/liberty_writer.py`, verified
-  against all 97 real `.lib` files, 700 real cells) -- every one
-  byte-identical with no edits, plus real, driven edit round-trips,
-  and independently re-verified faithful across the *entire* real PDK
-  at once via `main.py export-full`'s own smoking-gun round-trip test
-  (`export.py`, `File > Export Edited ...`, `main.py
-  export-lef`/`export-drc`/`export-magic-types`/`export-netlist`/
-  `export-verilog`/`export-liberty`). What's left is everything that's
-  still read-only in its own structured view -- Layers and Magic
-  Tech's other five domains -- for the same reason: no editor -> no
-  write-back path to build. GDS stays read-only by design (real
-  structural info only, no geometry-editing feature exists or is
-  planned this pass); Liberty's own real lookup-table sub-groups stay
-  unmodeled for the same bounded-scope reason as everywhere else, not
-  because a pin/timing-arc editor doesn't exist anymore.
+  all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files), Liberty
+  pin/timing-arc data (`ihp/liberty_writer.py`, verified against all
+  97 real `.lib` files, 700 real cells), and Layers
+  (`ihp/layers_writer.py`, verified against the real 377-layer
+  `sg13g2.lyp`) -- every one byte-identical with no edits, plus real,
+  driven edit round-trips, and independently re-verified faithful
+  across the *entire* real PDK at once via `main.py export-full`'s own
+  smoking-gun round-trip test (`export.py`, `File > Export Edited ...`,
+  `main.py export-lef`/`export-drc`/`export-magic-types`/
+  `export-netlist`/`export-verilog`/`export-liberty`/`export-layers`).
+  What's left is everything that's still read-only in its own
+  structured view -- Magic Tech's other domains -- for the same
+  reason: no editor -> no write-back path to build. GDS stays read-only
+  by design (real structural info only, no geometry-editing feature
+  exists or is planned this pass); Liberty's own real lookup-table
+  sub-groups stay unmodeled for the same bounded-scope reason as
+  everywhere else, not because a pin/timing-arc editor doesn't exist
+  anymore.
 - "Pre-pointed" Magic/KLayout launch guidance is back in
   `eda_tools.py`, pointed at real files this project has since
   downloaded and read: Magic launches with IHP's own real, official

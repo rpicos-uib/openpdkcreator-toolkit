@@ -74,21 +74,24 @@ same cache too).
 
 **Native write-back** (``export.py``, **File > Export Edited LEF
 Files** / **DRC Rules** / **Magic Types** / **CDL/SPICE Ports** /
-**Verilog Ports** / **Liberty Files**): unlike ``project_io.py``'s own
-program-format ``saves/``, this writes real, valid text back into the
-real file formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``), DRC
-Rules (a rule's ``rule_id``/``description`` patched into its real
-``.drc`` script's own ``.output()`` call, its ``value`` into the one
-real JSON config file it actually lives in -- ``ihp/drc_writer.py``),
-Magic Types (a type's own real one-line entry in its real ``.tech``
-file -- ``ihp/magic_tech_writer.py``), CDL/SPICE/Verilog port lists (a
-real ``.SUBCKT``/``*.PININFO`` pair or real ``module``/``input``/
-``output``/``inout`` declarations -- ``ihp/netlist_writer.py``/
-``ihp/verilog_writer.py``), and Liberty pin/timing-arc data (a pin's
-own real ``direction``/``capacitance``/``function`` attribute lines, a
-timing arc's own real ``related_pin``/``timing_type``/
-``timing_sense``/``when`` attribute lines -- ``ihp/liberty_writer.py``)
--- all via surgical, position-targeted text splicing, everything else
+**Verilog Ports** / **Liberty Files** / **Layers**): unlike
+``project_io.py``'s own program-format ``saves/``, this writes real,
+valid text back into the real file formats -- ``.lef`` (pin edits,
+``ihp/lef_writer.py``), DRC Rules (a rule's ``rule_id``/``description``
+patched into its real ``.drc`` script's own ``.output()`` call, its
+``value`` into the one real JSON config file it actually lives in --
+``ihp/drc_writer.py``), Magic Types (a type's own real one-line entry
+in its real ``.tech`` file -- ``ihp/magic_tech_writer.py``),
+CDL/SPICE/Verilog port lists (a real ``.SUBCKT``/``*.PININFO`` pair or
+real ``module``/``input``/``output``/``inout`` declarations --
+``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), Liberty
+pin/timing-arc data (a pin's own real ``direction``/``capacitance``/
+``function`` attribute lines, a timing arc's own real
+``related_pin``/``timing_type``/``timing_sense``/``when`` attribute
+lines -- ``ihp/liberty_writer.py``), and Layers (a real ``<name>``/
+``<source>``/``<frame-color>``/``<fill-color>`` tag, the only four
+real ``.lyp`` fields a ``Layer`` has -- ``ihp/layers_writer.py``) --
+all via surgical, position-targeted text splicing, everything else
 preserved byte-for-byte, to a new ``export/`` tree mirroring each
 file's own real relative path under ``pdk_root``. Never touches
 ``data/``. This covers every currently structured-editable domain --
@@ -255,6 +258,7 @@ class App(ttk.Frame):
         file_menu.add_command(label="Export Edited CDL/SPICE Ports (open_pdks format)", command=self._export_netlist_files)
         file_menu.add_command(label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files)
         file_menu.add_command(label="Export Edited Liberty Files (open_pdks format)", command=self._export_liberty_files)
+        file_menu.add_command(label="Export Edited Layers (open_pdks format)", command=self._export_layers)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -344,6 +348,20 @@ class App(ttk.Frame):
             self.status.set("No Liberty files parsed this session -- nothing to export (visit By Cell first).")
             return
         self.status.set(f"Exported {len(written)} real .lib file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
+    def _export_layers(self):
+        """Writes real, patched ``.lyp`` text reflecting whatever's
+        currently in ``self.project.layers`` -- see ``export.py``'s/
+        ``ihp/layers_writer.py``'s own docstrings. Unlike every other
+        domain here, Layers has no per-file cache to check first: the
+        Layers tab commits every field live (no pending-edit state),
+        and there's only ever one real ``.lyp`` loaded per session."""
+
+        if self.lyp_path is None:
+            self.status.set("No .lyp file loaded -- nothing to export.")
+            return
+        export_path = export_mod.export_layers(self.pdk_root, self.lyp_path, self.project.layers)
+        self.status.set(f"Exported {len(self.project.layers)} real layer(s) to {export_path}")
 
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,

@@ -49,8 +49,9 @@ lives in), Magic Types (``export-magic-types``/
 ``ihp/magic_tech_writer.py`` -- a type's own real one-line entry in
 its real ``.tech`` file), CDL/SPICE/Verilog ports
 (``export-netlist``/``export-verilog``/``ihp/netlist_writer.py``/
-``ihp/verilog_writer.py``), and Liberty pin/timing-arc data
-(``export-liberty``/``ihp/liberty_writer.py``) -- all surgical,
+``ihp/verilog_writer.py``), Liberty pin/timing-arc data
+(``export-liberty``/``ihp/liberty_writer.py``), and Layers
+(``export-layers``/``ihp/layers_writer.py``) -- all surgical,
 position-targeted patching into a new ``export/`` tree, never touching
 ``data/``, and independently re-verified faithful across the *entire*
 real PDK via ``export-full``'s own smoking-gun round-trip test. The
@@ -71,6 +72,7 @@ work, still only partially attempted here.
     python3 main.py export-netlist        # real CDL/SPICE port write-back verification
     python3 main.py export-verilog        # real Verilog port write-back verification
     python3 main.py export-liberty        # real Liberty pin/timing write-back verification
+    python3 main.py export-layers         # real .lyp write-back verification
     python3 main.py export-full --dest D  # a complete, standalone PDK tree (round-trip fidelity testing)
     python3 main.py gui                   # Overview, Technology, Cells, Settings tabs
 """
@@ -544,6 +546,34 @@ def cmd_export_liberty(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_export_layers(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    lyp_path = layers_mod.find_lyp(pdk_root)
+    if lyp_path is None:
+        print(f"No .lyp file found under {pdk_root}/libs.tech/", file=sys.stderr)
+        return 2
+
+    layers = layers_mod.import_layers(pdk_root, lyp_path)
+    export_path = export_mod.export_layers(pdk_root, lyp_path, layers)
+
+    original_text = lyp_path.read_text(encoding="utf-8", errors="replace")
+    exported_text = export_path.read_text(encoding="utf-8", errors="replace")
+    match = exported_text == original_text
+
+    print(f"Exported {len(layers)} real layer(s) to {export_path}")
+    print(
+        f"No real edits were made this run, so the export should be byte-identical "
+        f"to its real original -- {'yes' if match else 'NO'}."
+    )
+    if not match:
+        print("MISMATCH (a real write-back correctness bug):", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_export_full(pdk_root: Path, dest: Path) -> int:
     """A complete, real, standalone PDK tree at *dest* (see
     ``export.export_full_pdk``'s own docstring) -- the "smoking gun"
@@ -610,6 +640,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("export-netlist", help="Export real, patched .cdl/.spice files to export/ (byte-identical with no edits).")
     sub.add_parser("export-verilog", help="Export real, patched .v files to export/ (byte-identical with no edits).")
     sub.add_parser("export-liberty", help="Export real, patched .lib files to export/ (byte-identical with no edits).")
+    sub.add_parser("export-layers", help="Export the real, patched .lyp file to export/ (byte-identical with no edits).")
     export_full_parser = sub.add_parser(
         "export-full", help="Export a complete, standalone PDK tree -- for round-trip fidelity testing.",
     )
@@ -648,6 +679,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_export_verilog(args.pdk_root.resolve())
     if args.command == "export-liberty":
         return cmd_export_liberty(args.pdk_root.resolve())
+    if args.command == "export-layers":
+        return cmd_export_layers(args.pdk_root.resolve())
     if args.command == "export-full":
         return cmd_export_full(args.pdk_root.resolve(), args.dest.resolve())
     if args.command == "gui":
