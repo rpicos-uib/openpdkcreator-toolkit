@@ -96,6 +96,7 @@ from openpdkcreator.ihp import magic_tech as magic_tech_mod
 from openpdkcreator.ihp import netlist as netlist_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
 from openpdkcreator.ihp import spice_models as spice_models_mod
+from openpdkcreator.ihp import user_models as user_models_mod
 from openpdkcreator.ihp import verilog as verilog_mod
 from openpdkcreator.ihp import xschem as xschem_mod
 
@@ -272,6 +273,40 @@ def cmd_xschem(pdk_root: Path) -> int:
 
     print(f"\n{len(sym_files)} real .sym file(s): {total_pins} real pin(s) total.")
     print("By device type: " + ", ".join(f"{t or '(none)'}:{n}" for t, n in sorted(by_type.items())))
+    return 0
+
+
+def cmd_user_models() -> int:
+    """Lists every real module under ``user_models/verilog/*.v`` and
+    ``user_models/veriloga/*.va``, plus which real (or wholly new,
+    user-defined) cell it's linked to -- explicitly via
+    ``user_models/links.yaml``, or by the same auto name-match every
+    other view already uses. Ignores ``--pdk-root``: user models live
+    in this project's own tree, not the downloaded PDK."""
+
+    project_root = export_mod.PROJECT_ROOT
+    models = user_models_mod.load_user_models(project_root)
+    if not models:
+        print(
+            f"No user models found under {project_root / 'user_models'}/{{verilog,veriloga}}/ "
+            f"-- see user_models/README.md."
+        )
+        return 0
+
+    links = user_models_mod.load_links(project_root)
+    link_by_key = {(link.file_relpath, link.module_name): link.cell_name for link in links}
+
+    total_modules = 0
+    for model_file in models:
+        relpath = user_models_mod.relpath_for(project_root, model_file.path)
+        for module in model_file.modules:
+            total_modules += 1
+            explicit = link_by_key.get((relpath, module.name))
+            linked_text = explicit if explicit else f"(auto: {module.name})"
+            ports_text = ", ".join(f"{p.name}:{p.direction or '?'}" for p in module.ports)
+            print(f"{relpath} [{model_file.kind}] {module.name} -> {linked_text}  ports=[{ports_text}]")
+
+    print(f"\n{len(models)} real file(s), {total_modules} real module(s), {len(links)} explicit link(s).")
     return 0
 
 
@@ -664,6 +699,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
     sub.add_parser("ngspice", help="Parse real ngspice .lib model cards: .model/.subckt statements.")
     sub.add_parser("xschem", help="Parse real xschem .sym symbols: device type + pin list.")
+    sub.add_parser("user-models", help="List user_models/ Verilog/Verilog-A modules and their real cell links.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
     cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
@@ -698,6 +734,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ngspice(args.pdk_root.resolve())
     if args.command == "xschem":
         return cmd_xschem(args.pdk_root.resolve())
+    if args.command == "user-models":
+        return cmd_user_models()
     if args.command == "drc":
         return cmd_drc(args.pdk_root.resolve())
     if args.command == "cells":

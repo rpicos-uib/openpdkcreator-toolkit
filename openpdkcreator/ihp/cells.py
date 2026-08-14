@@ -20,6 +20,12 @@ carries real structural content (bounding box, per-layer shape count)
 via ``ihp/gds.py`` (KLayout's own real Python API, lazily imported) --
 ``sg13g2_pr`` is GDS-only (confirmed: zero real files under any other
 real view directory) -- its cell index is genuinely empty, not a bug.
+
+User models: a cell's own ``user_models`` list holds any user-authored
+Verilog/Verilog-A model connected to it (by name match or explicit
+link) -- see ``ihp/user_models.py``'s own docstring. Unlike every real
+view above, a user model can introduce a wholly new cell name this
+family's own real files never had.
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ from . import gds as gds_mod
 from . import lef as lef_mod
 from . import liberty as liberty_mod
 from . import netlist as netlist_mod
+from . import user_models as user_models_mod
 from . import verilog as verilog_mod
 
 
@@ -51,6 +58,11 @@ class CellViews:
     gds_present: bool = False
     gds_cell: gds_mod.GdsCell | None = None
     gds_source: Path | None = None
+    user_models: list[tuple[verilog_mod.VerilogModule, Path, str]] = field(default_factory=list)
+    """This real cell's own user-authored Verilog/Verilog-A models
+    (module, real source path, "verilog"/"veriloga") -- via a name
+    match or an explicit ``UserModelLink``, see ``ihp/user_models.py``
+    own docstring."""
 
 
 def discover_families(pdk_root: Path) -> list[str]:
@@ -66,6 +78,7 @@ def build_cell_index(
     get_netlist_cells: Callable[[Path], list[netlist_mod.NetlistCell]] | None = None,
     get_verilog_modules: Callable[[Path], list[verilog_mod.VerilogModule]] | None = None,
     get_liberty_cells: Callable[[Path], list[liberty_mod.LibertyCell]] | None = None,
+    user_models_by_cell: dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]] | None = None,
 ) -> dict[str, CellViews]:
     """*get_lef*/*get_netlist_cells*/*get_verilog_modules*/
     *get_liberty_cells*: optional parse-with-caching hooks (the GUI
@@ -77,7 +90,15 @@ def build_cell_index(
     here on every call, which would otherwise silently discard edits
     the moment the user switched families and back -- the exact same
     real bug already found and fixed for LEF pins. The CLI and tests
-    leave these ``None`` and get a plain, uncached parse each call."""
+    leave these ``None`` and get a plain, uncached parse each call.
+
+    *user_models_by_cell*: pre-computed via
+    ``ihp/user_models.py``'s own ``group_by_cell`` (this module stays
+    decoupled from link persistence/path-relative bookkeeping). A cell
+    name with no real view of its own here (a wholly new, user-defined
+    cell not yet in the real PDK) still gets a real ``CellViews``
+    entry -- ``get_or_create`` runs for user models the same as every
+    real view above."""
 
     parse_lef = get_lef or lef_mod.parse_lef_file
     parse_netlist = get_netlist_cells or netlist_mod.find_cells
@@ -157,6 +178,11 @@ def build_cell_index(
                 if real_cells is not None and cv.name in real_cells:
                     cv.gds_cell = real_cells[cv.name]
                     cv.gds_source = gds_path
+
+    if user_models_by_cell:
+        for cell_name, models in user_models_by_cell.items():
+            cv = get_or_create(cell_name)
+            cv.user_models.extend(models)
 
     return index
 

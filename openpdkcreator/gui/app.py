@@ -115,6 +115,7 @@ from ..ihp import layers as layers_mod
 from ..ihp import lef as lef_mod
 from ..ihp import liberty as liberty_mod
 from ..ihp import netlist as netlist_mod
+from ..ihp import user_models as user_models_mod
 from ..ihp import verilog as verilog_mod
 from ..models import DesignRule, Layer
 from .cell_hub_view import CellHubView
@@ -126,6 +127,7 @@ from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
 from .spice_models_view import SpiceModelsView
 from .tools_view import ToolsView
+from .user_models_view import UserModelsView
 from .xschem_view import XschemView
 
 _PROVENANCE_PATH_RE = re.compile(r"^([^:]+):\d+")
@@ -166,6 +168,8 @@ class App(ttk.Frame):
         self.netlist_cache: dict[Path, list[netlist_mod.NetlistCell]] = {}
         self.verilog_cache: dict[Path, list[verilog_mod.VerilogModule]] = {}
         self.liberty_cache: dict[Path, list[liberty_mod.LibertyCell]] = {}
+        self.user_models: list[user_models_mod.UserModelFile] = []
+        self.user_model_links: list[user_models_mod.UserModelLink] = []
 
         self._update_title()
         root.geometry("1100x650")
@@ -509,6 +513,11 @@ class App(ttk.Frame):
         self.xschem_view = XschemView(xschem_frame, self.pdk_root)
         self.xschem_view.pack(fill="both", expand=True)
 
+        user_models_frame = ttk.Frame(self.simulation_notebook)
+        self.simulation_notebook.add(user_models_frame, text="User Models")
+        self.user_models_view = UserModelsView(user_models_frame, self)
+        self.user_models_view.pack(fill="both", expand=True)
+
     # -- Settings tab -----------------------------------------------------
 
     def _build_settings_tab(self):
@@ -530,7 +539,20 @@ class App(ttk.Frame):
 
     # -- data loading ---------------------------------------------------------
 
+    def reload_user_models(self):
+        """Re-scans ``user_models/`` and reloads ``links.yaml`` --
+        called at startup and after the User Models tab saves a link,
+        so ``CellHubView``'s own By Cell aggregation sees the change
+        without a full app relaunch."""
+
+        self.user_models = user_models_mod.load_user_models(export_mod.PROJECT_ROOT)
+        self.user_model_links = user_models_mod.load_links(export_mod.PROJECT_ROOT)
+
+    def user_models_by_cell(self) -> dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]]:
+        return user_models_mod.group_by_cell(export_mod.PROJECT_ROOT, self.user_models, self.user_model_links)
+
     def load(self):
+        self.reload_user_models()
         self._refresh_inventory()
 
         lyp_path = layers_mod.find_lyp(self.pdk_root)

@@ -134,9 +134,9 @@ class CellHubView(ttk.Frame):
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
-        columns = ("name", "lef", "cdl", "spice", "verilog", "liberty", "gds")
+        columns = ("name", "lef", "cdl", "spice", "verilog", "liberty", "gds", "user")
         self.cells_tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
-        widths = {"name": 220, "lef": 40, "cdl": 40, "spice": 50, "verilog": 60, "liberty": 55, "gds": 40}
+        widths = {"name": 220, "lef": 40, "cdl": 40, "spice": 50, "verilog": 60, "liberty": 55, "gds": 40, "user": 45}
         for col in columns:
             self.cells_tree.heading(col, text=col.title() if col != "gds" else "GDS")
             self.cells_tree.column(col, width=widths[col], anchor="w" if col == "name" else "center")
@@ -194,6 +194,15 @@ class CellHubView(ttk.Frame):
         ttk.Button(middle, text="Edit Pins/Timing", command=self._edit_selected_liberty).grid(
             row=row, column=0, sticky="ew", pady=(2, 0)
         )
+        row += 1
+
+        ttk.Label(middle, text="User Models (double-click to view; link in Simulation > User Models):").grid(
+            row=row, column=0, sticky="w", pady=(10, 2)
+        )
+        row += 1
+        self.user_models_list = tk.Listbox(middle, height=4)
+        self.user_models_list.grid(row=row, column=0, sticky="ew")
+        self.user_models_list.bind("<Double-Button-1>", self._view_selected_user_model)
 
         right = ttk.Frame(body)
         right.grid(row=0, column=2, sticky="nsew")
@@ -247,12 +256,18 @@ class CellHubView(ttk.Frame):
             get_netlist_cells=self.app.get_parsed_netlist,
             get_verilog_modules=self.app.get_parsed_verilog,
             get_liberty_cells=self.app.get_parsed_liberty,
+            user_models_by_cell=self.app.user_models_by_cell(),
         )
         show_all = self.show_all_var.get()
         shown = 0
         for name in sorted(self.cell_index):
             cv = self.cell_index[name]
-            if not show_all and cv.lef_macro is None:
+            # A wholly new, user-defined cell (a real user model linked
+            # to a name with no real LEF macro of its own) stays
+            # visible by default too -- it's the whole point of "Show
+            # internal sub-cells too" being off shouldn't also hide a
+            # cell the user is actively authoring.
+            if not show_all and cv.lef_macro is None and not cv.user_models:
                 continue
             if not matches(self._filter_query, name):
                 continue
@@ -267,6 +282,7 @@ class CellHubView(ttk.Frame):
                     _CHECK if cv.verilog_module else "",
                     len(cv.liberty_entries) or "",
                     _CHECK if cv.gds_present else "",
+                    len(cv.user_models) or "",
                 ),
             )
 
@@ -296,6 +312,7 @@ class CellHubView(ttk.Frame):
     def _show_cell(self, cv: cells_mod.CellViews | None):
         self.current_cell = cv
         self.liberty_list.delete(0, "end")
+        self.user_models_list.delete(0, "end")
         if cv is None:
             self.detail_var.set("Select a cell.")
             for btn in self.view_buttons.values():
@@ -317,6 +334,8 @@ class CellHubView(ttk.Frame):
         self.edit_ports_buttons["verilog"].configure(state="normal" if cv.verilog_module else "disabled")
         for cell_entry, path in cv.liberty_entries:
             self.liberty_list.insert("end", path.name)
+        for module, path, kind in cv.user_models:
+            self.user_models_list.insert("end", f"{module.name}  ({kind}, {path.name})")
 
         if cv.gds_cell is not None:
             l, b, r, t = cv.gds_cell.bbox_microns or (0, 0, 0, 0)
@@ -396,3 +415,13 @@ class CellHubView(ttk.Frame):
         index = selection[0] if selection else 0
         cell_entry, path = cv.liberty_entries[index]
         edit_liberty_dialog(self, f"Liberty Pins/Timing -- {cv.name} ({path.name})", cell_entry)
+
+    def _view_selected_user_model(self, _event=None):
+        cv = self.current_cell
+        if cv is None:
+            return
+        selection = self.user_models_list.curselection()
+        if not selection:
+            return
+        module, path, _kind = cv.user_models[selection[0]]
+        view_file_dialog(self, path, module.start_line, module.end_line)

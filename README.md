@@ -29,6 +29,7 @@ python3 main.py magic-tech   # real Magic .tech parse + cross-reference against 
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
 python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.subckt statements
 python3 main.py xschem       # real xschem .sym symbol summary: device type + pin list
+python3 main.py user-models  # list user_models/ Verilog/Verilog-A modules and their real cell links
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
@@ -65,8 +66,10 @@ definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
 data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem Symbols** --
-a real symbol's own device-attribute block and real pin list; both
-read-only), and **Settings** (project-level settings -- not any one
+a real symbol's own device-attribute block and real pin list, both
+read-only; **User Models** -- user-authored Verilog/Verilog-A modules
+under `user_models/`, editable link to a real cell), and **Settings**
+(project-level settings -- not any one
 tool's PDK content -- **General** and **Tools** as sub-tabs). Qucs-S
 schematic data stays inventory-only (see the Overview tab) -- its own
 real `.sym` format is a genuinely different, unrelated tag syntax from
@@ -78,9 +81,10 @@ real parser exists for it.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
-Verilog/Liberty/GDS) actually exist, jump straight to that cell's own
-real block inside each, and **edit its real LEF pins directly** in a
-**Pins** pane -- the exact same in-memory macro/pins the LEF tab's own
+Verilog/Liberty/GDS, plus a **User** column counting any linked
+user-authored Verilog/Verilog-A model) actually exist, jump straight
+to that cell's own real block inside each, and **edit its real LEF
+pins directly** in a **Pins** pane -- the exact same in-memory macro/pins the LEF tab's own
 "LEF Macros" sub-tab edits (both tabs parse through one shared,
 ``App``-owned cache, ``App.get_parsed_lef``, so a pin edited from
 either tab is immediately visible, and saves the same way, from the
@@ -102,7 +106,14 @@ sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
 `fall_transition`) stay read-only, unmodeled, same bounded-scope
 precedent as everywhere else. Same `App`-owned caching
 (`App.get_parsed_liberty`) as LEF/CDL/SPICE/Verilog, so switching
-families and back never silently discards an in-progress edit.
+families and back never silently discards an in-progress edit. A
+**User Models** listbox (double-click to view the real source file)
+lists any user-authored Verilog/Verilog-A module connected to the
+selected cell -- by plain name match or an explicit link, both set up
+from **Simulation > User Models** -- and a wholly new, user-defined
+cell name (not present in the real PDK at all) still gets its own row
+here, so authoring a brand-new cell's model doesn't require first
+faking a real view for it.
 
 Every real list this size warrants it (Layers, DRC Rules, LEF Macros,
 By Cell, Magic Types) has a live **Filter** box (`gui/list_filter.py`
@@ -722,6 +733,50 @@ highlighted straight to that cell's real line range within its
   (identity-checked), not a silent re-parse that would have discarded
   the edit -- the exact bug class already found and fixed for LEF pins
   earlier this project.
+- **`openpdkcreator/ihp/user_models.py`** / **`gui/user_models_view.py`**
+  -- user-defined Verilog/Verilog-A model support, plus two ways to
+  link one to the rest of the PDK. Real files live under
+  `user_models/verilog/*.v` and `user_models/veriloga/*.va` (a small,
+  git-tracked directory -- deliberately *not* gitignored like `data/`/
+  `saves/`, since this is the user's own authored content, not a
+  derived edit of third-party PDK data). Verilog-A's real
+  `module NAME(port, ...); ... endmodule` header/port syntax is
+  identical to plain digital Verilog's (confirmed against IHP's own
+  real `libs.tech/verilog-a/mosvar/mosvar.va`), so `ihp/verilog.py`'s
+  existing `find_modules` parser is reused directly for both `.v` and
+  `.va` -- no new parser needed. Two linking mechanisms: (1) automatic
+  -- a module named the same as a real cell attaches to it with no
+  configuration, the same name-matching convention every other view in
+  `ihp/cells.py`'s `build_cell_index` already uses; (2) explicit --
+  a `UserModelLink(module_name, file_relpath, cell_name)` record,
+  persisted in `user_models/links.yaml` (also git-tracked), set from
+  the **Simulation > User Models** tab's own Cell name field + **Save
+  Link**/**Clear Link** buttons. A wholly new, user-defined cell name
+  (not present in the real PDK at all) still gets its own real
+  `CellViews` entry via `get_or_create` -- authoring a brand-new cell's
+  model doesn't require first faking a real view for it. **Simulation
+  > User Models** (`UserModelsView`) lists every real module found,
+  its real ports, and its current linked-cell text (`(auto: NAME)`
+  when implicit, the explicit cell name otherwise); **By Cell** gained
+  a **User** column (real linked-model count) and a **User Models**
+  listbox (double-click to view the real source, jumping straight to
+  that module's own real line range via `file_view_dialog`). Verified
+  for real, driven end-to-end in the container: a wholly-new module
+  auto-attaches to its own new cell; saving an explicit link moves it
+  onto a different, real existing cell (confirmed absorbed into that
+  cell's own `CellViews`, no longer its own top-level row in **By
+  Cell**); the link survives a `save_links`/`load_links` round-trip
+  through the real `links.yaml`; **Clear Link** removes it, falling
+  back to the automatic name match; and the **By Cell** listbox's
+  double-click handler opens the real source file correctly (a real
+  bug -- a missing `_view_selected_user_model` method, the binding's
+  target -- was found and fixed by this same driven test before it
+  ever reached the user). A second real bug was found and fixed the
+  same way: `UserModelsView._build` mixed Tk's `pack` and `grid`
+  geometry managers on the same parent frame, which raises
+  `TclError: cannot use geometry manager grid ... which already has
+  slaves managed by pack` the moment the tab is built -- fixed by
+  switching the top toolbar row to `grid` as well.
 - **`openpdkcreator/gui/port_editor.py`** -- `PortEditor`, a real port
   list + New/Delete Port + a Name/Direction[/Width] form, the same
   commit-on-switch pattern `PinEditor` uses -- duck-typed across CDL/
@@ -1112,18 +1167,31 @@ models, ...), not just read/display layers. Concretely, still open:
   registration (no single-flag KLayout switch for that was
   found/verified). Both fall back to a bare, unconfigured launch if
   the real file isn't there yet (`LaunchGuidance.requires_path`).
-- The **Simulation** top-level GUI group now has two real sub-tabs --
+- The **Simulation** top-level GUI group now has three real sub-tabs --
   **ngspice Models** (`ihp/spice_models.py`, real `.model`/`.subckt`
-  extraction) and **xschem Symbols** (`ihp/xschem.py`, real symbol
-  device-attribute/pin-list extraction). Qucs-S schematic data stays
-  inventory-only (see the Overview tab) -- its own real `.sym` format
-  is a genuinely different, unrelated tag syntax from xschem's
+  extraction), **xschem Symbols** (`ihp/xschem.py`, real symbol
+  device-attribute/pin-list extraction), and **User Models** (see the
+  user-defined Verilog/Verilog-A bullet below). Qucs-S schematic data
+  stays inventory-only (see the Overview tab) -- its own real `.sym`
+  format is a genuinely different, unrelated tag syntax from xschem's
   (`<PortSym .../>`, no real port names, just position/type/angle),
   so extending the xschem parser to it isn't a safe reuse; a real,
   separate parsing effort. xschem's own real schematic (`.sch`) files
   -- as opposed to `.sym` symbols -- remain real, separate future work.
   ngspice's own real `.LIB NAME ... .ENDL` PVT-corner blocks are now
   done too (`ihp/spice_models.py`'s own `Corners` sub-tab).
+- **User-defined Verilog/Verilog-A model inclusion, plus a way to link
+  it to the rest of the PDK, is done** -- see the
+  `ihp/user_models.py`/`gui/user_models_view.py` bullet in "What's
+  real here" for the full real design and verification. `main.py
+  user-models` gives the same listing on the CLI. Left as real,
+  separate future work: editing a user model's own ports/content from
+  inside the GUI (today it's authored externally, in `user_models/`,
+  and only read/linked here); batch-relinking many modules at once
+  (today it's one row at a time); and any real simulation-tool wiring
+  beyond linking (e.g. auto-generating an ngspice `.include` for a
+  linked Verilog-A model) -- this pass stops at "represented and
+  linked," not "wired into a real simulation run."
 - **Copy-vs-share with `OpenPDKCreator`, revisited and re-confirmed**:
   diffed every genuinely-copied file against `OpenPDKCreator`'s own
   current originals rather than assuming. The core data shapes
