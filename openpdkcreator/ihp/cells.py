@@ -65,21 +65,24 @@ def build_cell_index(
     get_lef: Callable[[Path], lef_mod.LefFile] | None = None,
     get_netlist_cells: Callable[[Path], list[netlist_mod.NetlistCell]] | None = None,
     get_verilog_modules: Callable[[Path], list[verilog_mod.VerilogModule]] | None = None,
+    get_liberty_cells: Callable[[Path], list[liberty_mod.LibertyCell]] | None = None,
 ) -> dict[str, CellViews]:
-    """*get_lef*/*get_netlist_cells*/*get_verilog_modules*: optional
-    parse-with-caching hooks (the GUI passes ``App.get_parsed_lef``/
-    ``get_parsed_netlist``/``get_parsed_verilog``, so the very same
-    ``LefMacro``/``NetlistCell``/``VerilogModule`` objects -- and any
-    in-memory port edits on them -- are shared with the LEF tab and
-    across a family switch, rather than re-parsed fresh here on every
-    call, which would otherwise silently discard edits the moment the
-    user switched families and back -- the exact same real bug already
-    found and fixed for LEF pins. The CLI and tests leave these
-    ``None`` and get a plain, uncached parse each call."""
+    """*get_lef*/*get_netlist_cells*/*get_verilog_modules*/
+    *get_liberty_cells*: optional parse-with-caching hooks (the GUI
+    passes ``App.get_parsed_lef``/``get_parsed_netlist``/
+    ``get_parsed_verilog``/``get_parsed_liberty``, so the very same
+    ``LefMacro``/``NetlistCell``/``VerilogModule``/``LibertyCell``
+    objects -- and any in-memory edits on them -- are shared with the
+    LEF tab and across a family switch, rather than re-parsed fresh
+    here on every call, which would otherwise silently discard edits
+    the moment the user switched families and back -- the exact same
+    real bug already found and fixed for LEF pins. The CLI and tests
+    leave these ``None`` and get a plain, uncached parse each call."""
 
     parse_lef = get_lef or lef_mod.parse_lef_file
     parse_netlist = get_netlist_cells or netlist_mod.find_cells
     parse_verilog = get_verilog_modules or verilog_mod.find_modules
+    parse_liberty = get_liberty_cells or liberty_mod.find_cells
     family_dir = pdk_root / "libs.ref" / family
     index: dict[str, CellViews] = {}
 
@@ -123,7 +126,7 @@ def build_cell_index(
     lib_dir = family_dir / "lib"
     if lib_dir.is_dir():
         for lib_path in sorted(lib_dir.glob("*.lib")):
-            for cell in liberty_mod.find_cells(lib_path):
+            for cell in parse_liberty(lib_path):
                 cv = get_or_create(cell.name)
                 cv.liberty_entries.append((cell, lib_path))
 

@@ -10,11 +10,13 @@ own docstring explains exactly how the patching preserves everything
 this project's LEF model doesn't capture), DRC Rules
 (``ihp/drc_writer.py``'s own docstring explains the real
 ``.drc``-script-vs-JSON-config split), Magic Types
-(``ihp/magic_tech_writer.py``), and CDL/SPICE/Verilog ports
-(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``). Liberty (real
-cell *boundaries* only, no content parsed) and every other real,
-non-editable domain (GDS, Layers, ...) has no write-back because
-there's no editor for it either -- see README's own Future Work.
+(``ihp/magic_tech_writer.py``), CDL/SPICE/Verilog ports
+(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), and Liberty
+pin/timing-arc data (``ihp/liberty_writer.py``'s own docstring explains
+the per-field diffing discipline; the real lookup-table sub-groups
+stay untouched, unmodeled). Every other real, non-editable domain
+(GDS, Layers, ...) has no write-back because there's no editor for it
+either -- see README's own Future Work.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ from .ihp import drc as drc_mod
 from .ihp import drc_writer
 from .ihp import lef as lef_mod
 from .ihp import lef_writer
+from .ihp import liberty as liberty_mod
+from .ihp import liberty_writer
 from .ihp import magic_tech as magic_tech_mod
 from .ihp import magic_tech_writer
 from .ihp import netlist as netlist_mod
@@ -155,6 +159,22 @@ def export_verilog_files(
     return written
 
 
+def export_liberty_files(
+    pdk_root: Path, liberty_cache: dict[Path, list[liberty_mod.LibertyCell]], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.lib`` file in *liberty_cache* (the GUI passes only
+    files parsed this session via ``App.get_parsed_liberty``;
+    ``export_full_pdk``/``main.py export-liberty`` pass every real
+    file, freshly parsed). Returns the real export paths written."""
+
+    written = []
+    for source_path, cells in liberty_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        liberty_writer.export_lib_file(cells, source_path, export_path)
+        written.append(export_path)
+    return written
+
+
 def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     """A complete, real, standalone open_pdks-format PDK tree at
     *dest_root* -- every real file under *pdk_root* copied verbatim
@@ -207,3 +227,6 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
 
     verilog_cache = {path: verilog_mod.find_modules(path) for path in pdk_root.glob("libs.ref/*/verilog/*.v")}
     export_verilog_files(pdk_root, verilog_cache, dest_root)
+
+    liberty_cache = {path: liberty_mod.find_cells(path) for path in pdk_root.glob("libs.ref/*/lib/*.lib")}
+    export_liberty_files(pdk_root, liberty_cache, dest_root)

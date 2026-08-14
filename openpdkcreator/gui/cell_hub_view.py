@@ -58,6 +58,17 @@ LEF pins, these parse through a shared, App-owned cache
 a family switch -- the exact same real bug class already found and
 fixed for LEF pins, applied here from the start rather than
 rediscovered.
+
+**Liberty pins/timing arcs** are also editable, via an **Edit Pins/
+Timing** button below the Liberty corner-file list -- real per-pin
+direction/capacitance/function and, for a selected pin, its own real
+timing arcs (related_pin/timing_type/timing_sense/when), *not* the
+real lookup tables (``cell_rise``/``cell_fall``/...) those arcs may
+carry -- see ``ihp/liberty.py``'s own docstring for why those stay
+read-only. Operates on whichever real corner file is selected in the
+listbox (or the first one, if none is), through the same kind of
+shared cache (``App.get_parsed_liberty``) as every other By Cell
+editor here.
 """
 
 from __future__ import annotations
@@ -69,6 +80,7 @@ from ..ihp import cells as cells_mod
 from ..ihp import netlist as netlist_mod
 from ..ihp import verilog as verilog_mod
 from .file_view_dialog import view_file_dialog
+from .liberty_dialog import edit_liberty_dialog
 from .pin_editor import PinEditor
 from .port_dialog import edit_ports_dialog
 
@@ -167,13 +179,17 @@ class CellHubView(ttk.Frame):
         )
         row += 1
 
-        ttk.Label(middle, text="Liberty (one per real corner file):").grid(
+        ttk.Label(middle, text="Liberty (one per real corner file, double-click to view):").grid(
             row=row, column=0, sticky="w", pady=(10, 2)
         )
         row += 1
         self.liberty_list = tk.Listbox(middle, height=6)
         self.liberty_list.grid(row=row, column=0, sticky="ew")
         self.liberty_list.bind("<Double-Button-1>", self._view_selected_liberty)
+        row += 1
+        ttk.Button(middle, text="Edit Pins/Timing", command=self._edit_selected_liberty).grid(
+            row=row, column=0, sticky="ew", pady=(2, 0)
+        )
 
         right = ttk.Frame(body)
         right.grid(row=0, column=2, sticky="nsew")
@@ -226,6 +242,7 @@ class CellHubView(ttk.Frame):
             get_lef=self.app.get_parsed_lef,
             get_netlist_cells=self.app.get_parsed_netlist,
             get_verilog_modules=self.app.get_parsed_verilog,
+            get_liberty_cells=self.app.get_parsed_liberty,
         )
         show_all = self.show_all_var.get()
         shown = 0
@@ -360,3 +377,12 @@ class CellHubView(ttk.Frame):
             return
         cell_entry, path = cv.liberty_entries[selection[0]]
         view_file_dialog(self, path, cell_entry.start_line, cell_entry.end_line)
+
+    def _edit_selected_liberty(self):
+        cv = self.current_cell
+        if cv is None or not cv.liberty_entries:
+            return
+        selection = self.liberty_list.curselection()
+        index = selection[0] if selection else 0
+        cell_entry, path = cv.liberty_entries[index]
+        edit_liberty_dialog(self, f"Liberty Pins/Timing -- {cv.name} ({path.name})", cell_entry)

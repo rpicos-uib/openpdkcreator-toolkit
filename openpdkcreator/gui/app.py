@@ -73,22 +73,26 @@ same cache too).
 
 **Native write-back** (``export.py``, **File > Export Edited LEF
 Files** / **DRC Rules** / **Magic Types** / **CDL/SPICE Ports** /
-**Verilog Ports**): unlike ``project_io.py``'s own program-format
-``saves/``, this writes real, valid text back into the real file
-formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``), DRC Rules (a
-rule's ``rule_id``/``description`` patched into its real ``.drc``
-script's own ``.output()`` call, its ``value`` into the one real JSON
-config file it actually lives in -- ``ihp/drc_writer.py``), Magic
-Types (a type's own real one-line entry in its real ``.tech`` file --
-``ihp/magic_tech_writer.py``), and CDL/SPICE/Verilog port lists (a real
-``.SUBCKT``/``*.PININFO`` pair or real ``module``/``input``/``output``/
-``inout`` declarations -- ``ihp/netlist_writer.py``/
-``ihp/verilog_writer.py``) -- all via surgical, position-targeted text
-splicing, everything else preserved byte-for-byte, to a new
-``export/`` tree mirroring each file's own real relative path under
-``pdk_root``. Never touches ``data/``. This covers every currently
-structured-editable domain -- see README's Future Work for what's
-still read-only (and so has no write-back either).
+**Verilog Ports** / **Liberty Files**): unlike ``project_io.py``'s own
+program-format ``saves/``, this writes real, valid text back into the
+real file formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``), DRC
+Rules (a rule's ``rule_id``/``description`` patched into its real
+``.drc`` script's own ``.output()`` call, its ``value`` into the one
+real JSON config file it actually lives in -- ``ihp/drc_writer.py``),
+Magic Types (a type's own real one-line entry in its real ``.tech``
+file -- ``ihp/magic_tech_writer.py``), CDL/SPICE/Verilog port lists (a
+real ``.SUBCKT``/``*.PININFO`` pair or real ``module``/``input``/
+``output``/``inout`` declarations -- ``ihp/netlist_writer.py``/
+``ihp/verilog_writer.py``), and Liberty pin/timing-arc data (a pin's
+own real ``direction``/``capacitance``/``function`` attribute lines, a
+timing arc's own real ``related_pin``/``timing_type``/
+``timing_sense``/``when`` attribute lines -- ``ihp/liberty_writer.py``)
+-- all via surgical, position-targeted text splicing, everything else
+preserved byte-for-byte, to a new ``export/`` tree mirroring each
+file's own real relative path under ``pdk_root``. Never touches
+``data/``. This covers every currently structured-editable domain --
+see README's Future Work for what's still read-only (and so has no
+write-back either).
 """
 
 from __future__ import annotations
@@ -104,6 +108,7 @@ from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..ihp import lef as lef_mod
+from ..ihp import liberty as liberty_mod
 from ..ihp import netlist as netlist_mod
 from ..ihp import verilog as verilog_mod
 from ..models import DesignRule, Layer
@@ -153,6 +158,7 @@ class App(ttk.Frame):
         # in-memory port edit (cells.py re-parses fresh on every call).
         self.netlist_cache: dict[Path, list[netlist_mod.NetlistCell]] = {}
         self.verilog_cache: dict[Path, list[verilog_mod.VerilogModule]] = {}
+        self.liberty_cache: dict[Path, list[liberty_mod.LibertyCell]] = {}
 
         self._update_title()
         root.geometry("1100x650")
@@ -216,6 +222,11 @@ class App(ttk.Frame):
             self.verilog_cache[path] = verilog_mod.find_modules(path)
         return self.verilog_cache[path]
 
+    def get_parsed_liberty(self, path: Path) -> list[liberty_mod.LibertyCell]:
+        if path not in self.liberty_cache:
+            self.liberty_cache[path] = liberty_mod.find_cells(path)
+        return self.liberty_cache[path]
+
     def collect_lef_pin_overrides(self) -> dict[str, dict[str, list[lef_mod.LefPin]]]:
         """Every macro's current pin list, for every real ``.lef`` file
         parsed so far this session (files never visited via either the
@@ -240,6 +251,7 @@ class App(ttk.Frame):
         file_menu.add_command(label="Export Edited Magic Types (open_pdks format)", command=self._export_magic_types)
         file_menu.add_command(label="Export Edited CDL/SPICE Ports (open_pdks format)", command=self._export_netlist_files)
         file_menu.add_command(label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files)
+        file_menu.add_command(label="Export Edited Liberty Files (open_pdks format)", command=self._export_liberty_files)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -318,6 +330,18 @@ class App(ttk.Frame):
             return
         self.status.set(f"Exported {len(written)} real .v file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
 
+    def _export_liberty_files(self):
+        """Writes real, patched Liberty pin/timing-arc text for every
+        real ``.lib`` file parsed this session (By Cell tab's own Edit
+        Pins/Timing dialog) -- see ``export.py``'s/
+        ``ihp/liberty_writer.py``'s own docstrings."""
+
+        written = export_mod.export_liberty_files(self.pdk_root, self.liberty_cache)
+        if not written:
+            self.status.set("No Liberty files parsed this session -- nothing to export (visit By Cell first).")
+            return
+        self.status.set(f"Exported {len(written)} real .lib file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
         then writes DRC Rules/Magic Types/LEF pins/the project name out
@@ -350,6 +374,7 @@ class App(ttk.Frame):
         self.lef_pin_overrides = {}
         self.netlist_cache.clear()
         self.verilog_cache.clear()
+        self.liberty_cache.clear()
         self.set_project_name(DEFAULT_PROJECT_NAME)
         self.settings_view.refresh()
         self.lef_view.load()

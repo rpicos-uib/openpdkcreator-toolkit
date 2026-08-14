@@ -35,6 +35,7 @@ python3 main.py export-drc   # real, patched DRC-rule write-back to export/ (byt
 python3 main.py export-magic-types   # real, patched Magic Types write-back to export/ (byte-identical with no edits)
 python3 main.py export-netlist   # real, patched .cdl/.spice port write-back to export/ (byte-identical with no edits)
 python3 main.py export-verilog   # real, patched .v port write-back to export/ (byte-identical with no edits)
+python3 main.py export-liberty   # real, patched .lib pin/timing write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
@@ -82,7 +83,18 @@ with no macro of its own -- common in `sg13g2_sram`) shows a plain
 Ports** dialog next to each real **View** button -- real per-port
 direction from a real CDL `*.PININFO` comment or real Verilog
 `input`/`output`/`inout` declarations, add/delete/rename/redirect, the
-same commit-on-switch pattern as everywhere else.
+same commit-on-switch pattern as everywhere else. **Liberty pins and
+timing arcs** are editable too, via an **Edit Pins/Timing** button next
+to the Liberty listbox (one real `.lib` corner file at a time, since a
+cell's timing legitimately differs per corner) -- a two-level dialog:
+a **Pins** pane (name/direction/capacitance/function) and, for the
+selected pin, a **Timing Arcs** pane
+(related_pin/timing_type/timing_sense/when); the real lookup-table
+sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
+`fall_transition`) stay read-only, unmodeled, same bounded-scope
+precedent as everywhere else. Same `App`-owned caching
+(`App.get_parsed_liberty`) as LEF/CDL/SPICE/Verilog, so switching
+families and back never silently discards an in-progress edit.
 
 **Settings > General** holds two deliberately distinct,
 separately-labeled pairs, so they never get confused now that this
@@ -341,13 +353,68 @@ highlighted straight to that cell's real line range within its
   grep ground truth exactly (4060/4060 across all 28 real SRAM CDL
   files); the real SRAM top-level macro's Verilog module is now found,
   with correct real bus port widths (e.g. `A_ADDR`: `input [9:0]`).
-- **`openpdkcreator/ihp/liberty.py`** -- real, brace-depth-counted
-  `cell (NAME) { ... }` boundary detection (a Liberty cell nests
-  further real groups inside it, so a fixed closing keyword doesn't
-  exist -- confirmed by reading the real file). Real, bounded scope:
-  cell name + real source line range only, never a full timing parser
-  -- still read-only, no per-pin/timing-arc model exists to edit (see
-  Future Work).
+- **`openpdkcreator/ihp/liberty.py`** -- a real, stack-based state
+  machine (same technique as `lef.py`) tracking arbitrary named-group
+  nesting depth, extended beyond real `cell (NAME) { ... }` boundary
+  detection into real, bounded pin/timing-arc extraction: a pin's
+  `direction`/`capacitance`/`function`, and, per real `timing () { ... }`
+  arc, `related_pin`/`timing_type`/`timing_sense`/`when` -- the real
+  lookup-table sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
+  `fall_transition`, each its own nested multi-dimensional
+  `index_1`/`index_2`/`values` data) deliberately left unparsed, the
+  same "bounded, not a full parser" precedent as LEF's own PORT rect
+  geometry. Two real structural complexities found and handled, not
+  assumed: every real file wraps its cells in one real top-level
+  `library (NAME) { ... }` group (missed on the first pass -- every
+  real cell is nested one level inside it, never at true "root",
+  causing a real 0-cells-found bug until fixed); `sg13g2_sram`'s own
+  real files wrap a bus's per-bit pins in a real `bus (NAME) { ... }`
+  group with its own two real, both-real formatting conventions
+  (`sg13g2_stdcell`: spaced `pin (NAME) {`, quoted values;
+  `sg13g2_sram`'s bus-nested pins: unspaced `pin(NAME) {`, unquoted
+  values, direction inherited from the enclosing bus when a per-bit pin
+  declares none of its own -- confirmed real, never redundantly
+  repeated). A real, separate `test_cell () { pin(...) {...} }`
+  scan-test/DFT pin representation (confirmed real, `sg13g2_stdcell`
+  only) is deliberately excluded from the real functional pin list, not
+  a bug -- it isn't specially recognized, so it falls through the
+  generic "skip any other real nested group" path along with
+  `leakage_power`/`internal_power`/the lookup tables themselves. Real,
+  1-indexed source line ranges tracked per pin and per timing arc
+  (`start_line`/`end_line`, plus `all_parsed_pin_ranges`/
+  `all_parsed_arc_ranges`, immutable original-position lists mirroring
+  `lef.py`'s own `LefMacro.all_parsed_pin_ranges`) feed
+  `ihp/liberty_writer.py`'s write-back. Verified for real: all 97 real
+  `.lib` files parse cleanly with 0 errors -- 700 real cells, 5422 real
+  pins, 3977 real timing arcs total.
+- **`openpdkcreator/gui/liberty_editor.py`**/**`liberty_dialog.py`** --
+  the **Edit Pins/Timing** dialog (see GUI structure above): a
+  two-level, commit-on-switch editor (Pins pane, and a nested Timing
+  Arcs pane for whichever pin is selected); switching pins flushes any
+  pending arc edit too, not just the pin's own fields.
+- **`openpdkcreator/ihp/liberty_writer.py`** -- real, surgical,
+  position-targeted write-back for Liberty pin/timing-arc data,
+  following the same discipline as every other writer here: re-reads
+  the pristine original file fresh from disk at write time, patches
+  only the exact real attribute lines a pin's/arc's edited fields
+  occupy, and leaves everything else -- above all each real timing
+  arc's own unparsed lookup-table sub-groups -- byte-for-byte
+  untouched. Diffs each field against a **fresh re-parse** rather than
+  blindly re-emitting it, since real Liberty attribute lines carry
+  real, inconsistent quoting/whitespace/spacing conventions file to
+  file (confirmed real: `sg13g2_stdcell` quotes `direction`,
+  `sg13g2_sram`'s bus-nested pins don't; `pin (NAME) {` vs `pin(NAME) {`;
+  `timing () {` vs `timing() {`) -- a pin's/timing arc's own real
+  header line is preserved verbatim whenever its name/shape didn't
+  change, and only reformatted, preserving the file's own real spacing
+  convention, when it genuinely did. Verified for real: byte-identical
+  no-edit round-trip across all 97 real `.lib` files (700 real cells);
+  real, driven edit round-trips confirmed correct with every other
+  real pin/arc/cell in the file provably unchanged for: a pin
+  direction/capacitance/function edit, a timing-arc field edit, a new
+  pin, a deleted pin, a new timing arc, a deleted timing arc, and a
+  real SRAM bus-nested pin edit (confirming the unspaced/unquoted
+  convention survives a real edit, not just a no-op).
 - **`openpdkcreator/ihp/gds.py`** -- real, bounded GDS structural
   extraction, via KLayout's own real Python API (`klayout.db`) --
   lazily imported (`_import_klayout_db`, `KLayoutUnavailable`), so
@@ -438,9 +505,8 @@ highlighted straight to that cell's real line range within its
   a `port_factory` callback for New Port, rather than two near-
   identical widgets.
 - **`openpdkcreator/ihp/netlist_writer.py`/`verilog_writer.py`** --
-  real, open_pdks-format write-back for CDL/SPICE/Verilog ports,
-  completing native write-back serialization for every currently
-  structured-editable domain. Unlike the other writers, there's no
+  real, open_pdks-format write-back for CDL/SPICE/Verilog ports.
+  Unlike the other writers, there's no
   single stable per-entry line/range to patch in place cleanly (a real
   `.SUBCKT` header can wrap across `+`-continuations in a way that's
   awkward to token-patch), so both instead compare each cell/module's
@@ -661,23 +727,22 @@ highlighted straight to that cell's real line range within its
 - **`export.export_full_pdk`** / **`main.py export-full`** -- a
   complete, real, standalone open_pdks-format PDK tree: every real
   file under `pdk_root` copied verbatim (`shutil.copytree`, so every
-  file this project has no editor for -- GDS/Liberty/CDL/SPICE/
-  Verilog/docs/qa/everything -- is included, not just the small subset
-  the other `export_*` functions above touch), with every real LEF/
-  DRC/Magic-Types file re-rendered on top through its own real writer,
-  freshly parsed straight from `pdk_root` with no GUI session
-  involved. Built specifically as a **smoking-gun round-trip fidelity
-  test**: export the real IHP PDK once, then export *that output*
-  again, and diff the two generations -- structurally identical would
-  mean every real writer here is a truly faithful, lossless
-  read-modify-write cycle across the *entire* real dataset, not just
-  the hand-picked samples each writer's own tests already covered.
-  **Run for real, twice, chained** (`export-full --pdk-root
-  data/ihp-sg13g2/ihp-sg13g2 --dest A`, then `export-full --pdk-root A
-  --dest B`) against the full real ~744 MB / 4900-real-file/symlink
-  IHP deck: **found one real bug this way**, invisible to a plain
-  content diff -- `shutil.copytree`'s own default (`symlinks=False`)
-  *dereferences* a real symlink (IHP's own
+  file this project has no editor for -- GDS/docs/qa/everything -- is
+  included, not just the small subset the other `export_*` functions
+  above touch), with every real LEF/DRC/Magic-Types/CDL/SPICE/Verilog/
+  Liberty file re-rendered on top through its own real writer, freshly
+  parsed straight from `pdk_root` with no GUI session involved. Built
+  specifically as a **smoking-gun round-trip fidelity test**: export
+  the real IHP PDK once, then export *that output* again, and diff the
+  two generations -- structurally identical would mean every real
+  writer here is a truly faithful, lossless read-modify-write cycle
+  across the *entire* real dataset, not just the hand-picked samples
+  each writer's own tests already covered. **Run for real, twice,
+  chained** (`export-full --pdk-root data/ihp-sg13g2/ihp-sg13g2 --dest
+  A`, then `export-full --pdk-root A --dest B`) against the full real
+  ~744 MB / 4900-real-file/symlink IHP deck: **found one real bug this
+  way**, invisible to a plain content diff -- `shutil.copytree`'s own
+  default (`symlinks=False`) *dereferences* a real symlink (IHP's own
   `libs.tech/ngspice/install.py -> ../xschem/install.py`) into a plain
   copy of its target, silently losing the real symlink structure
   (`diff -rq` alone reported zero differences, since it compares
@@ -688,16 +753,25 @@ highlighted straight to that cell's real line range within its
   and byte-for-byte, confirmed via `diff -rq --no-dereference` (zero
   differences), matching total real file/symlink counts (4900 each),
   matching total real byte size (769,423,550 bytes each), and a
-  permission-bits spot check.
+  permission-bits spot check. **Re-run again after Liberty write-back
+  was added**: still completely identical across the full real deck,
+  confirming `liberty_writer.py`'s own real bug fixes (see its own
+  section above) hold at full-PDK scale, not just per-file.
+- **`main.py export-liberty`** / **File > Export Edited Liberty
+  Files** (`app.py`) -- CLI and GUI actions, matching
+  `export-netlist`/`export-verilog`'s own shape: exports every real
+  `.lib` file parsed this session (`App.get_parsed_liberty`'s own
+  cache for the GUI; every real file, freshly parsed, for the CLI and
+  `export-full`) with any in-memory pin/timing-arc edits patched in.
 
 Native write-back serialization is now complete for every currently
-structured-editable domain -- LEF pins, DRC Rules, Magic Types, and
-CDL/SPICE/Verilog ports -- and independently re-verified faithful
-across the entire real PDK via `main.py export-full`'s own smoking-gun
-round-trip test, not just per-writer sample tests. Everything still
-read-only (Layers, Magic Tech's other five domains, Liberty
-pin/timing-arc content, GDS) has no write-back for the same reason it
-has no editor yet -- see Future Work.
+structured-editable domain -- LEF pins, DRC Rules, Magic Types,
+CDL/SPICE/Verilog ports, and Liberty pin/timing-arc data -- and
+independently re-verified faithful across the entire real PDK via
+`main.py export-full`'s own smoking-gun round-trip test, not just
+per-writer sample tests. Everything still read-only (Layers, Magic
+Tech's other five domains, GDS) has no write-back for the same reason
+it has no editor yet -- see Future Work.
 - **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
   sub-tab (`ToolsView`): real, live status of every tool in
   `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
@@ -743,14 +817,21 @@ models, ...), not just read/display layers. Concretely, still open:
   `defaultperimeter`/`defaultsidewall` -- plus `device`, its own real
   transistor-model mini-language), the much larger real remainder of
   `drc` (`surround`/`edge4way`/`maxwidth`/`cifmaxwidth`/`variants`/...
-  -- `width`/`spacing` are done), Liberty's own real pin/timing-arc data
-  (still only real cell *boundaries* -- `liberty.py`), and LEF's own
-  `VIA`/`ViaRULE` via-stack geometry -- no generic parser for any of
-  these exists yet. (Real GDS content -- bbox/shape counts, not full
-  geometry -- is done: `ihp/gds.py`, via `klayout.db`. Real
-  `compose`/`connect` sections, and the dominant `width`/`spacing`
-  patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
-  done -- see `magic_tech.py`'s own docstring for exact real coverage.)
+  -- `width`/`spacing` are done), Liberty's own real lookup-table
+  sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
+  `fall_transition`, each its own nested `index_1`/`index_2`/`values`
+  multi-dimensional data -- deliberately left unparsed even though
+  pin/timing-arc scalar data is now done, same "bounded, not a full
+  parser" precedent as everywhere else), and LEF's own `VIA`/`ViaRULE`
+  via-stack geometry -- no generic parser for any of these exists yet.
+  (Real GDS content -- bbox/shape counts, not full geometry -- is
+  done: `ihp/gds.py`, via `klayout.db`. Real `compose`/`connect`
+  sections, and the dominant `width`/`spacing` patterns in `drc`, and
+  `resist`/`planeorder` in `extract`, are also done -- see
+  `magic_tech.py`'s own docstring for exact real coverage. Liberty's
+  own real pin/timing-arc scalar data -- direction/capacitance/
+  function per pin, related_pin/timing_type/timing_sense/when per
+  timing arc -- is also done: `ihp/liberty.py`.)
 - Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
   reliable `width()/space()/sep()` -> `.output()` pattern (61 real
   rules); the other 94 real, honestly-skipped constructs are composite
@@ -761,21 +842,24 @@ models, ...), not just read/display layers. Concretely, still open:
   verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
   verified against all 27 real files with an extracted rule), Magic
   Types (`ihp/magic_tech_writer.py`, verified against both real
-  technologies' `.tech` files), and CDL/SPICE/Verilog ports
+  technologies' `.tech` files), CDL/SPICE/Verilog ports
   (`ihp/netlist_writer.py`/`ihp/verilog_writer.py`, verified against
-  all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files) -- every
-  one byte-identical with no edits, plus real, driven edit round-trips,
+  all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files), and
+  Liberty pin/timing-arc data (`ihp/liberty_writer.py`, verified
+  against all 97 real `.lib` files, 700 real cells) -- every one
+  byte-identical with no edits, plus real, driven edit round-trips,
   and independently re-verified faithful across the *entire* real PDK
   at once via `main.py export-full`'s own smoking-gun round-trip test
   (`export.py`, `File > Export Edited ...`, `main.py
   export-lef`/`export-drc`/`export-magic-types`/`export-netlist`/
-  `export-verilog`). What's left is everything that's still read-only
-  in its own structured view -- Layers, Magic Tech's other five
-  domains, and Liberty (real cell *boundaries* only, no pin/timing-arc
-  model exists to edit yet -- see `liberty.py`'s own docstring) -- for
-  the same reason: no editor -> no write-back path to build. GDS stays
-  read-only by design (real structural info only, no geometry-editing
-  feature exists or is planned this pass).
+  `export-verilog`/`export-liberty`). What's left is everything that's
+  still read-only in its own structured view -- Layers and Magic
+  Tech's other five domains -- for the same reason: no editor -> no
+  write-back path to build. GDS stays read-only by design (real
+  structural info only, no geometry-editing feature exists or is
+  planned this pass); Liberty's own real lookup-table sub-groups stay
+  unmodeled for the same bounded-scope reason as everywhere else, not
+  because a pin/timing-arc editor doesn't exist anymore.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
@@ -783,11 +867,6 @@ models, ...), not just read/display layers. Concretely, still open:
   and schematics), matching the **Technology**/**Cells** groups'
   pattern -- still inventory-only today (see the Overview tab), no real
   per-format parser exists yet.
-- Liberty pin/timing-arc data (still only real cell *boundaries* --
-  `liberty.py`) -- would need its own real, structured model first, the
-  same way `ihp/lef.py`'s `LefPin`/`ihp/netlist.py`'s `NetlistPort`
-  already exist for pins/ports, before an editor (and write-back) could
-  follow the same pattern.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.
