@@ -279,16 +279,19 @@ highlighted straight to that cell's real line range within its
     real `device <class> <model> <type> ...` statement (50 real
     entries, some wrapped across lines with a trailing `\` and joined
     the same way the `drc` section's own wrapped statements already
-    are).
+    are), and its own real `contact`/`devresist`/`antenna`/
+    `disconnect`/`substrate` statements (41 real lines combined:
+    24/7/4/4/2) -- each real, confirmed uniformly shaped, but small
+    and heterogeneous enough that all five share one generic, raw
+    `ExtractMiscStatement` rather than five near-identical dataclasses.
 
   Real `include` resolution confirmed: `ihp-sg13g2.tech` splices in 4
   fragment files (`cifout`/`cifin`/`drc`/`extract`) as one logical
   technology; `ihp-sg13g2-GDS.tech` is a second, genuinely separate
   technology with its own header. `lef`/`mzrouter`/`wiring`/`router`/
-  `plowing`/`plot`, and `extract`'s own real remainder
-  (`devresist`/`contact`/`antenna`/`disconnect`/`substrate`) are
-  honestly reported as not-parsed-this-pass, never silently dropped
-  (`MagicTechnology.unparsed_sections`, `MagicTechnology.drc_skipped`).
+  `plowing`/`plot` are honestly reported as not-parsed-this-pass, never
+  silently dropped (`MagicTechnology.unparsed_sections`,
+  `MagicTechnology.drc_skipped`).
 - **`openpdkcreator/ihp/reconcile.py`** -- cross-references the Magic
   `cifoutput` GDS mapping above against the KLayout `.lyp` layers
   (`ihp/layers.py`), both real, independent descriptions of the same
@@ -302,23 +305,25 @@ highlighted straight to that cell's real line range within its
   (`MagicTechView`), matching the Layers tab's Treeview-based shape:
   a technology picker (`ihp-sg13g2` / `ihp-sg13g2-GDS`, the two real,
   separate technologies -- the `include`d fragments have no own header
-  and aren't shown standalone) over thirteen sub-tabs, one per real,
+  and aren't shown standalone) over fourteen sub-tabs, one per real,
   parsed data domain (Planes/Types/Contacts/Aliases/Styles/CIF Layers/
   **CIF Input**/Compose/Connect/**DRC (Magic)**/Extract/**Extract
-  Coefficients**/**Extract Devices** -- CIF Input shows the section's
-  own two real, extracted facts side by side (ignored layers; the
-  standalone `calma` layer-hint table, `*` wildcard datatypes shown as
-  `*`, not a fake `0`); Extract Coefficients/Extract Devices show the
-  extract section's own real parasitic-coefficient lines and real
-  `device` statements) -- plus a **View File** button. **Types is
-  editable** -- a list + form pane (Plane/Name/Aliases/Obsolete),
-  New/Delete Type, the same commit-on-switch pattern as everywhere
-  else; every other domain stays read-only for now (each would need
-  its own form). Verified for real, driven against the actual
-  downloaded data: all thirteen sub-tabs' row counts match
-  `magic-tech`'s own CLI output exactly (39 compose/20 connect/192 DRC
-  checks + 17 angle checks/30 resist/23 cifinput-ignored/133
-  cifinput-hints/506 extract cap coefficients/50 extract devices),
+  Coefficients**/**Extract Devices**/**Extract Misc** -- CIF Input shows
+  the section's own two real, extracted facts side by side (ignored
+  layers; the standalone `calma` layer-hint table, `*` wildcard
+  datatypes shown as `*`, not a fake `0`); Extract Coefficients/Extract
+  Devices/Extract Misc show the extract section's own real
+  parasitic-coefficient lines, real `device` statements, and real
+  `contact`/`devresist`/`antenna`/`disconnect`/`substrate` statements)
+  -- plus a **View File** button. **Types is editable** -- a list +
+  form pane (Plane/Name/Aliases/Obsolete), New/Delete Type, the same
+  commit-on-switch pattern as everywhere else; every other domain
+  stays read-only for now (each would need its own form). Verified for
+  real, driven against the actual downloaded data: all fourteen
+  sub-tabs' row counts match `magic-tech`'s own CLI output exactly (39
+  compose/20 connect/192 DRC checks + 17 angle checks/30 resist/23
+  cifinput-ignored/133 cifinput-hints/506 extract cap coefficients/50
+  extract devices/41 extract misc),
   switching technologies
   correctly reloads every sub-tab, editing a real type's
   name/aliases/obsolete commits
@@ -1027,10 +1032,7 @@ models, ...), not just read/display layers. Concretely, still open:
   recipes themselves still aren't, since their *first* line alone
   doesn't reduce to one honest, standalone fact the way `cifoutput`'s
   *final* `calma` line does -- see `magic_tech.py`'s own docstring),
-  `extract`'s own remaining real constructs (`devresist`/`contact`/
-  `antenna`/`disconnect`/`substrate` -- its real parasitic-capacitance
-  coefficients and `device` statements are now done, see
-  `magic_tech.py`'s own docstring), the much larger real remainder of
+  the much larger real remainder of
   `drc` (`surround`/`edge4way`/`cifmaxwidth`/`variants`/`widespacing`/
   `cifwidth`/`cifspacing`/... -- `width`/`spacing`/`maxwidth`/`angles`
   are done; the remainder's own real shapes are less uniform -- variable

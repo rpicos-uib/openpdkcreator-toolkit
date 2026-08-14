@@ -85,8 +85,13 @@ each harder, mini-rule-language section rather than a full interpreter:
   via ``_join_backslash_continuations`` first, the same helper the
   ``drc`` section's own wrapped statements use; class/model/type kept
   as real, confirmed-positional fields, everything after kept raw).
-  ``devresist``/``contact``/``antenna``/``disconnect``/``substrate``
-  remain real, separate future work.
+  ``contact``/``devresist``/``antenna``/``disconnect``/``substrate``
+  (41 real lines combined: 24/7/4/4/2) are also extracted, into one
+  shared, generic, raw ``ExtractMiscStatement`` rather than five
+  near-identical dataclasses -- each real, confirmed uniformly shaped
+  (every real line for a given directive shares the exact same real
+  token count), but too small and heterogeneous individually to
+  justify five separate types.
 
 - ``cifinput``: two real, cleanly tabular facts pulled out of the
   section, its own real geometry-boolean recipe blocks (``layer``/
@@ -356,6 +361,21 @@ class ExtractDevice:
 
 
 @dataclass
+class ExtractMiscStatement:
+    """One real 'contact'/'devresist'/'antenna'/'disconnect'/
+    'substrate' line from the extract section -- each real, small
+    (2-24 real lines) and uniformly shaped enough (every real line for
+    a given directive shares the exact same real token count, confirmed
+    directly, not assumed) that all five share one generic, raw,
+    positional shape rather than five near-identical dataclasses.
+    Argument semantics deliberately not asserted, same discipline as
+    ``ExtractCapCoefficient``/``ComposeStatement``."""
+
+    directive: str
+    args: tuple[str, ...]
+
+
+@dataclass
 class MagicTechnology:
     source_path: Path
     included_files: list[str] = field(default_factory=list)
@@ -398,6 +418,9 @@ class MagicTechnology:
     extract_devices: list[ExtractDevice] = field(default_factory=list)
     """Real 'device ...' statements -- see ``ExtractDevice``'s own
     docstring."""
+    extract_misc: list[ExtractMiscStatement] = field(default_factory=list)
+    """Real 'contact'/'devresist'/'antenna'/'disconnect'/'substrate'
+    statements -- see ``ExtractMiscStatement``'s own docstring."""
     unparsed_sections: list[str] = field(default_factory=list)
     """Real section names found (directly or via include) that this
     pass deliberately does not parse -- see this module's own
@@ -810,6 +833,21 @@ def _parse_extract_devices(lines: list[str]) -> list[ExtractDevice]:
     return entries
 
 
+_EXTRACT_MISC_KEYWORDS = ("contact", "devresist", "antenna", "disconnect", "substrate")
+
+
+def _parse_extract_misc(lines: list[str]) -> list[ExtractMiscStatement]:
+    entries = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if parts[0] in _EXTRACT_MISC_KEYWORDS:
+            entries.append(ExtractMiscStatement(directive=parts[0], args=tuple(parts[1:])))
+    return entries
+
+
 def parse_tech_file(path: Path) -> MagicTechnology:
     included: list[str] = []
     lines = _load_lines_with_includes(path, included)
@@ -854,6 +892,7 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
     tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))
     tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
+    tech.extract_misc = _parse_extract_misc(sections.get("extract", []))
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)

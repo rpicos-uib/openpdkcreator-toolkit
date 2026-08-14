@@ -84,6 +84,7 @@ class MagicTechView(ttk.Frame):
         self._build_extract_tab(sub)
         self._build_extract_coefficients_tab(sub)
         self._build_extract_devices_tab(sub)
+        self._build_extract_misc_tab(sub)
 
     def _build_extract_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -117,6 +118,10 @@ class MagicTechView(ttk.Frame):
     def _build_extract_devices_tab(self, notebook: ttk.Notebook):
         columns = ("devclass", "model", "type_name", "rest")
         self.extract_devices_tree = self._make_tab(notebook, "Extract Devices", columns, (110, 160, 110, 400))
+
+    def _build_extract_misc_tab(self, notebook: ttk.Notebook):
+        columns = ("directive", "args")
+        self.extract_misc_tree = self._make_tab(notebook, "Extract Misc", columns, (110, 500))
 
     def _build_cifinput_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -262,7 +267,7 @@ class MagicTechView(ttk.Frame):
             self.cifinput_ignore_tree, self.cifinput_hints_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
-            self.extract_coeff_tree, self.extract_devices_tree,
+            self.extract_coeff_tree, self.extract_devices_tree, self.extract_misc_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -320,6 +325,8 @@ class MagicTechView(ttk.Frame):
             self.extract_devices_tree.insert(
                 "", "end", values=(device.devclass, device.model, device.type_name, " ".join(device.rest)),
             )
+        for misc in tech.extract_misc:
+            self.extract_misc_tree.insert("", "end", values=(misc.directive, " ".join(misc.args)))
 
         summary = (
             f"format {tech.format} | v{tech.version} -- {tech.description} | "
@@ -329,7 +336,8 @@ class MagicTechView(ttk.Frame):
             f"drc_checks:{len(tech.drc_checks)}+{len(tech.drc_angle_checks)}angles({len(tech.drc_skipped)} skipped) "
             f"extract_resist:{len(tech.extract_resist)} "
             f"extract_cap_coefficients:{len(tech.extract_cap_coefficients)} "
-            f"extract_devices:{len(tech.extract_devices)}"
+            f"extract_devices:{len(tech.extract_devices)} "
+            f"extract_misc:{len(tech.extract_misc)}"
         )
         if tech.included_files:
             summary += f" | includes: {', '.join(tech.included_files)}"
