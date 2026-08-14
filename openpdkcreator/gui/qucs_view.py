@@ -26,8 +26,18 @@ Both share the parent ``App``'s own per-file cache
 (``App.get_parsed_qucs_symbol``/``get_parsed_qucs_component``), the
 same "switching files and back never silently discards an in-progress
 edit" discipline every other editable domain here already uses.
-"View File" opens the real, selected file directly
-(``file_view_dialog.view_file_dialog``).
+
+Each file picker's own combobox is now editable, not a closed real-
+file list: typing a real, existing relative path and its own button
+reads **Edit File** (opens ``file_view_dialog.view_file_dialog``);
+typing one that doesn't exist yet reads **Create File** (writes a
+real, minimal, valid starting file via ``ihp/qucs_sym.py``'s own
+``create_new_symbol_geometry_file``/``create_new_component_file``,
+then reloads and selects it) -- see ``gui/file_picker_utils.py``'s own
+docstring. A newly created Component's own real Description/Models/
+Netlists (no structured editor exists for those, only Parameters) can
+still be filled in via that same **Edit File** dialog's own raw-text
+Edit/Save, once the file exists.
 """
 
 from __future__ import annotations
@@ -37,7 +47,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import qucs_sym as qucs_mod
-from .file_view_dialog import view_file_dialog
+from .file_picker_utils import handle_action, update_action_button
 
 
 class QucsView(ttk.Frame):
@@ -86,11 +96,13 @@ class _ComponentsPane(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="Qucs-S component .xml file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -141,10 +153,14 @@ class _ComponentsPane(ttk.Frame):
             foreground="#666", wraplength=260, justify="left",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
-    def _view_file(self):
-        path = self.files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=lambda path: qucs_mod.create_new_component_file(path, path.stem), on_created=self.load,
+        )
 
     def load(self):
         self.files = {
@@ -156,6 +172,7 @@ class _ComponentsPane(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def commit_pending_edits(self):
         self._commit_param_form()
@@ -280,11 +297,13 @@ class _SymbolsPane(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="Qucs-S symbol .sym file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -325,10 +344,14 @@ class _SymbolsPane(ttk.Frame):
         self.port_hint_var = tk.StringVar()
         ttk.Entry(right, textvariable=self.port_hint_var, state="readonly").grid(row=5, column=1, sticky="ew", pady=2)
 
-    def _view_file(self):
-        path = self.files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=qucs_mod.create_new_symbol_geometry_file, on_created=self.load,
+        )
 
     def load(self):
         self.files = {
@@ -340,6 +363,7 @@ class _SymbolsPane(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def commit_pending_edits(self):
         self._commit_port_form()

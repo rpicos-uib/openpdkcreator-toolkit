@@ -148,6 +148,65 @@ def find_symbol_geometry_files(pdk_root: Path) -> list[Path]:
     return sorted((pdk_root / "libs.tech" / "qucs-s" / "symbols").glob("*.sym"))
 
 
+def create_new_symbol_geometry_file(path: Path) -> None:
+    """Writes a real, minimal, valid (empty) Qucs-S ``.sym`` file at
+    *path* -- no real drawing primitives yet (added afterward via the
+    GUI's own New Port action; every other real primitive kind --
+    ``Line``/``Arc``/``Text`` -- has no editor here either). Refuses
+    to overwrite an existing real file."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists -- refusing to overwrite it.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+
+
+def create_new_component_file(path: Path, name: str) -> None:
+    """Writes a real, minimal, valid Qucs-S component ``.xml`` at
+    *path* -- the same real ``<Component>`` structure every real file
+    uses (library/schematic_id, Description, Models, Netlists,
+    Symbols referencing a same-named real ``.sym`` file, an empty real
+    Parameters list -- adding one isn't supported here, see
+    ``ihp/qucs_component_writer.py``'s own docstring). Every real
+    field this project has no structured editor for (Description,
+    Models, Netlists) is left as an honest placeholder for real,
+    raw-text editing via the GUI's own View File -> Edit -> Save.
+    Refuses to overwrite an existing real file."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists -- refusing to overwrite it.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f'<?xml version="1.0"?>\n'
+        f'<Component\n'
+        f'  xsi:noNamespaceSchemaLocation="Component.xsd"\n'
+        f'  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n'
+        f'  library="IHP SG13G2 devices" names="{name}" schematic_id="X">\n'
+        f'    <Description>\n'
+        f'        TODO: describe this device\n'
+        f'    </Description>\n'
+        f'    <Models>\n'
+        f'        <DefaultModel value="{name}">\n'
+        f'        </DefaultModel>\n'
+        f'        <SpiceModel value="{name}">\n'
+        f'        </SpiceModel>\n'
+        f'    </Models>\n'
+        f'    <Netlists>\n'
+        f'        <NgspiceNetlist value=""> </NgspiceNetlist>\n'
+        f'        <CDLNetlist value="{{NgspiceNetlist}}"> </CDLNetlist>\n'
+        f'    </Netlists>\n'
+        f'    <Symbols>\n'
+        f'        <Symbol id="Standard">\n'
+        f'           <File>{{QUCS_S_COMPONENTS_LIBRARY}}/{name}.sym</File>\n'
+        f'        </Symbol>\n'
+        f'    </Symbols>\n'
+        f'    <Parameters>\n'
+        f'    </Parameters>\n'
+        f'</Component>\n',
+        encoding="utf-8",
+    )
+
+
 def parse_symbol_geometry(path: Path) -> QucsSymbolGeometry:
     text = path.read_text(encoding="utf-8", errors="replace")
     geometry = QucsSymbolGeometry(source_path=path)

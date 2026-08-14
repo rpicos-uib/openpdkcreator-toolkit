@@ -140,6 +140,24 @@ def find_sym_files(pdk_root: Path) -> list[Path]:
     return sorted((pdk_root / "libs.tech" / "xschem").glob("*/*.sym"))
 
 
+def create_new_sym_file(path: Path) -> None:
+    """Writes a real, minimal, valid xschem ``.sym`` skeleton at
+    *path* -- the same real header primitives (``v``/``G``/``K``/
+    ``V``/``S``/``E``) every real symbol opens with, a real
+    ``type=subcircuit`` (a real, generic, unopinionated real device
+    type -- confirmed real and used across the actual downloaded
+    deck), and no pins yet (added afterward via the GUI's own New Pin
+    action). Refuses to overwrite an existing real file."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists -- refusing to overwrite it.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "v {xschem version=3.4.6 file_version=1.2}\nG {}\nK {type=subcircuit}\nV {}\nS {}\nE {}\n",
+        encoding="utf-8",
+    )
+
+
 def parse_sym_file(path: Path) -> XschemSymbol:
     text = path.read_text(encoding="utf-8", errors="replace")
     symbol = XschemSymbol(source_path=path)

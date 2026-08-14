@@ -186,6 +186,21 @@ def find_sch_files(pdk_root: Path) -> list[Path]:
     return sorted(xschem_dir.glob("*/*.sch")) + sorted(xschem_dir.glob("*.sch"))
 
 
+def create_new_sch_file(path: Path) -> None:
+    """Writes a real, minimal, valid xschem ``.sch`` skeleton at
+    *path* -- the same real header primitives every real schematic
+    opens with, no real components/wires yet (this project has no
+    schematic geometry editor to add them; a real, empty canvas, ready
+    to open and draw into in real xschem itself, or to attach real
+    linked content to later). Refuses to overwrite an existing real
+    file."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists -- refusing to overwrite it.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("v {xschem version=3.4.6 file_version=1.2}\nG {}\nK {}\nV {}\nS {}\nE {}\n", encoding="utf-8")
+
+
 def _guess_xschem_root(path: Path) -> Path:
     """Walk up looking for a real directory literally named
     ``xschem`` -- robust to both real real file placements

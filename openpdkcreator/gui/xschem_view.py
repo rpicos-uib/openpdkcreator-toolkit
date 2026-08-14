@@ -36,8 +36,14 @@ Both sub-tabs share the parent ``App``'s own per-file cache
 (``App.get_parsed_xschem_symbol``/``get_parsed_xschem_schematic``), the
 same "switching files and back never silently discards an in-progress
 edit" discipline every other editable domain here already uses.
-"View File" opens the real, selected file directly
-(``file_view_dialog.view_file_dialog``).
+Each file picker's own combobox is now editable, not a closed real-
+file list: typing a real, existing relative path and its own button
+reads **Edit File** (opens ``file_view_dialog.view_file_dialog``);
+typing one that doesn't exist yet reads **Create File** (writes a
+real, minimal, valid starting file via ``ihp/xschem.py``'s own
+``create_new_sym_file``/``ihp/xschem_sch.py``'s own
+``create_new_sch_file``, then reloads and selects it) -- see
+``gui/file_picker_utils.py``'s own docstring.
 """
 
 from __future__ import annotations
@@ -48,7 +54,7 @@ from tkinter import ttk
 
 from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
-from .file_view_dialog import view_file_dialog
+from .file_picker_utils import handle_action, update_action_button
 from .port_editor import PortEditor
 
 _STEM_TO_DIRECTION = {"ipin": "in", "opin": "out", "iopin": "inout"}
@@ -93,11 +99,13 @@ class _SymbolsPane(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="xschem .sym file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -120,10 +128,14 @@ class _SymbolsPane(ttk.Frame):
         )
         self.pins_editor.pack(fill="both", expand=True, padx=4, pady=4)
 
-    def _view_file(self):
-        path = self.sym_files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=xschem_mod.create_new_sym_file, on_created=self.load,
+        )
 
     def load(self):
         self.sym_files = {
@@ -135,6 +147,7 @@ class _SymbolsPane(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def commit_pending_edits(self):
         self.pins_editor.commit_pending_edits()
@@ -185,11 +198,13 @@ class _SchematicsPane(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="xschem .sch file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -289,10 +304,14 @@ class _SchematicsPane(ttk.Frame):
         self.wire_label_var.trace_add("write", self._on_wire_field_changed)
         ttk.Entry(right, textvariable=self.wire_label_var).grid(row=0, column=1, sticky="ew", pady=2)
 
-    def _view_file(self):
-        path = self.sch_files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=xschem_sch_mod.create_new_sch_file, on_created=self.load,
+        )
 
     def load(self):
         self.sch_files = {
@@ -304,6 +323,7 @@ class _SchematicsPane(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def commit_pending_edits(self):
         self._commit_instance_form()

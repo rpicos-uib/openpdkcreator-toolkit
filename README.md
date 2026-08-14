@@ -1334,6 +1334,30 @@ models, ...), not just read/display layers. Concretely, still open:
   `read_text()`, after the CRLF fix), real edit/add/delete round-trips
   for both domains, and a full, complete-PDK, two-generation
   `export-full` smoking-gun round-trip producing zero differences.
+- **Every file picker across xschem/Qucs-S can now create a brand-new
+  real file, not just edit an existing one** -- each combobox is
+  editable (not a closed real-file list); its own button reads **Edit
+  File** for a real, existing typed/selected path, or **Create File**
+  for one that doesn't exist yet, writing a real, minimal, valid
+  skeleton via a new `create_new_*` function per domain
+  (`ihp/xschem.py`/`ihp/xschem_sch.py`/`ihp/qucs_sym.py`) -- a real
+  xschem `.sym`/`.sch` header (`v`/`G`/`K`/`V`/`S`/`E`), an empty real
+  Qucs-S `.sym`, or a real, valid `<Component>` skeleton, each
+  confirmed to parse cleanly before shipping. A newly created file
+  becomes real, ordinary editable content immediately -- xschem
+  Symbols/Qucs-S Symbols accept New Pin/New Port right away; a new
+  Qucs-S Component's own Description/Models/Netlists (no structured
+  editor exists for those) can still be filled in via the same **Edit
+  File** dialog's own raw-text Edit/Save, the same as any other real,
+  downloaded file. `gui/file_picker_utils.py` shares this logic across
+  all four panes rather than four hand-copies, and refuses a typed
+  path that resolves outside the real PDK tree (e.g. via `..`) before
+  ever writing anything. Verified for real, driven in the container:
+  the button reads correctly for both an existing and a new name, a
+  directory-traversal Create attempt is correctly blocked (confirmed
+  no file written anywhere), and all four domains' Create actions each
+  produce a real file that re-parses cleanly and immediately accepts
+  further edits through the existing editors.
 - **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
   symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
   all 100 real, downloaded `.sch` files (99 real, one level under a
