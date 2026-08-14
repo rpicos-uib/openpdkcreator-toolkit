@@ -99,6 +99,7 @@ from openpdkcreator.ihp import spice_models as spice_models_mod
 from openpdkcreator.ihp import user_models as user_models_mod
 from openpdkcreator.ihp import verilog as verilog_mod
 from openpdkcreator.ihp import xschem as xschem_mod
+from openpdkcreator.ihp import xschem_sch as xschem_sch_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
 
@@ -273,6 +274,43 @@ def cmd_xschem(pdk_root: Path) -> int:
 
     print(f"\n{len(sym_files)} real .sym file(s): {total_pins} real pin(s) total.")
     print("By device type: " + ", ".join(f"{t or '(none)'}:{n}" for t, n in sorted(by_type.items())))
+    return 0
+
+
+def cmd_xschem_sch(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    sch_files = xschem_sch_mod.find_sch_files(pdk_root)
+    if not sch_files:
+        print(f"No .sch files found under {pdk_root}/libs.tech/xschem/", file=sys.stderr)
+        return 2
+
+    xschem_root = pdk_root / "libs.tech" / "xschem"
+    total_instances = 0
+    total_pins = 0
+    total_wires = 0
+    unresolved: set[str] = set()
+    for path in sch_files:
+        schematic = xschem_sch_mod.parse_sch_file(path, xschem_root=xschem_root)
+        total_instances += len(schematic.instances)
+        total_pins += len(schematic.pin_instances)
+        total_wires += len(schematic.wires)
+        unresolved.update(inst.symbol_ref for inst in schematic.instances if inst.resolved_path is None)
+        pin_text = ", ".join(f"{inst.name}:{inst.pin_label}" for inst in schematic.pin_instances)
+        print(
+            f"{path.relative_to(pdk_root)}: instances={len(schematic.instances)} "
+            f"wires={len(schematic.wires)} pins=[{pin_text}]"
+        )
+
+    print(
+        f"\n{len(sch_files)} real .sch file(s): {total_instances} real component instance(s), "
+        f"{total_pins} real pin instance(s), {total_wires} real wire segment(s)."
+    )
+    print(f"{len(unresolved)} unique real symbol reference(s) resolve outside the downloaded PDK (external to it):")
+    for ref in sorted(unresolved):
+        print(f"  {ref}")
     return 0
 
 
@@ -699,6 +737,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
     sub.add_parser("ngspice", help="Parse real ngspice .lib model cards: .model/.subckt statements.")
     sub.add_parser("xschem", help="Parse real xschem .sym symbols: device type + pin list.")
+    sub.add_parser("xschem-sch", help="Parse real xschem .sch schematics: instances/pins/wires.")
     sub.add_parser("user-models", help="List user_models/ Verilog/Verilog-A modules and their real cell links.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
@@ -734,6 +773,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ngspice(args.pdk_root.resolve())
     if args.command == "xschem":
         return cmd_xschem(args.pdk_root.resolve())
+    if args.command == "xschem-sch":
+        return cmd_xschem_sch(args.pdk_root.resolve())
     if args.command == "user-models":
         return cmd_user_models()
     if args.command == "drc":

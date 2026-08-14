@@ -29,6 +29,7 @@ python3 main.py magic-tech   # real Magic .tech parse + cross-reference against 
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
 python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.subckt statements
 python3 main.py xschem       # real xschem .sym symbol summary: device type + pin list
+python3 main.py xschem-sch   # real xschem .sch schematic summary: instances/pins/wires
 python3 main.py user-models  # list user_models/ Verilog/Verilog-A modules and their real cell links
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
@@ -65,8 +66,10 @@ ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
 data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
-Models** -- real `.model`/`.subckt` statements; **xschem Symbols** --
-a real symbol's own device-attribute block and real pin list, both
+Models** -- real `.model`/`.subckt` statements; **xschem** -- a
+**Symbols** sub-tab (a real symbol's own device-attribute block and
+real pin list) and a **Schematics** sub-tab (real component instances,
+their own exposed pin instances, and real wire segments), both
 read-only; **User Models** -- user-authored Verilog/Verilog-A modules
 under `user_models/`, editable link to a real cell), and **Settings**
 (project-level settings -- not any one
@@ -1179,10 +1182,54 @@ models, ...), not just read/display layers. Concretely, still open:
   format is a genuinely different, unrelated tag syntax from xschem's
   (`<PortSym .../>`, no real port names, just position/type/angle),
   so extending the xschem parser to it isn't a safe reuse; a real,
-  separate parsing effort. xschem's own real schematic (`.sch`) files
-  -- as opposed to `.sym` symbols -- remain real, separate future work.
-  ngspice's own real `.LIB NAME ... .ENDL` PVT-corner blocks are now
-  done too (`ihp/spice_models.py`'s own `Corners` sub-tab).
+  separate parsing effort. ngspice's own real
+  `.LIB NAME ... .ENDL` PVT-corner blocks are now done too
+  (`ihp/spice_models.py`'s own `Corners` sub-tab).
+- **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
+  symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
+  all 100 real, downloaded `.sch` files (99 real, one level under a
+  family directory, plus one real, genuine exception,
+  `start_page.sch`, sitting directly at the xschem root itself --
+  found by cross-checking a full recursive real-file listing against
+  a first-draft, naive one-level-deep glob before trusting a count,
+  and now handled by `find_sch_files`). Reuses `ihp/xschem.py`'s own
+  real, quote-aware brace scanner and key=value parser directly rather
+  than duplicating them, since a `.sch` file shares the same top-level
+  `TAG {content}` primitive shape as a `.sym`, plus two schematic-only
+  real primitives: `C {symbol_ref} x y rot flip {props}` component
+  instances (1{,}920 real lines total, once the `start_page.sch` gap
+  above was fixed -- a first count attempt landed at 1{,}905 and was
+  traced to the exact same missed-file bug) and
+  `N x1 y1 x2 y2 {props}` wire segments (1{,}979 real lines). A
+  component instance's own symbol reference is confirmed real to
+  resolve relative to `libs.tech/xschem/` itself, not the containing
+  `.sch` file's own directory; 34 of 204 real, unique referenced
+  symbols never resolve inside the downloaded PDK at all (xschem's own
+  bundled pin/ground/generic-device symbols, referenced both bare and
+  under a real `devices/` prefix) -- reported honestly via
+  `resolved_path is None`, not treated as a parsing gap. A schematic's
+  own exposed ports are identified by real, stable convention (an
+  instance whose symbol stem is `ipin`/`opin`/`iopin`) -- **a real,
+  driven cross-check against the matching `.sym`'s own Pins tab found
+  a genuine, honest discrepancy, not agreement**: `sg13g2_inv_1.sch`'s
+  four real pin instances (`Y`/`A`/`VDD`/`VSS`) are a real superset of
+  its own `.sym`'s two real drawn ports (`A`/`Y` only) -- the symbol
+  doesn't draw `VDD`/`VSS` as explicit visible pins, but the
+  schematic instantiating real devices still wires real power rails to
+  them; recorded as the real fact it is rather than silently claimed
+  to match. `gui/xschem_view.py`'s **Simulation > xschem** tab gained
+  a second major sub-tab, **Schematics** (its own file picker over all
+  100 real files, with **Instances**/**Pins**/**Wires** sub-tabs,
+  the Instances tab showing each real symbol reference's PDK-vs-
+  external resolution at a glance), alongside the existing **Symbols**
+  sub-tab (unchanged, confirmed still correct post-refactor). `main.py
+  xschem-sch` gives the same real summary on the CLI. Verified for
+  real, driven in the container: real counts match a corrected,
+  independent grep-based ground truth exactly (100 files, 1{,}920
+  instances, 1{,}979 wires, 34 unique external references), a spot-
+  checked real file's Instances/Pins/Wires rows and PDK/external
+  resolution flags are individually correct, and `start_page.sch`
+  (the real top-level exception file) parses without error.
 - **User-defined Verilog/Verilog-A model inclusion, plus a way to link
   it to the rest of the PDK, is done** -- see the
   `ihp/user_models.py`/`gui/user_models_view.py` bullet in "What's
