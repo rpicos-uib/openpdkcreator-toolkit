@@ -4,17 +4,19 @@ real, downloaded ``libs.tech/ngspice/models/*.lib`` files, since
 there's no small, fixed set of "the real ones" to enumerate (mirroring
 ``lef_view.py``'s own file-picker shape for the same reason).
 
-Two sub-tabs per file: **Models** (every real ``.model NAME TYPE
+Three sub-tabs per file: **Models** (every real ``.model NAME TYPE
 ...`` statement, its own real parameter list shown as one raw
 ``key=value`` text column rather than a parameter-by-parameter
 breakdown -- some real PSP MOSFET model cards carry 370+ real
 parameters, well past what a tabular column layout could usefully
-show) and **Subckts** (every real ``.subckt NAME port1 port2 ...``
-block's own real port list). Read-only -- no editor exists for
-ngspice model data, matching every other real, display-only domain
-here (Layers, Magic Tech's other five domains, GDS, LEF's own Vias
-tab). "View File" opens the real, selected ``.lib`` file directly
-(``file_view_dialog.view_file_dialog``).
+show), **Subckts** (every real ``.subckt NAME port1 port2 ...``
+block's own real port list), and **Corners** (every real ``.LIB NAME
+... .ENDL`` PVT-corner block's own real ``.param``/``.include``
+content -- confirmed real in all 6 real `corner*.lib` files). Read-only
+-- no editor exists for ngspice model data, matching every other real,
+display-only domain here (Layers, Magic Tech's other five domains,
+GDS, LEF's own Vias tab). "View File" opens the real, selected ``.lib``
+file directly (``file_view_dialog.view_file_dialog``).
 """
 
 from __future__ import annotations
@@ -56,6 +58,7 @@ class SpiceModelsView(ttk.Frame):
 
         self.models_tree = self._make_tree(sub, "Models", ("name", "type", "params"), (200, 100, 640))
         self.subckts_tree = self._make_tree(sub, "Subckts", ("name", "ports"), (200, 640))
+        self.corners_tree = self._make_tree(sub, "Corners", ("name", "param_count", "includes", "params"), (140, 90, 220, 500))
 
     def _make_tree(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -88,6 +91,8 @@ class SpiceModelsView(ttk.Frame):
             self.models_tree.delete(row)
         for row in self.subckts_tree.get_children():
             self.subckts_tree.delete(row)
+        for row in self.corners_tree.get_children():
+            self.corners_tree.delete(row)
 
         path = self.lib_files.get(self.file_var.get())
         if path is None:
@@ -103,5 +108,11 @@ class SpiceModelsView(ttk.Frame):
             self.models_tree.insert("", "end", values=(model.name, model.model_type, params_text))
         for subckt in lib.subckts:
             self.subckts_tree.insert("", "end", values=(subckt.name, " ".join(subckt.ports)))
+        for corner in lib.corners:
+            params_text = " ".join(f"{key}={value}" for key, value in corner.params)
+            self.corners_tree.insert(
+                "", "end",
+                values=(corner.name, len(corner.params), ", ".join(corner.includes), params_text),
+            )
 
-        self.summary_var.set(f"models:{len(lib.models)}  subckts:{len(lib.subckts)}")
+        self.summary_var.set(f"models:{len(lib.models)}  subckts:{len(lib.subckts)}  corners:{len(lib.corners)}")

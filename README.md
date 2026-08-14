@@ -373,18 +373,28 @@ highlighted straight to that cell's real line range within its
   all 32 real files; fixed by checking every real line for `.model`
   regardless of subckt nesting. Verified for real: 61/61 real models
   and 57/57 real subckts extracted exactly (including a real 371-real-
-  parameter PSP MOSFET model card parsed cleanly). Real `.LIB name ...
-  .ENDL` PVT-corner blocks (a real `.param NAME = value` list per
-  corner, confirmed real in the `corner*.lib` files) are deliberately
-  not parsed this pass.
+  parameter PSP MOSFET model card parsed cleanly). Real
+  `.LIB NAME ... .ENDL NAME` PVT-corner blocks are also extracted (47
+  real blocks across all 6 real `corner*.lib` files, every real
+  `.LIB`/`.ENDL` pair balanced): each real corner's own real `.param
+  KEY = VALUE` overrides (kept raw, same reasoning as `.model`'s own
+  params) and real `.include FILE` statements. A real, confirmed-not-
+  assumed distinction: a `.param` line found *inside* a real `.subckt`
+  body (a device's own local default, e.g. `capacitors_mod_mismatch.lib`'s
+  own `cap_carea_mm` mismatch parameter) is correctly NOT attributed to
+  any corner -- only `.param` lines genuinely inside a real
+  `.LIB`/`.ENDL` block are. Verified for real: 396/396 real corner
+  params in `cornerMOSlv.lib`'s own 11 real corners cross-checked
+  against an independent ground-truth scan exactly.
 - **`openpdkcreator/gui/spice_models_view.py`** -- the **Simulation >
   ngspice Models** tab (`SpiceModelsView`), the same file-picker +
   Treeview shape as `lef_view.py` (no small, fixed set of "the real
-  ones" to enumerate -- all 32 real `.lib` files are shown). Two
-  sub-tabs, **Models** and **Subckts**; a model's own real parameter
-  list is shown as one raw `key=value` text column rather than a
-  parameter-by-parameter breakdown, since some real PSP model cards
-  carry 370+ real parameters. Read-only -- no editor exists for
+  ones" to enumerate -- all 32 real `.lib` files are shown). Three
+  sub-tabs, **Models**, **Subckts**, and **Corners**; a model's own
+  real parameter list is shown as one raw `key=value` text column
+  rather than a parameter-by-parameter breakdown, since some real PSP
+  model cards carry 370+ real parameters. Read-only -- no editor exists
+  for
   ngspice model data. Verified for real, driven: switching files
   reloads both trees with the correct real row counts.
 - **`openpdkcreator/ihp/xschem.py`** -- a real, bounded xschem `.sym`
@@ -1090,9 +1100,9 @@ models, ...), not just read/display layers. Concretely, still open:
   (`<PortSym .../>`, no real port names, just position/type/angle),
   so extending the xschem parser to it isn't a safe reuse; a real,
   separate parsing effort. xschem's own real schematic (`.sch`) files
-  -- as opposed to `.sym` symbols -- and ngspice's own real `.LIB
-  name ... .ENDL` PVT-corner blocks (a real `.param NAME = value` list
-  per corner) are also real, separate future work.
+  -- as opposed to `.sym` symbols -- remain real, separate future work.
+  ngspice's own real `.LIB NAME ... .ENDL` PVT-corner blocks are now
+  done too (`ihp/spice_models.py`'s own `Corners` sub-tab).
 - **Copy-vs-share with `OpenPDKCreator`, revisited and re-confirmed**:
   diffed every genuinely-copied file against `OpenPDKCreator`'s own
   current originals rather than assuming. The core data shapes

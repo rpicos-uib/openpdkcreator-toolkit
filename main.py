@@ -227,18 +227,25 @@ def cmd_ngspice(pdk_root: Path) -> int:
 
     total_models = 0
     total_subckts = 0
+    total_corners = 0
     for path in lib_files:
         parsed = spice_models_mod.parse_lib_file(path)
         total_models += len(parsed.models)
         total_subckts += len(parsed.subckts)
+        total_corners += len(parsed.corners)
         detail = []
         if parsed.models:
             detail.append(f"{len(parsed.models)} model(s)")
         if parsed.subckts:
             detail.append(f"{len(parsed.subckts)} subckt(s)")
+        if parsed.corners:
+            detail.append(f"{len(parsed.corners)} corner(s)")
         print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
 
-    print(f"\n{len(lib_files)} real .lib file(s): {total_models} model(s), {total_subckts} subckt(s) total.")
+    print(
+        f"\n{len(lib_files)} real .lib file(s): {total_models} model(s), "
+        f"{total_subckts} subckt(s), {total_corners} PVT-corner(s) total."
+    )
     return 0
 
 

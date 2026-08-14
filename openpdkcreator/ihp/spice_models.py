@@ -30,11 +30,19 @@ Two real, cleanly recognizable statement kinds are extracted in full:
   assumed; every real ``.model`` is captured regardless of subckt
   nesting.
 
-Real, deliberately NOT parsed this pass: ``.LIB name ... .ENDL`` PVT-
-corner blocks (confirmed real in the ``corner*.lib`` files -- a real
-``.param NAME = value`` list per corner) and each real model's own
-full parameter *count* (some real PSP MOSFET cards carry 100+ real
-parameters) -- browsable here, not semantically interpreted.
+A third real, cleanly recognizable statement kind, also extracted in
+full: ``.LIB NAME ... .ENDL NAME`` PVT-corner blocks (confirmed real
+in all 6 real ``corner*.lib`` files -- 47 real blocks combined, every
+real ``.LIB``/``.ENDL`` pair balanced). Each real corner's own real
+``.param KEY = VALUE`` overrides (kept as raw strings, same "don't
+assert numeric type" reasoning as ``.model``'s own params -- some real
+values are quoted formula expressions, e.g. real
+``cap_carea_mm='agauss(1, 0.01, (mm_ok != 1 ? 0 : 1))'``) and real
+``.include FILE`` statements (confirmed real inside these same 6
+files' own corner blocks -- which real model file a given corner
+actually pulls in) are both captured. Each real model's own full
+parameter *count* (some real PSP MOSFET cards carry 100+ real
+parameters) is browsable here, not semantically interpreted.
 """
 
 from __future__ import annotations
@@ -47,6 +55,10 @@ _MODEL_RE = re.compile(r"^\.model\s+(\S+)\s+(\S+)\s*(.*)$", re.IGNORECASE)
 _SUBCKT_RE = re.compile(r"^\.subckt\s+(\S+)\s*(.*)$", re.IGNORECASE)
 _ENDS_RE = re.compile(r"^\.ends\b", re.IGNORECASE)
 _PARAM_RE = re.compile(r"(\S+)\s*=\s*('[^']*'|\"[^\"]*\"|\S+)")
+_LIB_RE = re.compile(r"^\.lib\s+(\S+)", re.IGNORECASE)
+_ENDL_RE = re.compile(r"^\.endl\b", re.IGNORECASE)
+_DOT_PARAM_RE = re.compile(r"^\.param\s+(.*)$", re.IGNORECASE)
+_INCLUDE_RE = re.compile(r"^\.include\s+(\S+)", re.IGNORECASE)
 
 
 @dataclass
@@ -69,10 +81,24 @@ class SpiceSubckt:
 
 
 @dataclass
+class SpiceCorner:
+    """One real ``.LIB NAME ... .ENDL NAME`` PVT-corner block --
+    ``params`` is every real ``.param KEY = VALUE`` override found
+    inside it, in real file order, kept as raw strings (see this
+    module's own docstring for why); ``includes`` is every real
+    ``.include FILE`` statement found inside it."""
+
+    name: str
+    params: list[tuple[str, str]] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class SpiceLibFile:
     source_path: Path
     models: list[SpiceModel] = field(default_factory=list)
     subckts: list[SpiceSubckt] = field(default_factory=list)
+    corners: list[SpiceCorner] = field(default_factory=list)
 
 
 def find_lib_files(pdk_root: Path) -> list[Path]:
@@ -120,6 +146,7 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
     joined = _join_plus_continuations(content_lines)
 
     current_subckt: SpiceSubckt | None = None
+    current_corner: SpiceCorner | None = None
     for line in joined:
         stripped = line.strip()
         if not stripped:
@@ -134,6 +161,21 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
             name, model_type, rest = model_match.groups()
             lib.models.append(SpiceModel(name=name, model_type=model_type, params=_parse_params(rest)))
             continue
+        if current_corner is not None:
+            if _ENDL_RE.match(stripped):
+                lib.corners.append(current_corner)
+                current_corner = None
+                continue
+            param_match = _DOT_PARAM_RE.match(stripped)
+            if param_match:
+                parsed = _parse_params(param_match.group(1))
+                if parsed:
+                    current_corner.params.append(parsed[0])
+                continue
+            include_match = _INCLUDE_RE.match(stripped)
+            if include_match:
+                current_corner.includes.append(include_match.group(1))
+            continue
         if current_subckt is not None:
             if _ENDS_RE.match(stripped):
                 lib.subckts.append(current_subckt)
@@ -143,6 +185,10 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
         if subckt_match:
             name, rest = subckt_match.groups()
             current_subckt = SpiceSubckt(name=name, ports=rest.split())
+            continue
+        lib_match = _LIB_RE.match(stripped)
+        if lib_match:
+            current_corner = SpiceCorner(name=lib_match.group(1))
             continue
 
     return lib
