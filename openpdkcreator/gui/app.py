@@ -127,6 +127,7 @@ from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
 from .spice_models_view import SpiceModelsView
 from .tools_view import ToolsView
+from .qucs_view import QucsView
 from .user_models_view import UserModelsView
 from .xschem_view import XschemView
 
@@ -509,9 +510,14 @@ class App(ttk.Frame):
         self.spice_models_view.pack(fill="both", expand=True)
 
         xschem_frame = ttk.Frame(self.simulation_notebook)
-        self.simulation_notebook.add(xschem_frame, text="xschem Symbols")
+        self.simulation_notebook.add(xschem_frame, text="xschem")
         self.xschem_view = XschemView(xschem_frame, self.pdk_root)
         self.xschem_view.pack(fill="both", expand=True)
+
+        qucs_frame = ttk.Frame(self.simulation_notebook)
+        self.simulation_notebook.add(qucs_frame, text="Qucs-S")
+        self.qucs_view = QucsView(qucs_frame, self.pdk_root)
+        self.qucs_view.pack(fill="both", expand=True)
 
         user_models_frame = ttk.Frame(self.simulation_notebook)
         self.simulation_notebook.add(user_models_frame, text="User Models")

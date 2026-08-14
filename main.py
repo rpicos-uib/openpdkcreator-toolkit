@@ -94,6 +94,7 @@ from openpdkcreator.ihp import lef as lef_mod
 from openpdkcreator.ihp import liberty as liberty_mod
 from openpdkcreator.ihp import magic_tech as magic_tech_mod
 from openpdkcreator.ihp import netlist as netlist_mod
+from openpdkcreator.ihp import qucs_sym as qucs_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
 from openpdkcreator.ihp import spice_models as spice_models_mod
 from openpdkcreator.ihp import user_models as user_models_mod
@@ -311,6 +312,41 @@ def cmd_xschem_sch(pdk_root: Path) -> int:
     print(f"{len(unresolved)} unique real symbol reference(s) resolve outside the downloaded PDK (external to it):")
     for ref in sorted(unresolved):
         print(f"  {ref}")
+    return 0
+
+
+def cmd_qucs(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    component_files = qucs_mod.find_component_files(pdk_root)
+    sym_files = qucs_mod.find_symbol_geometry_files(pdk_root)
+    if not component_files and not sym_files:
+        print(f"No Qucs-S component/symbol files found under {pdk_root}/libs.tech/qucs-s/symbols/", file=sys.stderr)
+        return 2
+
+    total_params = 0
+    for path in component_files:
+        component = qucs_mod.parse_component_file(path)
+        total_params += len(component.parameters)
+        resolved = "PDK" if component.resolved_symbol_path is not None else "external"
+        print(
+            f"{path.relative_to(pdk_root)}: {component.description or '(no description)'}  "
+            f"model={component.spice_model}  params={len(component.parameters)}  symbol={component.symbol_file}[{resolved}]"
+        )
+
+    print(f"\n{len(component_files)} real .xml component(s): {total_params} real parameter(s) total.")
+
+    total_ports = 0
+    total_primitives = 0
+    for path in sym_files:
+        geometry = qucs_mod.parse_symbol_geometry(path)
+        total_ports += len(geometry.ports)
+        total_primitives += geometry.primitive_count
+        print(f"{path.relative_to(pdk_root)}: {geometry.primitive_count} primitive(s), {len(geometry.ports)} port(s)")
+
+    print(f"\n{len(sym_files)} real .sym symbol(s): {total_primitives} real drawing primitive(s), {total_ports} real port(s).")
     return 0
 
 
@@ -738,6 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ngspice", help="Parse real ngspice .lib model cards: .model/.subckt statements.")
     sub.add_parser("xschem", help="Parse real xschem .sym symbols: device type + pin list.")
     sub.add_parser("xschem-sch", help="Parse real xschem .sch schematics: instances/pins/wires.")
+    sub.add_parser("qucs", help="Parse real Qucs-S component .xml/symbol .sym files.")
     sub.add_parser("user-models", help="List user_models/ Verilog/Verilog-A modules and their real cell links.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
@@ -775,6 +812,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_xschem(args.pdk_root.resolve())
     if args.command == "xschem-sch":
         return cmd_xschem_sch(args.pdk_root.resolve())
+    if args.command == "qucs":
+        return cmd_qucs(args.pdk_root.resolve())
     if args.command == "user-models":
         return cmd_user_models()
     if args.command == "drc":

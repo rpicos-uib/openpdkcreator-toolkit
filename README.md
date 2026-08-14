@@ -30,6 +30,7 @@ python3 main.py lef          # real LEF parse summary: tech layers + macro/cell 
 python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.subckt statements
 python3 main.py xschem       # real xschem .sym symbol summary: device type + pin list
 python3 main.py xschem-sch   # real xschem .sch schematic summary: instances/pins/wires
+python3 main.py qucs         # real Qucs-S component .xml/symbol .sym summary
 python3 main.py user-models  # list user_models/ Verilog/Verilog-A modules and their real cell links
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
@@ -69,18 +70,17 @@ data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem** -- a
 **Symbols** sub-tab (a real symbol's own device-attribute block and
 real pin list) and a **Schematics** sub-tab (real component instances,
-their own exposed pin instances, and real wire segments), both
-read-only; **User Models** -- user-authored Verilog/Verilog-A modules
-under `user_models/`, editable link to a real cell), and **Settings**
-(project-level settings -- not any one
-tool's PDK content -- **General** and **Tools** as sub-tabs). Qucs-S
-schematic data stays inventory-only (see the Overview tab) -- its own
-real `.sym` format is a genuinely different, unrelated tag syntax from
-xschem's (`<PortSym .../>`, no real port *names*, just position/type),
-so parsing it isn't a quick reuse of the xschem parser -- no real
-parser exists yet (see Future Work). **Technology**/**Cells**/
+their own exposed pin instances, and real wire segments); **Qucs-S**
+-- a **Components** sub-tab (real device definitions: models,
+parameters, netlist templates) and a **Symbols** sub-tab (real drawn-
+geometry ports, no real port names, just position/type/angle -- a
+genuinely different tag syntax from xschem's own `.sym`, confirmed,
+not a quick reuse); **User Models** -- user-authored Verilog/Verilog-A
+modules under `user_models/`, editable link to a real cell), and
+**Settings** (project-level settings -- not any one tool's PDK content
+-- **General** and **Tools** as sub-tabs). **Technology**/**Cells**/
 **Simulation** are the pattern a future sub-tab would repeat once a
-real parser exists for it.
+real parser exists for a still-unparsed domain.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
@@ -1173,18 +1173,62 @@ models, ...), not just read/display layers. Concretely, still open:
   registration (no single-flag KLayout switch for that was
   found/verified). Both fall back to a bare, unconfigured launch if
   the real file isn't there yet (`LaunchGuidance.requires_path`).
-- The **Simulation** top-level GUI group now has three real sub-tabs --
+- The **Simulation** top-level GUI group now has four real sub-tabs --
   **ngspice Models** (`ihp/spice_models.py`, real `.model`/`.subckt`
-  extraction), **xschem Symbols** (`ihp/xschem.py`, real symbol
-  device-attribute/pin-list extraction), and **User Models** (see the
-  user-defined Verilog/Verilog-A bullet below). Qucs-S schematic data
-  stays inventory-only (see the Overview tab) -- its own real `.sym`
-  format is a genuinely different, unrelated tag syntax from xschem's
-  (`<PortSym .../>`, no real port names, just position/type/angle),
-  so extending the xschem parser to it isn't a safe reuse; a real,
-  separate parsing effort. ngspice's own real
+  extraction), **xschem** (`ihp/xschem.py`/`ihp/xschem_sch.py`, real
+  symbol and schematic extraction, see their own bullets), **Qucs-S**
+  (see the dedicated bullet below), and **User Models** (see the
+  user-defined Verilog/Verilog-A bullet below). ngspice's own real
   `.LIB NAME ... .ENDL` PVT-corner blocks are now done too
   (`ihp/spice_models.py`'s own `Corners` sub-tab).
+- **Qucs-S's own real component/symbol data is done** --
+  `ihp/qucs_sym.py`, hand-verified against all real, downloaded
+  `libs.tech/qucs-s/symbols/` files. **A real, confirmed structural
+  fact worth stating plainly, found before writing a single parser
+  line**: this one real directory holds *two* genuinely different real
+  formats sharing one file location, not one -- `.xml` (34 real
+  files): a real, single-root, well-formed `<Component>` XML document
+  (library/description/models, real `Parameters` each with a real
+  `name`/`unit`/`show` plus either a real `default_value` or a real
+  `equation` -- confirmed real variance, 177 of 188 real parameters
+  carry the former, the other 11 the latter, never both -- real
+  `Netlists`' `NgspiceNetlist`/`CDLNetlist`/optional `XyceNetlist`
+  template strings, kept raw, and a reference to exactly one real
+  `.sym` geometry file, confirmed to resolve for all 34 real files);
+  `.sym` (22 real files, 350 real drawing primitives): a flat sequence
+  of real, individually well-formed, self-closing tags -- Qucs-S's own
+  real *drawn* geometry, confirmed genuinely different from xschem's
+  own `.sym` as already flagged (real `<PortSym x=... y=... type=...
+  angle=... [condition=...]/>` primitives carry no real port name at
+  all, 66 real ports total). Unlike this project's other real
+  XML-*shaped* format (KLayout's own `.lyp`, hand-rolled because
+  write-back needs real line numbers), the standard
+  `xml.etree.ElementTree` is used directly here -- this domain is
+  read-only, confirmed to parse all 34 real `.xml` files with zero
+  failures. **A real parsing bug found and fixed by a driven count
+  check, not assumed correct**: a first-draft primitive scanner
+  required a real drawing tag to be the *entire* line, undercounting
+  ports 46-of-66 and primitives 330-of-350 -- traced to a real,
+  partial convention this format actually uses, a trailing XML comment
+  naming the physical pin (e.g. `<PortSym .../> <!--D-->`, confirmed
+  present on 20 of the 66 real port lines, absent on the other 46) --
+  fixed by relaxing the scanner to match just the tag itself and
+  separately capture that comment as an honestly-partial `hint` field,
+  not a real port-name substitute. A real, optional `condition=`
+  attribute on a drawing primitive marks it as belonging to only one
+  real symbol variant (e.g. a real BJT's own `npn`/`pnp` geometry) --
+  the Qucs-S schematic-capture analog of Magic's own `variants`
+  conditional-scoping construct, recorded raw, not evaluated.
+  `gui/qucs_view.py` mirrors `xschem_view.py`'s own two-pane shape:
+  **Components** (Overview/Parameters/Netlists sub-tabs, its own file
+  picker over all 34 real files) and **Symbols** (a real Ports table,
+  its own file picker over all 22 real files). `main.py qucs` gives
+  the same real summary on the CLI. Verified for real, driven in the
+  container: real counts match ground truth exactly (34 components,
+  188 parameters, 22 symbols, 350 primitives, 66 ports, 20 hinted), a
+  spot-checked real component (`nmos.xml`) and its own real symbol
+  (`Mos.sym`, all 8 real ports correctly hinted `D`/`G`/`S`/`B` across
+  its two real `nmos`/`pmos` variants) both render correctly.
 - **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
   symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
   all 100 real, downloaded `.sch` files (99 real, one level under a
