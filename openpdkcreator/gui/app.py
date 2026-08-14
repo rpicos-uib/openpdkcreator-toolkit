@@ -21,13 +21,14 @@ grouped by what they actually represent rather than left flat:
   inside each one, and edit its real LEF pins directly -- the exact
   same in-memory macro the LEF tab itself edits (see
   ``App.get_parsed_lef`` below).
-- **Simulation** -- real ngspice ``.lib`` model-card data (real
-  ``.model``/``.subckt`` statements -- ``ihp/spice_models.py``), one
-  sub-tab so far, **ngspice Models**, matching the **Technology**/
-  **Cells** groups' own file-picker/Treeview shape; read-only, no
-  editor exists for simulation model data. xschem/Qucs-S schematic
-  data stays inventory-only (see the Overview tab) -- no real parser
-  for either exists yet, so no sub-tab pretends otherwise.
+- **Simulation** -- **ngspice Models** (real ``.model``/``.subckt``
+  statements -- ``ihp/spice_models.py``) and **xschem Symbols** (a
+  real symbol's own device-attribute block and real pin list --
+  ``ihp/xschem.py``), both matching the **Technology**/**Cells**
+  groups' own file-picker/Treeview shape; read-only, no editor exists
+  for simulation model or symbol data. Qucs-S schematic data stays
+  inventory-only (see the Overview tab) -- no real parser exists yet,
+  so no sub-tab pretends otherwise.
 - **Settings** -- project-level settings, not any one tool's PDK
   content, two sub-tabs: **General** (``gui/settings_view.py``): this
   project's own editable name and where it lives on disk, versus the
@@ -121,10 +122,11 @@ from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
 from .magic_tech_view import MagicTechView
-from .spice_models_view import SpiceModelsView
 from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
+from .spice_models_view import SpiceModelsView
 from .tools_view import ToolsView
+from .xschem_view import XschemView
 
 _PROVENANCE_PATH_RE = re.compile(r"^([^:]+):\d+")
 
@@ -501,6 +503,11 @@ class App(ttk.Frame):
         self.simulation_notebook.add(ngspice_frame, text="ngspice Models")
         self.spice_models_view = SpiceModelsView(ngspice_frame, self.pdk_root)
         self.spice_models_view.pack(fill="both", expand=True)
+
+        xschem_frame = ttk.Frame(self.simulation_notebook)
+        self.simulation_notebook.add(xschem_frame, text="xschem Symbols")
+        self.xschem_view = XschemView(xschem_frame, self.pdk_root)
+        self.xschem_view.pack(fill="both", expand=True)
 
     # -- Settings tab -----------------------------------------------------
 

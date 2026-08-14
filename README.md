@@ -28,6 +28,7 @@ python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
 python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.subckt statements
+python3 main.py xschem       # real xschem .sym symbol summary: device type + pin list
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
@@ -62,15 +63,18 @@ Tabs are grouped by what they represent, not left flat: **Overview**
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
-data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (real
-ngspice model-card data -- **ngspice Models** as its one sub-tab so
-far, real `.model`/`.subckt` statements, read-only), and **Settings**
-(project-level settings -- not any one tool's PDK content -- **General**
-and **Tools** as sub-tabs). xschem/Qucs-S schematic data stays
-inventory-only (see the Overview tab) -- no real parser for either
-exists yet (see Future Work). **Technology**/**Cells**/**Simulation**
-are the pattern a future sub-tab would repeat once a real parser
-exists for it.
+data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
+Models** -- real `.model`/`.subckt` statements; **xschem Symbols** --
+a real symbol's own device-attribute block and real pin list; both
+read-only), and **Settings** (project-level settings -- not any one
+tool's PDK content -- **General** and **Tools** as sub-tabs). Qucs-S
+schematic data stays inventory-only (see the Overview tab) -- its own
+real `.sym` format is a genuinely different, unrelated tag syntax from
+xschem's (`<PortSym .../>`, no real port *names*, just position/type),
+so parsing it isn't a quick reuse of the xschem parser -- no real
+parser exists yet (see Future Work). **Technology**/**Cells**/
+**Simulation** are the pattern a future sub-tab would repeat once a
+real parser exists for it.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
@@ -383,6 +387,42 @@ highlighted straight to that cell's real line range within its
   carry 370+ real parameters. Read-only -- no editor exists for
   ngspice model data. Verified for real, driven: switching files
   reloads both trees with the correct real row counts.
+- **`openpdkcreator/ihp/xschem.py`** -- a real, bounded xschem `.sym`
+  symbol parser, hand-verified against all 202 real, downloaded
+  symbols. A real symbol is a flat sequence of top-level `TAG
+  {content}` primitives; the real device-attribute block (`K { ... }`)
+  and real pin list (`B ... {name=... dir=...}` primitives) are
+  extracted in full, the symbol's own real drawing geometry
+  (line/arc/text primitives) deliberately not parsed or rendered --
+  the same "structure yes, graphics no" scope as `ihp/lef.py`'s own
+  PORT rect-count-only precedent. Two real structural complications
+  found and handled, not assumed: a real block's own matching closing
+  `}` needs a quote-aware, brace-depth-aware scan, not a naive
+  first-`}` search -- a real, embedded, *escaped* brace inside a real
+  quoted Tcl expression (`ptap1.sym`'s own `format="tcleval(...[ev
+  \{...\}]...)"`) broke a first-draft naive version; a real `B`
+  primitive's own property block can itself span multiple physical
+  lines (confirmed real in `inductor.sym`). Not every real `B`
+  primitive is a real pin -- four real, plain decorative boxes with no
+  `name=`/`dir=` properties at all are correctly skipped, not a gap.
+  The real `K` block's own `type=` field (`capacitor`/`primitive`/
+  `nmos`/`subcircuit`/...) is exposed directly; its own real
+  `template="key=value ..."` sub-value is parsed one level deeper;
+  every other real `K`-field varies per device kind (confirmed:
+  `cap_cmim.sym` and `sg13g2_a21o_1.sym` share almost no field names)
+  and is kept raw, the same "don't guess further semantics" discipline
+  `ihp/magic_tech.py`'s own `ComposeStatement` uses. Verified for real:
+  374 real pins extracted across all 202 real symbols (378 real `B`
+  lines minus the 4 real non-pin decorative boxes), field-by-field
+  spot-checked against the source text for a simple two-pin symbol, a
+  four-pin digital stdcell symbol, the escaped-brace file, and the
+  multi-line pin-block file.
+- **`openpdkcreator/gui/xschem_view.py`** -- the **Simulation > xschem
+  Symbols** tab (`XschemView`), the same file-picker + Treeview shape
+  as `spice_models_view.py`. Two sub-tabs, **Device** (type +
+  template params + raw fields) and **Pins** (name/direction).
+  Read-only. Verified for real, driven: switching files reloads both
+  trees with the correct real row counts.
 - **`openpdkcreator/gui/pin_editor.py`** -- `PinEditor`, a real macro
   pin list + New/Delete Pin + a Name/Direction/Use form, the same
   commit-on-switch pattern `LayersView`/`RulesView` already use.
@@ -1041,14 +1081,18 @@ models, ...), not just read/display layers. Concretely, still open:
   registration (no single-flag KLayout switch for that was
   found/verified). Both fall back to a bare, unconfigured launch if
   the real file isn't there yet (`LaunchGuidance.requires_path`).
-- The **Simulation** top-level GUI group now exists with its first
-  real sub-tab (**ngspice Models** -- `ihp/spice_models.py`, real
-  `.model`/`.subckt` extraction); xschem/Qucs-S schematic data stays
-  inventory-only (see the Overview tab), no real parser for either
-  exists yet -- more Simulation sub-tabs would repeat the same
-  file-picker/Treeview pattern once one does. ngspice's own real
-  `.LIB name ... .ENDL` PVT-corner blocks (a real `.param NAME = value`
-  list per corner) are also real, separate future work.
+- The **Simulation** top-level GUI group now has two real sub-tabs --
+  **ngspice Models** (`ihp/spice_models.py`, real `.model`/`.subckt`
+  extraction) and **xschem Symbols** (`ihp/xschem.py`, real symbol
+  device-attribute/pin-list extraction). Qucs-S schematic data stays
+  inventory-only (see the Overview tab) -- its own real `.sym` format
+  is a genuinely different, unrelated tag syntax from xschem's
+  (`<PortSym .../>`, no real port names, just position/type/angle),
+  so extending the xschem parser to it isn't a safe reuse; a real,
+  separate parsing effort. xschem's own real schematic (`.sch`) files
+  -- as opposed to `.sym` symbols -- and ngspice's own real `.LIB
+  name ... .ENDL` PVT-corner blocks (a real `.param NAME = value` list
+  per corner) are also real, separate future work.
 - **Copy-vs-share with `OpenPDKCreator`, revisited and re-confirmed**:
   diffed every genuinely-copied file against `OpenPDKCreator`'s own
   current originals rather than assuming. The core data shapes

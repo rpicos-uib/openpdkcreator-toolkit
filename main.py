@@ -97,6 +97,7 @@ from openpdkcreator.ihp import netlist as netlist_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
 from openpdkcreator.ihp import spice_models as spice_models_mod
 from openpdkcreator.ihp import verilog as verilog_mod
+from openpdkcreator.ihp import xschem as xschem_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
 
@@ -238,6 +239,30 @@ def cmd_ngspice(pdk_root: Path) -> int:
         print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
 
     print(f"\n{len(lib_files)} real .lib file(s): {total_models} model(s), {total_subckts} subckt(s) total.")
+    return 0
+
+
+def cmd_xschem(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    sym_files = xschem_mod.find_sym_files(pdk_root)
+    if not sym_files:
+        print(f"No .sym files found under {pdk_root}/libs.tech/xschem/", file=sys.stderr)
+        return 2
+
+    total_pins = 0
+    by_type: dict[str, int] = {}
+    for path in sym_files:
+        sym = xschem_mod.parse_sym_file(path)
+        total_pins += len(sym.pins)
+        by_type[sym.device_type] = by_type.get(sym.device_type, 0) + 1
+        pin_text = ", ".join(f"{p.name}:{p.direction}" for p in sym.pins)
+        print(f"{path.relative_to(pdk_root)}: type={sym.device_type or '(none)'}  pins=[{pin_text}]")
+
+    print(f"\n{len(sym_files)} real .sym file(s): {total_pins} real pin(s) total.")
+    print("By device type: " + ", ".join(f"{t or '(none)'}:{n}" for t, n in sorted(by_type.items())))
     return 0
 
 
@@ -629,6 +654,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
     sub.add_parser("ngspice", help="Parse real ngspice .lib model cards: .model/.subckt statements.")
+    sub.add_parser("xschem", help="Parse real xschem .sym symbols: device type + pin list.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
     cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
@@ -661,6 +687,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_lef(args.pdk_root.resolve())
     if args.command == "ngspice":
         return cmd_ngspice(args.pdk_root.resolve())
+    if args.command == "xschem":
+        return cmd_xschem(args.pdk_root.resolve())
     if args.command == "drc":
         return cmd_drc(args.pdk_root.resolve())
     if args.command == "cells":
