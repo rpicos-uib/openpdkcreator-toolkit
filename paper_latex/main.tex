@@ -1,0 +1,411 @@
+\documentclass[a4paper,11pt]{article}
+
+% ---------------------------------------------------------------------
+% openPDKcreator -- technical report. Plain article class (this is a
+% software-tool writeup grounded in one real, downloaded PDK, not a
+% novel research result), A4, single file for easy Overleaf import.
+% Do not compile locally -- imported into Overleaf and compiled there.
+% ---------------------------------------------------------------------
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  backgroundcolor=\color{gray!8},
+}
+
+\title{openPDKcreator: A General-Purpose Toolkit for Reading, Editing,\\
+and Round-Trip Exporting Process Design Kits}
+\author{Rodrigo Picos\\
+\small Electronic Technology, Department of Industrial Engineering and Construction,\\
+\small Universitat de les Illes Balears, Palma, Spain\\
+\small \href{mailto:rpicosg@gmail.com}{rpicosg@gmail.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Process Design Kits (PDKs) bundle a foundry's technology data --
+layer definitions, design rules, device models, standard-cell views,
+and tool-specific configuration -- into a large, heterogeneous tree of
+proprietary and semi-standard file formats. Existing open-source PDK
+tooling either targets one specific tool's native format in isolation
+(a DRC deck, a LEF file, a Liberty library) or treats the PDK as an
+opaque blob to be consumed, not edited. \textbf{openPDKcreator} is a
+general-purpose toolkit that reads, cross-references, edits, and
+losslessly re-exports a real, complete, open-source PDK --
+IHP's SG13G2 130\,nm process, released under the open\_pdks
+convention -- across all of its native tool formats at once: KLayout
+layer properties, Magic technology files, LEF, DRC decks, Liberty
+timing libraries, GDS structural summaries, CDL/SPICE/Verilog
+netlists, ngspice model cards, and xschem symbols. Every editable
+domain has a verified, byte-identical write-back path, checked both
+per-file and via a whole-PDK, two-generation round-trip export
+covering all 5{,}345 real files (744\,MB) with zero structural or
+byte-level drift. The toolkit also supports linking user-authored
+Verilog/Verilog-A behavioral models into the same cell-centric view
+that aggregates a cell's native LEF/CDL/SPICE/Verilog/Liberty/GDS
+representations. This report describes the toolkit's architecture,
+the real-data verification discipline used throughout its
+development, its current coverage across each native format, and the
+work still open toward the stated end goal of authoring PDK content
+from scratch, not just editing an existing one.
+\end{abstract}
+
+\tableofcontents
+
+\section{Introduction}
+
+A PDK is not one file format but a federation of them: a foundry
+ships design-rule decks for whichever verification tool it targets
+(Magic, KLayout, Calibre, \ldots), device models for whichever
+simulator its customers use (ngspice, Xyce, \ldots), standard-cell
+views in whatever a digital flow expects (LEF/Liberty/Verilog), and
+schematic symbols for whatever schematic capture tool a designer
+prefers (xschem, Qucs-S, \ldots). Each of these formats predates the
+open-source EDA ecosystem that now consumes them, and each was
+designed around one tool's own needs, not a shared, general data
+model. The practical consequence is that most PDK tooling is
+narrowly scoped: a LEF parser reads LEF, a DRC-deck linter reads one
+tool's DRC syntax, and cross-referencing "what does this one cell
+look like across every one of these formats" is left to the human
+designer, manually opening each file in its own tool.
+
+\textbf{openPDKcreator} takes a different approach: one project, one
+data model per format, one cell-centric aggregation view across all
+of them, grounded end-to-end in a real, complete, publicly available
+PDK rather than synthetic or partial test fixtures. This report
+documents that project as it stands: what real formats it reads,
+what it can edit and losslessly write back, how that write-back
+fidelity was verified at full-PDK scale, and the still-open work
+toward the stated longer-term goal -- generating PDK content from
+scratch, not only reading and editing an existing one.
+
+\subsection{Why a real PDK, not fixtures}
+
+Every parser and writer in this project was built and verified
+directly against IHP's own downloaded SG13G2 data -- never a hand-written
+sample file standing in for the real format. This discipline
+surfaced real structural facts a synthetic fixture would not have:
+that a single Magic technology type's cross-section recipe can be
+split across multiple, textually distant blocks sharing one name
+(Section~\ref{sec:magic}); that some writers must regenerate a
+declaration line rather than patch it in place, because the original
+can wrap across multi-line continuations in ways that are unsafe to
+token-patch (Section~\ref{sec:netlist-writeback}); and that a naive
+trailing-newline normalization can silently mask a real byte-level
+bug in exactly the files whose test coverage most needed to catch it
+(Section~\ref{sec:verification}).
+
+\subsection{Relationship to open\_pdks}
+
+IHP's own README states plainly that its PDK ``already comes
+pre-built'' in the format described by the \texttt{open\_pdks}
+project (\url{https://github.com/RTimothyEdwards/open_pdks}) --
+direct, authoritative confirmation that this project's target
+directory layout
+(\texttt{\{libs.doc,libs.qa,libs.ref,libs.tech\}}, with
+\texttt{libs.ref/<family>/\{cdl,gds,lef,lib,mag,spice,verilog,\allowbreak
+xschem\}} and \texttt{libs.tech/<tool>/}) is the real, standard
+convention, not a project-specific guess. One concrete divergence was
+found and is documented rather than silently normalized away: the
+canonical \texttt{open\_pdks} example library name carries an
+explicit foundry tag segment (\texttt{<family>\_fd\_<type>}), while
+IHP's real library names omit it
+(\texttt{sg13g2\_pr}/\texttt{sg13g2\_io}/\texttt{sg13g2\_sram}/\allowbreak
+\texttt{sg13g2\_stdcell}).
+
+\section{Architecture}
+
+\subsection{Directory layout and data flow}
+
+The tool is organized around three layers: \texttt{ihp/} (one module
+per native format, each exposing a real, typed parse of that
+format's structured content), \texttt{gui/} (a Tk application whose
+tabs mirror the \texttt{ihp/} module boundaries, grouped by what they
+represent rather than left flat), and \texttt{export.py}/\texttt{main.py}
+(CLI commands and a write-back export path that reads the same
+parsed, possibly-edited in-memory objects the GUI edits and
+serializes them back to their native format).
+
+A downloaded copy of the real PDK lives under \texttt{data/}, fetched
+via a depth-1, blob-filtered, sparse \texttt{git clone} of
+IHP's public repository that deliberately excludes its own git
+submodules (separate third-party repositories for digital synthesis
+and EM solvers, unrelated to PDK structure). This directory is
+gitignored -- the toolkit's own code is what is version-controlled,
+not a redistribution of IHP's data.
+
+\subsection{Cell-centric aggregation}
+
+The \textbf{By Cell} view (\texttt{ihp/cells.py}, \texttt{gui/cell\_hub\_view.py})
+is the toolkit's central cross-reference: for one real cell name, it
+aggregates whichever of LEF, CDL, SPICE, Verilog, Liberty, and GDS
+representations exist for it, scanning every real file under each
+view directory rather than assuming one fixed file-per-cell
+convention -- a necessary generalization, since IHP's own families
+use two different real organizations for the same view kind
+(\texttt{sg13g2\_io}/\texttt{sg13g2\_stdcell} pack every cell for a
+view into one combined file; \texttt{sg13g2\_sram} ships one real
+file per hard macro). All parsing runs through one shared,
+application-owned cache, so an edit made from one tab (e.g.\ a LEF
+pin edited via \textbf{By Cell}) is immediately visible, as the exact
+same in-memory object, from every other tab that shows the same
+data -- confirmed by object-identity checks, not just value equality,
+in the project's own regression tests.
+
+\section{Native format coverage}
+
+\subsection{KLayout layers}
+
+\texttt{ihp/layers.py} parses KLayout's \texttt{.lyp} layer-properties
+XML via a hand-rolled, nesting-depth-aware text scanner (rather than
+\texttt{ElementTree}) specifically so that each real layer's own
+source line range can be tracked -- a prerequisite for the surgical,
+line-range write-back in \texttt{ihp/layers\_writer.py}, verified
+against the real, 377-layer \texttt{sg13g2.lyp}. Only the fields that
+are genuinely real, patchable properties (name, GDS layer/datatype,
+frame/fill color) are ever written back; everything else is
+project-only metadata that is never round-tripped into the real file.
+
+\subsection{Magic technology files}
+\label{sec:magic}
+
+\texttt{ihp/magic\_tech.py} parses Magic's \texttt{.tech} format,
+whose sections range from cleanly tabular
+(\texttt{tech}/\texttt{version}/\texttt{planes}/\texttt{types}/\allowbreak
+\texttt{contact}/\texttt{aliases}/\texttt{styles}/\texttt{compose}/\texttt{connect},
+parsed in full) to small mini-rule-languages of their own
+(\texttt{cifoutput}, \texttt{cifinput}, \texttt{drc}, \texttt{extract}).
+For each of the latter, one or more reliable, uniformly-shaped
+statement kinds are extracted in full rather than attempting a
+general-purpose grammar for the whole section:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{cifoutput}: every real \texttt{layer NAME \ldots calma L D}
+    recipe -- a genuine Magic-type-name to GDS-layer/datatype mapping,
+    cross-referenced against the KLayout \texttt{.lyp} layers in
+    \texttt{ihp/reconcile.py} (100/377 real GDS layer/datatype pairs
+    recognized by both independent descriptions of the same
+    fabricated stream; the remaining 277 \texttt{.lyp}-only pairs are
+    annotation/QA datatypes Magic's own fabrication output has no
+    reason to paint -- a sensible finding, not a parsing gap).
+  \item \textbf{cifinput}: standalone \texttt{ignore}/\texttt{calma}
+    hints (23 and 133 real entries respectively), plus the section's
+    own real geometry-boolean recipe blocks
+    (\texttt{layer}/\texttt{templayer NAME <base> \ldots} followed by
+    real \texttt{and}/\texttt{and-not}/\texttt{or}/\texttt{grow}/\allowbreak
+    \texttt{shrink}/\texttt{labels}/\ldots op lines), recorded
+    verbatim rather than evaluated. A real structural fact was
+    confirmed here: one Magic type's own recipe can be split across
+    multiple, textually distant blocks sharing the same name (e.g.\
+    the real \texttt{nwell} type has two separate
+    \texttt{layer nwell \ldots} blocks with two different base
+    layers), mirroring a pattern already handled for
+    \texttt{cifoutput} -- 188 real, unique recipe names were found
+    across 211 real block occurrences once merged correctly.
+  \item \textbf{drc}: the dominant tabular kinds --
+    \texttt{width}/\texttt{spacing}/\texttt{maxwidth} (192 real
+    statements) and \texttt{angles} (17 real statements, kept in a
+    separate dataclass since a degree count is not a length and must
+    not receive the same micron-conversion factor). Real values are
+    converted to microns via an empirically confirmed
+    \texttt{/1000} factor, cross-checked against three independently
+    extracted KLayout DRC rules sharing the same rule ID.
+  \item \textbf{extract}: per-layer sheet resistance and plane
+    ordering, the section's own parasitic-capacitance coefficients
+    (506 real lines), every real \texttt{device} statement (50 real
+    entries), and its \texttt{contact}/\texttt{devresist}/\texttt{antenna}/\allowbreak
+    \texttt{disconnect}/\texttt{substrate} statements (41 real lines
+    combined) -- small and heterogeneous enough to share one generic,
+    raw statement dataclass rather than five near-identical ones.
+\end{itemize}
+
+\subsection{LEF}
+
+\texttt{ihp/lef.py} parses tech-LEF layers, \texttt{SITE}s, and real
+\texttt{MACRO}s (class, size, site, symmetry) with their
+\texttt{PIN}s (direction, use, port layers and rectangle counts) and
+\texttt{OBS} layers, hand-verified against all 32 of IHP's real
+downloaded \texttt{.lef} files (a tech LEF, two combined-family LEFs,
+and 28 real SRAM hard-macro LEFs). Real \texttt{VIA}/\texttt{ViaRULE}
+via-stack geometry is also parsed and shown read-only. Pin data is
+fully editable in both the LEF tab and the By Cell tab, through the
+shared object cache described above, with a verified, byte-identical
+write-back path (\texttt{ihp/lef\_writer.py}).
+
+\subsection{KLayout DRC decks}
+
+\texttt{ihp/drc.py} extracts two reliable patterns from the real
+DRC-deck Ruby DSL --
+\texttt{width()}/\texttt{space()}/\texttt{sep()} and
+\texttt{.enclosed()} results assigned to a variable and later fed to
+a same-variable \texttt{.output()} call, cross-referenced against a
+real JSON values file -- yielding 75 real rules. The remaining 86
+real constructs are honestly reported as skipped rather than
+guessed: they are multi-step composite or derived checks (angle and
+acute-corner checks, antenna-ratio accumulation, density windows)
+with no single reliable, generic extraction pattern, confirmed by
+tallying every real method-chain shape used across them deck-wide and
+finding no one shape dominating the way the four extracted patterns
+do.
+
+\subsection{Liberty timing libraries}
+
+\texttt{ihp/liberty.py} extracts real per-pin and per-timing-arc
+scalar data (direction, capacitance, function per pin;
+related\_pin/timing\_type/timing\_sense/when per arc) across all 97
+real \texttt{.lib} files and 700 real cells, editable through a
+two-level dialog (Pins, then Timing Arcs for the selected pin). The
+real, nested lookup-table sub-groups
+(\texttt{cell\_rise}/\texttt{cell\_fall}/\texttt{rise\_transition}/\allowbreak
+\texttt{fall\_transition}, each carrying its own multi-dimensional
+\texttt{index\_1}/\texttt{index\_2}/\texttt{values} data) are
+deliberately left unparsed, the same bounded-scope precedent used
+throughout the project: a domain is either fully, verifiably
+supported, or honestly reported as not yet attempted -- never
+partially guessed.
+
+\subsection{GDS}
+
+\texttt{ihp/gds.py} provides real structural summaries -- bounding
+box and per-layer shape counts, not full polygon geometry -- via
+KLayout's own Python API (\texttt{klayout.db}), lazily imported so
+every other command in the toolkit still runs without it installed.
+Against \texttt{sg13g2\_stdcell.gds}, 84 real structures are found,
+matching LEF's own 84 macros exactly; the largest real file
+(\texttt{sg13g2\_io.gds}, 69\,MB) parses in under 0.1\,s.
+
+\subsection{Netlists, digital Verilog, and ngspice/xschem}
+
+\texttt{ihp/netlist.py} and \texttt{ihp/verilog.py} extract real CDL/SPICE
+subcircuits and Verilog modules with real per-port direction (from a
+real CDL \texttt{*.PININFO} comment or real Verilog
+\texttt{input}/\texttt{output}/\texttt{inout} declarations), editable
+via a shared port editor. \texttt{ihp/spice\_models.py} extracts real
+ngspice \texttt{.model}/\texttt{.subckt} statements and, in a later
+extension, real \texttt{.LIB NAME \ldots .ENDL} PVT-corner blocks
+(their own \texttt{.param} overrides and \texttt{.include}
+statements, kept distinct from unrelated \texttt{.param} lines living
+inside a \texttt{.subckt} body). \texttt{ihp/xschem.py} extracts a
+real symbol's device-attribute block and real pin list from
+xschem's \texttt{.sym} format, via a quote-aware, brace-depth-tracking
+scanner needed because real content can contain escaped braces inside
+quoted Tcl expressions -- 374 real pins were found across 202 real
+symbols.
+
+\section{Write-back and verification methodology}
+\label{sec:verification}
+
+Every currently structured-editable domain -- LEF pins, DRC rules,
+Magic types, CDL/SPICE/Verilog ports, Liberty pin/timing data, and
+KLayout layers -- has a native write-back path that is verified two
+ways: first, that exporting with \emph{no edits} reproduces the real
+original file byte-for-byte, across every real file in the domain
+(not a sample); second, that a real, driven edit round-trips
+correctly (survives export, re-import, and a simulated application
+relaunch).
+
+\subsection{Netlist/Verilog write-back}
+\label{sec:netlist-writeback}
+
+Unlike the other writers, CDL/SPICE/Verilog port write-back
+(\texttt{ihp/netlist\_writer.py}, \texttt{ihp/verilog\_writer.py}) has
+no single stable per-entry line range to patch in place: a real
+\texttt{.SUBCKT} header can wrap across \texttt{+}-continuations in
+ways that are unsafe to token-patch. Both writers instead compare
+each cell or module's \emph{current} port list against a fresh
+re-parse of the same real original file -- unchanged, the original
+header text is kept byte-for-byte, wrapping included; changed, it is
+regenerated cleanly as a single line, with, for CDL, a fresh
+\texttt{*.PININFO} line inserted where none existed before.
+
+\subsection{Whole-PDK, two-generation round-trip export}
+
+Beyond per-domain verification, the toolkit's \texttt{export-full}
+command exports a complete, standalone copy of the entire real PDK
+tree, and this is chained twice -- export the real original to
+generation A, then export A to generation B -- with a structural,
+symlink-aware \texttt{diff -rq --no-dereference} comparison across
+all three trees (original vs.\ A, A vs.\ B, original vs.\ B). This
+caught two real bugs invisible to narrower, per-file tests: a naive
+directory-copy step that silently dereferenced a real symlink
+(\texttt{libs.tech/ngspice/install.py -> ../xschem/install.py}) into
+a plain file copy, and a shared newline-handling bug in which every
+writer unconditionally appended a trailing newline, silently
+changing real byte content in the 21 real files that do not end with
+one -- invisible to each writer's own narrower test because that
+test's own comparison logic happened to normalize away the exact
+same discrepancy it should have caught. Both were found, root-caused
+against the real data, and fixed once, in one shared location, rather
+than patched separately per writer.
+
+As of this report, a full two-generation round-trip across the
+complete real IHP SG13G2 tree -- 5{,}345 real files and symlinks,
+744\,MB -- produces \emph{zero} differences in any of the three
+pairwise comparisons.
+
+\section{User-defined behavioral models}
+
+Beyond editing the PDK's own native content, the toolkit supports
+attaching user-authored Verilog or Verilog-A behavioral models to
+real (or entirely new) cells, so a designer's own compact models can
+be represented in the same cell-centric view as the foundry's native
+data. Verilog-A's real \texttt{module NAME(port, \ldots);\ \ldots\ endmodule}
+header and port syntax is identical to plain digital Verilog's
+(confirmed against IHP's own real \texttt{mosvar.va}), so the
+existing Verilog module parser is reused directly for both file
+types, with no new grammar required.
+
+Two linking mechanisms are supported: automatic name-matching (a
+module named identically to a real cell attaches to it with no
+configuration, the same convention every other native view already
+uses for cell aggregation), and an explicit, persisted link record
+mapping a specific module in a specific file to a specific cell name
+-- including a wholly new, user-defined cell name not present in the
+real PDK at all, which still receives its own aggregated cell-view
+entry. This lets a designer author and browse an entirely new
+compact model alongside the foundry's own cells, without first having
+to fabricate a placeholder native view for it.
+
+\section{Discussion and future work}
+
+The toolkit's current scope is deliberately bounded: it reads,
+cross-references, and edits an \emph{existing} real PDK's structured
+content, with verified round-trip fidelity, but does not yet generate
+new PDK content from scratch (a novel technology file, a new DRC
+deck, a new device model) -- the stated longer-term goal. Concretely
+still open: the much larger, structurally irregular remainder of
+Magic's own \texttt{drc} section (variable argument counts, nested
+layer-boolean expressions, and one genuinely non-check, conditional-scoping
+construct); Liberty's own nested lookup-table sub-groups; the
+harder, composite/derived KLayout DRC constructs with no single
+reliable extraction pattern; and Qucs-S's own real schematic-symbol
+format, which uses a genuinely different, unrelated tag syntax from
+xschem's and would need its own, separate parser rather than a reuse
+of the existing one.
+
+\section{Conclusion}
+
+openPDKcreator demonstrates that a general, cross-format PDK toolkit
+is practical to build and verify against real, complete, open-source
+foundry data -- not merely against synthetic fixtures -- and that
+doing so surfaces real structural facts and real bugs that narrower,
+per-format tooling and per-file testing would not have caught. Every
+currently editable domain has a write-back path verified
+byte-identical against the real, complete IHP SG13G2 PDK, both
+per-file and at whole-tree, two-generation round-trip scale, with
+zero structural drift found across 5{,}345 real files.
+
+\end{document}
