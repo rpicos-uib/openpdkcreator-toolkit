@@ -73,16 +73,17 @@ sub-tabs, one per tool that defines it), **Cells** (real cell/macro
 data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem** -- a
 **Symbols** sub-tab (a real symbol's own device-attribute block,
-read-only, and an **editable** real pin list) and a **Schematics**
-sub-tab (**editable** real component instances -- name, and a real
-pin instance's own net label -- plus a real, read-only Pins summary
-and **editable** real wire labels); **Qucs-S**
--- a **Components** sub-tab (real device definitions: models,
-read-only; **editable** real Parameter default_value/equation) and a
-**Symbols** sub-tab (**editable** real drawn-geometry ports -- no real
-port names, just position/type/angle -- a genuinely different tag
-syntax from xschem's own `.sym`, confirmed, not a quick reuse);
-**User Models** -- user-authored Verilog/Verilog-A
+read-only; an **editable** real pin list; and a real, interactive
+**Graphical** canvas) and a **Schematics** sub-tab (**editable** real
+component instances -- name, and a real pin instance's own net label;
+a real, read-only Pins summary; **editable** real wire labels; and its
+own real **Graphical** canvas, which also supports placing brand-new
+instances/wires); **Qucs-S** -- a **Components** sub-tab (real device
+definitions: models, read-only; **editable** real Parameter
+default_value/equation) and a **Symbols** sub-tab (**editable** real
+drawn-geometry ports -- no real port names, just position/type/angle,
+a genuinely different tag syntax from xschem's own `.sym` -- plus its
+own real **Graphical** canvas); **User Models** -- user-authored Verilog/Verilog-A
 modules under `user_models/`, editable link to a real cell), and
 **Settings** (project-level settings -- not any one tool's PDK content
 -- **General** and **Tools** as sub-tabs). **Technology**/**Cells**/
@@ -1358,6 +1359,80 @@ models, ...), not just read/display layers. Concretely, still open:
   no file written anywhere), and all four domains' Create actions each
   produce a real file that re-parses cleanly and immediately accepts
   further edits through the existing editors.
+- **A real, shared, interactive graphical editor -- not just tables --
+  now covers every real drawn-geometry domain: xschem Symbols,
+  xschem Schematics, and Qucs-S Symbols.** One canvas widget
+  (`gui/geometry_canvas.py`) is reused across all three (Qucs-S
+  Components has no geometry of its own to edit) via a small,
+  per-domain adapter layer (`gui/geometry_adapters.py`) that's the
+  *only* place any real file format's own field names are known --
+  the canvas itself works with one shared, format-agnostic
+  `GeometryItem` shape.
+
+  **Real geometry parsing came first**, extending every domain's own
+  real parser to capture drawing primitives this project had
+  deliberately left unparsed until now ("structure, not graphics," the
+  precedent this very feature request superseded): `ihp/xschem.py`
+  gained real `XschemLine`/`XschemArc`/`XschemText`/`XschemBox`
+  (plus real pin *geometry*, not just name/direction) -- verified
+  against ground truth exactly (1,222 lines/145 arcs/851 texts/378
+  `B` primitives, matching a real, hand-verified inverter symbol's own
+  5 lines/1 arc/4 texts/2 pins one-for-one). `ihp/xschem_sch.py`
+  gained the same four shape kinds for a schematic's own real embedded
+  decorative geometry (66 lines/0 arcs/112 texts/87 boxes, confirmed
+  once `start_page.sch` -- the same real top-level-exception file
+  found earlier -- was included in the ground truth). `ihp/qucs_sym.py`
+  gained real `QucsLine`/`QucsArc`/`QucsText` (253/8/23 real
+  primitives, summing with the existing 66 real ports to exactly the
+  already-known 350 real primitive total).
+
+  **Real write-back for all of it**, extending every existing writer
+  rather than adding new ones: `ihp/xschem_writer.py` now patches pin
+  *position* (previously name/direction only) and every new shape
+  kind, using the same real "unchanged -> keep the original line
+  verbatim" discipline throughout, since a real pin/text primitive can
+  carry real properties beyond what's modeled (`goto=`/`propag=`/
+  `sim_pinnumber=`/`layer=`, all confirmed real) that must survive a
+  position-only edit untouched. `ihp/xschem_sch_writer.py` gained
+  instance position/rotation/flip write-back and, newly, **real
+  New Instance/New Wire support** -- deliberately *not* offered by
+  this project's own first-pass Schematics editor (no sensible way to
+  choose a real position), now real and safe because the graphical
+  canvas *is* that sensible way. `ihp/qucs_sym_writer.py` gained
+  Line/Arc/Text write-back with the same real, per-attribute
+  column-alignment preservation already established for ports.
+  Verified byte-identical against every real file in all three domains
+  with no edits, plus real add/move/delete round-trips for every new
+  shape kind including new-instance placement referencing a real
+  symbol and new-wire drawing.
+
+  **The canvas itself** (`gui/geometry_canvas.py`): a **Select** tool
+  (click to select/drag to move any real shape, `Delete`/`BackSpace`
+  to remove it) and **Line**/**Arc**/**Text** tools (click, or
+  click-drag for Line/Arc, to place a real new shape -- Arc defaults
+  to a real full circle, adjustable afterward). Schematics additionally
+  get **Instance** (pick a real `.sym` from the whole downloaded
+  symbol library via a real, filterable picker dialog, then click a
+  position) and **Wire** (click two points) tools. Every edit mutates
+  the exact same real, live domain object every other tab already
+  shares (the same `App`-owned per-file cache discipline as
+  everywhere else) -- a canvas drag/delete immediately updates the
+  matching Pins/Instances/Wires table too, confirmed for real, driven
+  in the container (deleting a pin on the canvas removes it from the
+  Pins table; deleting/moving a wire updates the Wires table's own
+  position columns). Verified end-to-end, driven, in the container:
+  real scene population matches exact real shape counts for a
+  hand-verified real inverter (symbol *and* schematic), dragging a
+  real pin/port moves the real underlying object, drawing a new real
+  Line/Arc/Text/Wire adds a real shape, placing a new real Instance
+  (with a mocked symbol-picker dialog) adds a real, correctly-
+  positioned `XschemInstance` referencing a real symbol, deleting a
+  selected real shape removes it and keeps every table in sync, and a
+  real write-back export afterward reflects every one of these edits
+  correctly -- plus the existing `test_by_cell_and_settings.py`/
+  `test_magic_new_tabs.py` regressions and a full, complete-PDK,
+  two-generation `export-full` smoking-gun round-trip still producing
+  zero differences.
 - **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
   symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
   all 100 real, downloaded `.sch` files (99 real, one level under a

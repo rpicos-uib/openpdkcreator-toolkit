@@ -6,31 +6,47 @@ no small, fixed set of "the real ones" here either, in either domain):
 
 **Symbols**: all 202 real, downloaded ``libs.tech/xschem/*/*.sym``
 files. **Device** (the real ``K``-block's own
-``type``/``template_params``/``raw_fields``, read-only) and **Pins**
-(the real ``B ... {name=... dir=...}`` pin list) sub-tabs -- **Pins is
-editable**, reusing ``port_editor.PortEditor`` directly (it already
-duck-types over ``.name``/``.direction``, exactly ``XschemPin``'s own
-real shape), with real write-back via ``ihp/xschem_writer.py``
-(``File > Export Edited xschem Symbols``/``main.py
-export-xschem-sym``) -- pin geometry/every other real ``B`` property
-stays untouched, see that writer's own docstring for why.
+``type``/``template_params``/``raw_fields``, read-only), **Pins**
+(the real ``B ... {name=... dir=...}`` pin list -- editable, reusing
+``port_editor.PortEditor`` directly), and **Graphical** (a real,
+interactive canvas -- see below) sub-tabs.
 
 **Schematics**: all 100 real, downloaded ``libs.tech/xschem/`` ``.sch``
-files. **Instances** (every real ``C {...}`` component; **editable**:
-real ``name=``, and, for a real pin instance, its real net-label --
-symbol reference/position/rotation/flip/PDK-vs-external resolution
-stay read-only display columns, since this project has no schematic
-geometry editor) and **Wires** (every real ``N x1 y1 x2 y2
-{lab=...}`` segment; **editable**: real ``lab=`` only). Both support
-**Delete** but not "New" -- a real instance/wire needs a real symbol
-reference or real coordinates to mean anything, and synthesizing a
-fake default would misrepresent a real schematic; see
-``ihp/xschem_sch_writer.py``'s own docstring. Real write-back via that
-writer (``File > Export Edited xschem Schematics``/``main.py
-export-xschem-sch``), including the real, narrow class of entries/
-files it safely refuses to touch (a real, confirmed quote-scanning
-ambiguity in 27 real ``sg13g2_tests_xyce``-family files -- see that
-writer's own docstring).
+files. **Instances** (every real ``C {...}`` component -- editable:
+real ``name=``, and, for a real pin instance, its real net-label;
+position/rotation/flip stay read-only *here*, moved via the
+Graphical tab instead), **Pins** (a real, read-only summary of just
+the schematic's own exposed pin instances), **Wires** (every real
+``N x1 y1 x2 y2 {lab=...}`` segment -- editable: real ``lab=``), and
+**Graphical** sub-tabs.
+
+**Graphical** (both Symbols and Schematics; Qucs-S Symbols has its own
+real equivalent, see ``gui/qucs_view.py``): a real, interactive
+``geometry_canvas.GeometryCanvas`` rendering every real drawn
+primitive (lines/arcs/text/pins-or-ports, plus, for Schematics,
+instances/wires) to real scale. **Select** tool: click to select/drag
+to move any real shape, ``Delete``/``BackSpace`` to remove it.
+**Line**/**Arc**/**Text** tools place a real new shape by clicking (or
+click-dragging, for Line/Arc). Schematics additionally get
+**Instance** (pick a real ``.sym`` from the whole downloaded symbol
+library, then click a position) and **Wire** (click two points) tools
+-- unlike this project's own first-pass Schematics editor, "New
+Instance/Wire" is now real and supported, since the canvas gives a
+real way to choose *where* one actually goes, the real concern that
+originally ruled it out. Every canvas edit mutates the exact same
+real, live domain object every other tab/writer already shares (see
+``gui/geometry_adapters.py``'s own docstring) -- a drag/draw/delete is
+immediately reflected in the matching table (Pins/Instances/Wires) and
+in a real write-back export, with no separate "commit" step.
+
+Real write-back for everything above -- geometry included -- via
+``ihp/xschem_writer.py``/``ihp/xschem_sch_writer.py`` (``File >
+Export Edited xschem Symbols``/``Schematics``, ``main.py
+export-xschem-sym``/``export-xschem-sch``), including the real,
+narrow class of Schematics entries/files that writer safely refuses
+to touch (a real, confirmed quote-scanning ambiguity in 27 real
+``sg13g2_tests_xyce``-family files -- see that writer's own
+docstring).
 
 Both sub-tabs share the parent ``App``'s own per-file cache
 (``App.get_parsed_xschem_symbol``/``get_parsed_xschem_schematic``), the
@@ -54,7 +70,9 @@ from tkinter import ttk
 
 from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
+from . import geometry_adapters
 from .file_picker_utils import handle_action, update_action_button
+from .geometry_canvas import GeometryCanvas
 from .port_editor import PortEditor
 
 _STEM_TO_DIRECTION = {"ipin": "in", "opin": "out", "iopin": "inout"}
@@ -128,6 +146,43 @@ class _SymbolsPane(ttk.Frame):
         )
         self.pins_editor.pack(fill="both", expand=True, padx=4, pady=4)
 
+        graphical_frame = ttk.Frame(sub)
+        sub.add(graphical_frame, text="Graphical")
+        self.canvas_view = GeometryCanvas(
+            graphical_frame,
+            on_new_line=self._on_new_line, on_new_arc=self._on_new_arc, on_new_text=self._on_new_text,
+            on_scene_changed=self._on_canvas_changed,
+        )
+        self.canvas_view.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def _on_new_line(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_xschem_line(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_arc(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_xschem_arc(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_text(self, x, y, content):
+        if self.current is not None:
+            geometry_adapters.new_xschem_text(self.current, x, y, content)
+            self._reload_canvas()
+
+    def _on_canvas_changed(self):
+        """A canvas delete can remove a real pin (the canvas' own
+        Select tool can select/delete a pin the same as any other real
+        shape) -- refresh the Pins table so it never shows a real pin
+        no longer in ``XschemSymbol.pins``. Position-only drags don't
+        need this (the Pins table shows no position column)."""
+        if self.current is not None:
+            self.pins_editor.set_ports(self.current.pins)
+
+    def _reload_canvas(self):
+        if self.current is not None:
+            self.canvas_view.set_scene(geometry_adapters.xschem_symbol_scene(self.current), auto_fit=False)
+
     def _update_action_button(self):
         update_action_button(self.action_button, self.pdk_root, self.file_var)
 
@@ -162,6 +217,7 @@ class _SymbolsPane(ttk.Frame):
             self.summary_var.set("No xschem .sym data loaded -- has ihp/fetch.py been run?")
             self.current = None
             self.pins_editor.set_ports(None)
+            self.canvas_view.set_scene(geometry_adapters.Scene())
             return
 
         self.current = self.app.get_parsed_xschem_symbol(path)
@@ -173,6 +229,7 @@ class _SymbolsPane(ttk.Frame):
         for key, value in symbol.raw_fields.items():
             self.device_tree.insert("", "end", values=(key, value))
         self.pins_editor.set_ports(symbol.pins)
+        self.canvas_view.set_scene(geometry_adapters.xschem_symbol_scene(symbol))
 
         self.summary_var.set(f"type:{symbol.device_type or '(none)'}  pins:{len(symbol.pins)}")
 
@@ -215,6 +272,82 @@ class _SchematicsPane(ttk.Frame):
         self._build_instances_tab(sub)
         self._build_pins_tab(sub)
         self._build_wires_tab(sub)
+        self._build_graphical_tab(sub)
+
+    def _build_graphical_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="Graphical")
+        self.canvas_view = GeometryCanvas(
+            frame,
+            on_new_line=self._on_new_line, on_new_arc=self._on_new_arc, on_new_text=self._on_new_text,
+            on_new_instance=self._on_new_instance, on_new_wire=self._on_new_wire,
+            on_scene_changed=self._on_canvas_changed, pick_symbol=self._pick_symbol,
+        )
+        self.canvas_view.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def _on_new_line(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_xschem_line(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_arc(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_xschem_arc(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_text(self, x, y, content):
+        if self.current is not None:
+            geometry_adapters.new_xschem_text(self.current, x, y, content)
+            self._reload_canvas()
+
+    def _on_new_wire(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_xschem_sch_wire(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+            self._refresh_wires_tree()
+
+    def _on_new_instance(self, x, y, symbol_ref):
+        if self.current is not None:
+            geometry_adapters.new_xschem_sch_instance(self.current, x, y, symbol_ref)
+            self._reload_canvas()
+            self._refresh_instances_tree()
+
+    def _pick_symbol(self) -> str | None:
+        return _pick_symbol_dialog(self, self.pdk_root)
+
+    def _on_canvas_changed(self):
+        """A canvas drag/delete mutates the real, shared
+        ``XschemSchematic`` object in place -- refresh the Instances/
+        Wires tables too, since (unlike Symbols' own Pins list) Wires
+        shows real position columns that a drag/delete can change."""
+        self._refresh_instances_tree()
+        self._refresh_wires_tree()
+
+    def _reload_canvas(self):
+        if self.current is not None:
+            self.canvas_view.set_scene(geometry_adapters.xschem_schematic_scene(self.current), auto_fit=False)
+
+    def _refresh_instances_tree(self):
+        for row in self.instances_tree.get_children():
+            self.instances_tree.delete(row)
+        self._instance_by_iid = {}
+        if self.current is None:
+            return
+        for inst in self.current.instances:
+            iid = self._iid(inst)
+            self._instance_by_iid[iid] = inst
+            self.instances_tree.insert("", "end", iid=iid, values=self._instance_row_values(inst))
+
+    def _refresh_wires_tree(self):
+        for row in self.wires_tree.get_children():
+            self.wires_tree.delete(row)
+        self._wire_by_iid = {}
+        if self.current is None:
+            return
+        for wire in self.current.wires:
+            iid = self._iid(wire)
+            self._wire_by_iid[iid] = wire
+            self.wires_tree.insert("", "end", iid=iid, values=self._wire_row_values(wire))
 
     def _build_instances_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -253,8 +386,8 @@ class _SchematicsPane(ttk.Frame):
 
         ttk.Label(
             right,
-            text="Symbol reference/position/rotation/flip stay read-only --\n"
-            "this project has no schematic geometry editor.",
+            text="Symbol reference/position/rotation/flip stay read-only\n"
+            "here -- drag an instance on the Graphical tab to move it.",
             foreground="#666", wraplength=260, justify="left",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
@@ -354,6 +487,7 @@ class _SchematicsPane(ttk.Frame):
             self.current = None
             self._load_instance_into_form(None)
             self._load_wire_into_form(None)
+            self.canvas_view.set_scene(geometry_adapters.Scene())
             return
 
         self.current = self.app.get_parsed_xschem_schematic(path)
@@ -373,6 +507,7 @@ class _SchematicsPane(ttk.Frame):
 
         self._load_instance_into_form(None)
         self._load_wire_into_form(None)
+        self.canvas_view.set_scene(geometry_adapters.xschem_schematic_scene(schematic))
 
         self.summary_var.set(
             f"instances:{len(schematic.instances)}  pins:{len(schematic.pin_instances)}  "
@@ -475,3 +610,54 @@ class _SchematicsPane(ttk.Frame):
         self.wires_tree.delete(selection[0])
         del self._wire_by_iid[selection[0]]
         self._load_wire_into_form(None)
+
+
+def _pick_symbol_dialog(parent: tk.Widget, pdk_root: Path) -> str | None:
+    """A real, minimal modal: pick one real ``.sym`` file (by its own
+    real relative path) from the whole downloaded xschem symbol
+    library -- used by the Schematics Graphical tab's own Instance
+    tool. Returns ``None`` if cancelled."""
+
+    files = sorted(str(p.relative_to(pdk_root)) for p in xschem_mod.find_sym_files(pdk_root))
+    dialog = tk.Toplevel(parent)
+    dialog.title("Pick a real symbol")
+    dialog.geometry("560x420")
+    dialog.transient(parent.winfo_toplevel())
+
+    ttk.Label(dialog, text="Real xschem .sym file to instantiate:").pack(anchor="w", padx=8, pady=(8, 4))
+    filter_var = tk.StringVar()
+    ttk.Entry(dialog, textvariable=filter_var).pack(fill="x", padx=8)
+
+    listbox = tk.Listbox(dialog)
+    listbox.pack(fill="both", expand=True, padx=8, pady=8)
+
+    def _populate(*_args):
+        listbox.delete(0, "end")
+        query = filter_var.get().lower()
+        for name in files:
+            if query in name.lower():
+                listbox.insert("end", name)
+
+    filter_var.trace_add("write", _populate)
+    _populate()
+
+    result: list[str | None] = [None]
+
+    def _ok():
+        selection = listbox.curselection()
+        if selection:
+            result[0] = listbox.get(selection[0])
+        dialog.destroy()
+
+    def _cancel():
+        dialog.destroy()
+
+    listbox.bind("<Double-Button-1>", lambda _e: _ok())
+    button_row = ttk.Frame(dialog)
+    button_row.pack(fill="x", padx=8, pady=(0, 8))
+    ttk.Button(button_row, text="OK", command=_ok).pack(side="right")
+    ttk.Button(button_row, text="Cancel", command=_cancel).pack(side="right", padx=(0, 6))
+
+    dialog.grab_set()
+    dialog.wait_window()
+    return result[0]

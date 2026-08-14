@@ -70,7 +70,9 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .xschem import _line_no_at, _parse_kv_block, _scan_braced
+from .xschem import XschemArc, XschemBox, XschemLine, XschemText
+from .xschem import _A_RE, _B_RE, _L_RE, _T_HEAD_RE, _T_TAIL_RE
+from .xschem import _line_no_at, _parse_kv_block, _scan_braced, _to_float
 
 _C_HEAD_RE = re.compile(r"(?m)^C\s*\{")
 _C_TAIL_RE = re.compile(r"\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
@@ -162,6 +164,21 @@ class XschemSchematic:
     ``ihp/lef.py``'s ``LefMacro.all_parsed_pin_ranges``, used by
     ``ihp/xschem_sch_writer.py`` to tell a real deleted entry apart
     from a verbatim gap."""
+    lines: list[XschemLine] = field(default_factory=list)
+    all_parsed_line_ranges: list[tuple[int, int]] = field(default_factory=list)
+    arcs: list[XschemArc] = field(default_factory=list)
+    all_parsed_arc_ranges: list[tuple[int, int]] = field(default_factory=list)
+    texts: list[XschemText] = field(default_factory=list)
+    all_parsed_text_ranges: list[tuple[int, int]] = field(default_factory=list)
+    boxes: list[XschemBox] = field(default_factory=list)
+    all_parsed_box_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Real, decorative/annotation drawing geometry a schematic can
+    also directly embed (confirmed real: 66 real lines/97 real texts/
+    87 real boxes/0 real arcs across the downloaded deck) -- reuses
+    ``ihp/xschem.py``'s own ``XschemLine``/``XschemArc``/
+    ``XschemText``/``XschemBox`` dataclasses and real regexes directly,
+    the exact same real primitive shapes a ``.sym`` file uses. For the
+    real graphical editor (``gui/geometry_canvas.py``)."""
 
     @property
     def net_names(self) -> list[str]:
@@ -256,5 +273,64 @@ def parse_sch_file(path: Path, xschem_root: Path | None = None) -> XschemSchemat
             )
         )
         schematic.all_parsed_wire_ranges.append((start_line, end_line))
+
+    for match in _B_RE.finditer(text):
+        layer, x1, y1, x2, y2 = match.groups()
+        _content, end_pos = _scan_braced(text, match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        schematic.boxes.append(
+            XschemBox(
+                layer=layer, x1=_to_float(x1), y1=_to_float(y1), x2=_to_float(x2), y2=_to_float(y2),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        schematic.all_parsed_box_ranges.append((start_line, end_line))
+
+    for match in _L_RE.finditer(text):
+        layer, x1, y1, x2, y2 = match.groups()
+        _content, end_pos = _scan_braced(text, match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        schematic.lines.append(
+            XschemLine(
+                layer=layer, x1=_to_float(x1), y1=_to_float(y1), x2=_to_float(x2), y2=_to_float(y2),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        schematic.all_parsed_line_ranges.append((start_line, end_line))
+
+    for match in _A_RE.finditer(text):
+        layer, cx, cy, radius, start_angle, sweep_angle = match.groups()
+        _content, end_pos = _scan_braced(text, match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        schematic.arcs.append(
+            XschemArc(
+                layer=layer, cx=_to_float(cx), cy=_to_float(cy), radius=_to_float(radius),
+                start_angle=_to_float(start_angle), sweep_angle=_to_float(sweep_angle),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        schematic.all_parsed_arc_ranges.append((start_line, end_line))
+
+    for match in _T_HEAD_RE.finditer(text):
+        text_content, after_text = _scan_braced(text, match.end() - 1)
+        tail_match = _T_TAIL_RE.match(text, after_text)
+        if not tail_match:
+            continue  # a real, malformed/truncated T line -- never observed; skipped rather than crashing.
+        x, y, rot, flip, hsize, vsize = tail_match.groups()
+        _props, end_pos = _scan_braced(text, tail_match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        schematic.texts.append(
+            XschemText(
+                text=text_content, x=_to_float(x), y=_to_float(y),
+                rot=int(_to_float(rot)), flip=int(_to_float(flip)),
+                hsize=_to_float(hsize), vsize=_to_float(vsize),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        schematic.all_parsed_text_ranges.append((start_line, end_line))
 
     return schematic

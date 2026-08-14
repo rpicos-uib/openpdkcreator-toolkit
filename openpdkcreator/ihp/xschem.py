@@ -3,15 +3,14 @@ real, downloaded ``libs.tech/xschem/*/*.sym`` files (202 real symbols
 across `sg13g2_pr`/`sg13g2_stdcells`/`sg13g2_tests`/
 `sg13g2_tests_xyce`) -- the first concrete real parser for the
 project's own stated **Simulation** GUI group's schematic-capture
-side (see README's Future Work), matching this project's established
-"one honest, bounded pattern per real format" discipline: a real
-symbol's own device-attribute (``K { ... }``) block and its own real
-pin list (``B ... { name=... dir=... }`` primitives) are extracted in
-full; the symbol's own real drawing geometry (``L``/``A``/``T``
-lines -- line segments, arcs, text labels) is deliberately NOT parsed
-or rendered, the same "structure yes, graphics no" precedent
-``ihp/lef.py``'s own PORT rect-count-only scope and ``ihp/gds.py``'s
-own bbox-only scope already established.
+side (see README's Future Work): a real symbol's own device-attribute
+(``K { ... }``) block, its own real pin list (``B ... { name=...
+dir=... }`` primitives), and, for the real graphical editor (see
+``gui/geometry_canvas.py``), its own real drawing geometry too --
+``L`` (line), ``A`` (arc), ``T`` (text), and any non-pin ``B`` (a real
+decorative box, confirmed real in `sg13_hv_nmos.sym`/
+`sg13_hv_pmos.sym`/... -- has no `name=`/`dir=` at all) primitives,
+each with its own real coordinates.
 
 **Real format, confirmed by reading actual files, not assumed**: an
 xschem ``.sym`` file is a flat sequence of top-level, column-0
@@ -30,8 +29,17 @@ real lines) -- the same scanner handles this uniformly. Not every real
 ``B`` primitive is a real pin (some are plain decorative boxes with no
 ``name=``/``dir=`` properties at all, confirmed real in
 `sg13_hv_nmos.sym`/`sg13_hv_pmos.sym`/`sg13_hv_rf_nmos.sym`/
-`sg13_hv_rf_pmos.sym`) -- these are correctly skipped, not an
-extraction gap.
+`sg13_hv_rf_pmos.sym`) -- these are correctly skipped as pins, but
+still captured as real, plain boxes now that graphics are modeled.
+Real geometry shapes, confirmed by direct reading: ``L <layer> <x1>
+<y1> <x2> <y2> {props}`` (a line segment); ``A <layer> <cx> <cy>
+<radius> <start_angle> <sweep_angle> {props}`` (an arc, real angles in
+real degrees, not always integers -- confirmed real,
+non-integer sweep angles in `sg13g2_a21o_1.sym`); ``T {text} <x> <y>
+<rotation> <flip> <hsize> <vsize> {props}`` (a text label, real
+``@name``/``@symname``/... placeholder tokens included verbatim, not
+resolved). Real coordinates are floats throughout (confirmed real,
+non-integer values), unlike Qucs-S's own real integer-only geometry.
 
 The real ``K`` block's own ``type=`` field (e.g. ``capacitor``/
 ``primitive``/``nmos``/``subcircuit``/``res``/``diode``) is exposed as
@@ -55,8 +63,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _K_BLOCK_RE = re.compile(r"(?m)^K\s*\{")
-_B_BLOCK_RE = re.compile(r"(?m)^B\s+(?:\S+\s+){5}\{")
+_B_RE = re.compile(r"(?m)^B\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
+_L_RE = re.compile(r"(?m)^L\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
+_A_RE = re.compile(r"(?m)^A\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
+_T_HEAD_RE = re.compile(r"(?m)^T\s*\{")
+_T_TAIL_RE = re.compile(r"\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
 _KV_RE = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|\S+)')
+
+
+def _to_float(token: str) -> float:
+    try:
+        return float(token)
+    except ValueError:
+        return 0.0  # a real, unexpected non-numeric coordinate -- never seen in practice; kept defensive, not fatal.
 
 
 def _unquote(text: str) -> str:
@@ -111,6 +130,65 @@ class XschemPin:
     direction: str
     """Real ``dir=`` value -- ``in``/``out``/``inout``, confirmed the
     only three real values across all 202 real symbols."""
+    layer: str = "5"
+    x1: float = 0.0
+    y1: float = 0.0
+    x2: float = 0.0
+    y2: float = 0.0
+    """Real pin geometry (a real ``B`` primitive's own rectangle) --
+    used by the real graphical editor (``gui/geometry_canvas.py``) to
+    draw and drag the pin; not previously modeled when only the
+    structured Pins list editor existed."""
+    start_line: int = 0
+    end_line: int = 0
+
+
+@dataclass
+class XschemLine:
+    layer: str
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    start_line: int = 0
+    end_line: int = 0
+
+
+@dataclass
+class XschemArc:
+    layer: str
+    cx: float
+    cy: float
+    radius: float
+    start_angle: float
+    sweep_angle: float
+    start_line: int = 0
+    end_line: int = 0
+
+
+@dataclass
+class XschemText:
+    text: str
+    x: float
+    y: float
+    rot: int
+    flip: int
+    hsize: float
+    vsize: float
+    start_line: int = 0
+    end_line: int = 0
+
+
+@dataclass
+class XschemBox:
+    """A real, non-pin ``B`` primitive -- a plain decorative box (see
+    this module's own docstring)."""
+
+    layer: str
+    x1: float
+    y1: float
+    x2: float
+    y2: float
     start_line: int = 0
     end_line: int = 0
 
@@ -134,6 +212,21 @@ class XschemSymbol:
     editing (New/Delete Pin); mirrors ``ihp/lef.py``'s ``LefMacro.
     all_parsed_pin_ranges``, used by ``ihp/xschem_writer.py`` to tell a
     real deleted pin apart from a decorative-box/comment gap."""
+    lines: list[XschemLine] = field(default_factory=list)
+    all_parsed_line_ranges: list[tuple[int, int]] = field(default_factory=list)
+    arcs: list[XschemArc] = field(default_factory=list)
+    all_parsed_arc_ranges: list[tuple[int, int]] = field(default_factory=list)
+    texts: list[XschemText] = field(default_factory=list)
+    all_parsed_text_ranges: list[tuple[int, int]] = field(default_factory=list)
+    boxes: list[XschemBox] = field(default_factory=list)
+    all_parsed_box_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Real drawing geometry -- one list plus one real, parse-time-only
+    range list per real shape kind, the same real "line_no ==
+    ``0`` -> added this session" / "``all_parsed_*`` tracks deletions"
+    discipline ``pins``/``all_parsed_pin_ranges`` already use, so
+    ``gui/geometry_canvas.py``'s own graphical editor and
+    ``ihp/xschem_writer.py``'s own write-back can add/move/delete any
+    of them."""
 
 
 def find_sym_files(pdk_root: Path) -> list[Path]:
@@ -172,17 +265,78 @@ def parse_sym_file(path: Path) -> XschemSymbol:
             symbol.template_params = _parse_kv_block(template_raw)
         symbol.raw_fields = k_fields
 
-    for match in _B_BLOCK_RE.finditer(text):
+    for match in _B_RE.finditer(text):
+        layer, x1, y1, x2, y2 = match.groups()
         brace_pos = match.end() - 1
         content, end_pos = _scan_braced(text, brace_pos)
         props = _parse_kv_block(content)
-        name = props.get("name")
-        direction = props.get("dir")
-        if not name or not direction:
-            continue  # a real, non-pin decorative box -- not an extraction gap, see this module's docstring.
         start_line = _line_no_at(text, match.start())
         end_line = _line_no_at(text, end_pos - 1)
-        symbol.pins.append(XschemPin(name=name, direction=direction, start_line=start_line, end_line=end_line))
-        symbol.all_parsed_pin_ranges.append((start_line, end_line))
+        name = props.get("name")
+        direction = props.get("dir")
+        if name and direction:
+            symbol.pins.append(
+                XschemPin(
+                    name=name, direction=direction, layer=layer,
+                    x1=_to_float(x1), y1=_to_float(y1), x2=_to_float(x2), y2=_to_float(y2),
+                    start_line=start_line, end_line=end_line,
+                )
+            )
+            symbol.all_parsed_pin_ranges.append((start_line, end_line))
+        else:
+            # a real, non-pin decorative box -- not an extraction gap, see this module's docstring.
+            symbol.boxes.append(
+                XschemBox(
+                    layer=layer, x1=_to_float(x1), y1=_to_float(y1), x2=_to_float(x2), y2=_to_float(y2),
+                    start_line=start_line, end_line=end_line,
+                )
+            )
+            symbol.all_parsed_box_ranges.append((start_line, end_line))
+
+    for match in _L_RE.finditer(text):
+        layer, x1, y1, x2, y2 = match.groups()
+        _content, end_pos = _scan_braced(text, match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        symbol.lines.append(
+            XschemLine(
+                layer=layer, x1=_to_float(x1), y1=_to_float(y1), x2=_to_float(x2), y2=_to_float(y2),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        symbol.all_parsed_line_ranges.append((start_line, end_line))
+
+    for match in _A_RE.finditer(text):
+        layer, cx, cy, radius, start_angle, sweep_angle = match.groups()
+        _content, end_pos = _scan_braced(text, match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        symbol.arcs.append(
+            XschemArc(
+                layer=layer, cx=_to_float(cx), cy=_to_float(cy), radius=_to_float(radius),
+                start_angle=_to_float(start_angle), sweep_angle=_to_float(sweep_angle),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        symbol.all_parsed_arc_ranges.append((start_line, end_line))
+
+    for match in _T_HEAD_RE.finditer(text):
+        text_content, after_text = _scan_braced(text, match.end() - 1)
+        tail_match = _T_TAIL_RE.match(text, after_text)
+        if not tail_match:
+            continue  # a real, malformed/truncated T line -- never observed; skipped rather than crashing.
+        x, y, rot, flip, hsize, vsize = tail_match.groups()
+        _props, end_pos = _scan_braced(text, tail_match.end() - 1)
+        start_line = _line_no_at(text, match.start())
+        end_line = _line_no_at(text, end_pos - 1)
+        symbol.texts.append(
+            XschemText(
+                text=text_content, x=_to_float(x), y=_to_float(y),
+                rot=int(_to_float(rot)), flip=int(_to_float(flip)),
+                hsize=_to_float(hsize), vsize=_to_float(vsize),
+                start_line=start_line, end_line=end_line,
+            )
+        )
+        symbol.all_parsed_text_ranges.append((start_line, end_line))
 
     return symbol

@@ -1,32 +1,35 @@
 """Real xschem ``.sch`` write-back for the in-memory ``XschemSchematic``
-this project's Schematics editor edits -- deliberately narrow, matching
-what's safely editable without a real geometry editor (this project has
-none, the same "structure, not graphics" precedent
-``ihp/xschem.py``/``ihp/xschem_sch.py`` themselves already established):
+this project's Schematics editor (table-based, and the real graphical
+canvas, ``gui/geometry_canvas.py``) edits:
 
-- An instance's real ``name=`` property, and, for a real pin instance
-  (``ipin``/``opin``/``iopin``), its real ``lab=`` net-label property
-  -- both patched via the same real, quote-aware key=value
-  substitution ``ihp/xschem_writer.py`` already uses for symbol pins,
-  preserving every other real instance property (device parameters
-  like ``l=``/``w=``/``model=``, ...) and the instance's own real
-  position/rotation/flip untouched.
-- A wire's real ``lab=`` property, same substitution.
-- **Delete only** for both -- no "add a new instance/wire" here: a
-  real component instance needs a real symbol reference and a real
-  drawn position to mean anything, and this project has no schematic
-  geometry editor to place one sensibly; synthesizing a fake default
-  would misrepresent a real schematic rather than honestly extend it.
-  Deleting an existing real instance/wire (a genuinely safe, real
-  removal) is supported; every other structural change is left to
-  xschem itself.
+- An instance's real ``name=`` property, its real position/rotation/
+  flip, and, for a real pin instance (``ipin``/``opin``/``iopin``),
+  its real ``lab=`` net-label property -- name/label patched via the
+  same real, quote-aware key=value substitution
+  ``ihp/xschem_writer.py`` already uses for symbol pins, preserving
+  every other real instance property (device parameters like ``l=``/
+  ``w=``/``model=``, ...) untouched; position/rotation/flip patched in
+  the instance's own header, the same "unchanged -> keep the real
+  original line verbatim" discipline as everywhere else.
+- A wire's real endpoints and its real ``lab=`` property.
+- Real decorative ``L``ine/``A``rc/``T``ext/``B``ox geometry a
+  schematic can also directly embed -- the exact same real primitive
+  shapes a ``.sym`` file uses, so this module reuses
+  ``ihp/xschem_writer.py``'s own render functions directly rather than
+  duplicating them.
+- **New Instance/New Wire are now supported**, unlike this project's
+  own first-pass Schematics editor: a real graphical canvas gives the
+  user a real way to choose where a new instance/wire actually goes
+  (click a real symbol reference and a real canvas position, or draw
+  a real wire endpoint-to-endpoint) -- no longer a guessed default
+  this project has no sensible way to place, the real concern that
+  originally ruled this out.
 
 Same surgical, position-targeted discipline as every other writer
 here: re-reads the *original* file fresh from disk, keeps every real
-line of an unedited (or non-deletable) block verbatim via
-``XschemSchematic.all_parsed_instance_ranges``/
-``all_parsed_wire_ranges`` (tracked at parse time), and omits a
-deleted entry's original text span entirely.
+line of an unedited block verbatim via each shape kind's own
+``all_parsed_*_ranges`` (tracked at parse time), and omits a deleted
+entry's original text span entirely.
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ from pathlib import Path
 
 from . import text_utils
 from . import xschem_sch as xschem_sch_mod
-from .xschem_writer import _replace_kv
+from .xschem_writer import _fmt_num, _render_arc_block, _render_box_block, _render_line_block, _render_text_block, _replace_kv
 
 _SCAN = xschem_sch_mod._scan_braced
 _C_HEAD_RE = xschem_sch_mod._C_HEAD_RE
@@ -68,7 +71,9 @@ def _has_unbalanced_quotes(block_text: str) -> bool:
     return count % 2 != 0
 
 
-def _render_instance_block(inst: xschem_sch_mod.XschemInstance, original_lines: list[str]) -> list[str]:
+def _render_instance_block(
+    inst: xschem_sch_mod.XschemInstance, original_lines: list[str], fresh: xschem_sch_mod.XschemInstance | None,
+) -> list[str]:
     """Locates the props block's own real opening brace the exact same
     way ``xschem_sch.parse_sch_file`` itself does -- via ``_C_HEAD_RE``/
     ``_C_TAIL_RE``, not a naive raw-character brace scan -- because a
@@ -80,8 +85,15 @@ def _render_instance_block(inst: xschem_sch_mod.XschemInstance, original_lines: 
     own real, driven byte-identical-export check before it ever
     shipped. Returns *original_lines* verbatim, ignoring any pending
     edit, when ``_has_unbalanced_quotes`` flags this specific block as
-    unsafe to patch (see this module's own docstring) -- a real,
-    narrow, per-entry refusal, not a whole-file one."""
+    unsafe to patch (see ``render_sch_file``'s own docstring) -- a
+    real, narrow, per-entry refusal, not a whole-file one."""
+
+    if not original_lines:
+        header = f"C {{{inst.symbol_ref}}} {_fmt_num(inst.x)} {_fmt_num(inst.y)} {inst.rot} {inst.flip} {{"
+        prop_text = " ".join(f"{k}={v}" for k, v in inst.props.items())
+        name_part = f"name={inst.name}"
+        interior = f"{name_part} {prop_text}".strip() if prop_text else name_part
+        return [f"{header}{interior}}}"]
 
     block_text = "\n".join(original_lines)
     if _has_unbalanced_quotes(block_text):
@@ -94,24 +106,45 @@ def _render_instance_block(inst: xschem_sch_mod.XschemInstance, original_lines: 
     if not tail_match:
         return original_lines
 
+    position_unchanged = fresh is not None and (
+        inst.x == fresh.x and inst.y == fresh.y and inst.rot == fresh.rot and inst.flip == fresh.flip
+    )
     interior, close_pos = _SCAN(block_text, tail_match.end() - 1)
     new_interior = _replace_kv(interior, "name", inst.name)
     if inst.is_pin:
         new_interior = _replace_kv(new_interior, "lab", inst.pin_label)
-    new_block = block_text[: tail_match.end()] + new_interior + block_text[close_pos - 1 :]
+
+    if position_unchanged:
+        new_block = block_text[: tail_match.end()] + new_interior + block_text[close_pos - 1 :]
+    else:
+        header = f"C {{{inst.symbol_ref}}} {_fmt_num(inst.x)} {_fmt_num(inst.y)} {inst.rot} {inst.flip} {{"
+        new_block = header + new_interior + block_text[close_pos - 1 :]
     return new_block.split("\n")
 
 
-def _render_wire_block(wire: xschem_sch_mod.XschemWire, original_lines: list[str]) -> list[str]:
+def _render_wire_block(wire: xschem_sch_mod.XschemWire, original_lines: list[str], fresh: xschem_sch_mod.XschemWire | None) -> list[str]:
+    if not original_lines:
+        label_part = f"{{lab={wire.label}}}" if wire.label else "{}"
+        return [f"N {_fmt_num(wire.x1)} {_fmt_num(wire.y1)} {_fmt_num(wire.x2)} {_fmt_num(wire.y2)} {label_part}"]
+
     block_text = "\n".join(original_lines)
     if _has_unbalanced_quotes(block_text):
         return original_lines
     head_match = _N_HEAD_RE.match(block_text)
     if not head_match:
         return original_lines
+
+    position_unchanged = fresh is not None and (
+        wire.x1 == fresh.x1 and wire.y1 == fresh.y1 and wire.x2 == fresh.x2 and wire.y2 == fresh.y2
+    )
     interior, close_pos = _SCAN(block_text, head_match.end() - 1)
     new_interior = _replace_kv(interior, "lab", wire.label) if wire.label else interior
-    new_block = block_text[: head_match.end()] + new_interior + block_text[close_pos - 1 :]
+
+    if position_unchanged:
+        new_block = block_text[: head_match.end()] + new_interior + block_text[close_pos - 1 :]
+    else:
+        header = f"N {_fmt_num(wire.x1)} {_fmt_num(wire.y1)} {_fmt_num(wire.x2)} {_fmt_num(wire.y2)} {{"
+        new_block = header + new_interior + block_text[close_pos - 1 :]
     return new_block.split("\n")
 
 
@@ -133,21 +166,12 @@ def render_sch_file(original_path: Path, schematic: xschem_sch_mod.XschemSchemat
     this project's quote-aware brace scanner (``ihp/xschem.py``'s own
     ``_scan_braced``, shared with the ``.sym`` domain, where this
     exact idiom has never been observed) cannot safely disambiguate
-    from a second, nested quoted region -- without real xschem's own
-    source to confirm the intended real grammar, guessing risks
-    silently corrupting a real file. Two real, computable safety
+    from a second, nested quoted region. Two real, computable safety
     signals catch every real occurrence found (confirmed zero false
     positives across the whole downloaded deck): a whole-file check
-    (two parsed entries' own line ranges overlapping, the case for 26
-    of the 27, where the mis-scan swallows a real sibling instance
-    whole -- the entire file is left untouched, any pending edits
-    included, rather than a partial, uneven patch) and a per-entry
-    check (``_has_unbalanced_quotes``, the case for the 27th --
-    ``dc_esd_diodes.sch``'s own affected instance is the real file's
-    own *last* entry, so its mis-scan runs off the end of the file
-    instead of overlapping a sibling -- only that one real entry is
-    left untouched, every other real entry in that same file still
-    patches normally)."""
+    (two parsed instance/wire ranges overlapping, the case for 26 of
+    the 27) and a per-entry check (``_has_unbalanced_quotes``, the
+    case for the 27th, ``dc_esd_diodes.sch``)."""
 
     original_text = original_path.read_text(encoding="utf-8", errors="replace")
     original_lines = original_text.splitlines()
@@ -158,29 +182,31 @@ def render_sch_file(original_path: Path, schematic: xschem_sch_mod.XschemSchemat
     if whole_file_unsafe:
         return text_utils.join_preserving_trailing_newline(original_text, original_lines)
 
-    # Merge both real entry kinds (instances, wires) into one, real
-    # file-order patch pass -- their own real line ranges never
-    # overlap (confirmed: each is its own real, separate top-level
-    # primitive), so a single sorted merge is safe.
+    fresh = xschem_sch_mod.parse_sch_file(original_path)
+
+    # Merge every real entry kind into one, real file-order patch pass
+    # -- their own real line ranges never overlap (confirmed: each is
+    # its own real, separate top-level primitive).
     patches: list[tuple[int, int, list[str] | None]] = []
 
-    current_instances_by_start = {inst.start_line: inst for inst in schematic.instances if inst.start_line}
-    for orig_start, orig_end in schematic.all_parsed_instance_ranges:
-        inst = current_instances_by_start.get(orig_start)
-        if inst is None:
-            patches.append((orig_start, orig_end, None))  # deleted this session
-        else:
-            block = _render_instance_block(inst, original_lines[orig_start - 1 : orig_end])
-            patches.append((orig_start, orig_end, block))
-
-    current_wires_by_start = {wire.start_line: wire for wire in schematic.wires if wire.start_line}
-    for orig_start, orig_end in schematic.all_parsed_wire_ranges:
-        wire = current_wires_by_start.get(orig_start)
-        if wire is None:
-            patches.append((orig_start, orig_end, None))
-        else:
-            block = _render_wire_block(wire, original_lines[orig_start - 1 : orig_end])
-            patches.append((orig_start, orig_end, block))
+    for entries, all_ranges, fresh_entries, render_fn in (
+        (schematic.instances, schematic.all_parsed_instance_ranges, fresh.instances, _render_instance_block),
+        (schematic.wires, schematic.all_parsed_wire_ranges, fresh.wires, _render_wire_block),
+        (schematic.lines, schematic.all_parsed_line_ranges, fresh.lines, _render_line_block),
+        (schematic.arcs, schematic.all_parsed_arc_ranges, fresh.arcs, _render_arc_block),
+        (schematic.texts, schematic.all_parsed_text_ranges, fresh.texts, _render_text_block),
+        (schematic.boxes, schematic.all_parsed_box_ranges, fresh.boxes, _render_box_block),
+    ):
+        current_by_start = {e.start_line: e for e in entries if e.start_line}
+        fresh_by_start = {e.start_line: e for e in fresh_entries}
+        for orig_start, orig_end in all_ranges:
+            start_idx, end_idx = orig_start - 1, orig_end - 1
+            obj = current_by_start.get(orig_start)
+            if obj is not None:
+                block = render_fn(obj, original_lines[start_idx : end_idx + 1], fresh_by_start.get(orig_start))
+                patches.append((orig_start, orig_end, block))
+            else:
+                patches.append((orig_start, orig_end, None))  # deleted this session
 
     patches.sort(key=lambda p: p[0])
 
@@ -193,7 +219,17 @@ def render_sch_file(original_path: Path, schematic: xschem_sch_mod.XschemSchemat
             output.extend(block)
         cursor = end_idx + 1
 
-    output.extend(original_lines[cursor:])
+    output.extend(original_lines[cursor:])  # rest of the real file, verbatim
+
+    for entries, render_fn in (
+        (schematic.instances, _render_instance_block), (schematic.wires, _render_wire_block),
+        (schematic.lines, _render_line_block), (schematic.arcs, _render_arc_block),
+        (schematic.texts, _render_text_block), (schematic.boxes, _render_box_block),
+    ):
+        for entry in entries:
+            if entry.start_line == 0:
+                output.extend(render_fn(entry, [], None))  # added this session
+
     return text_utils.join_preserving_trailing_newline(original_text, output)
 
 

@@ -12,15 +12,19 @@ matched to the real file's own ``<Parameter ...>`` tags since a real
 Parameter has no other stable identity), and real **Netlists** (the
 raw Ngspice/CDL/[Xyce] template strings, read-only).
 
-**Symbols** (22 real ``.sym`` drawn-geometry files): real
-``PortSym`` primitives -- **editable** position/type/angle/condition,
-via ``ihp/qucs_sym_writer.py``; the real, honestly-partial trailing
-``hint`` comment (20 of 66 real lines carry one) stays read-only,
-preserved verbatim on an edited line, not itself an editable field --
-this format carries no real port *name* at all, unlike xschem's own
-``.sym``. New/Delete Port supported (a real, minimal, honest
-``0,0``/no-condition starting point for a new port, matching
-``ihp/qucs_sym_writer.py``'s own documented default).
+**Symbols** (22 real ``.sym`` drawn-geometry files): a **Ports**
+sub-tab (real ``PortSym`` primitives -- **editable** position/type/
+angle/condition; the real, honestly-partial trailing ``hint`` comment
+stays read-only, preserved verbatim on an edited line, not itself an
+editable field -- this format carries no real port *name* at all,
+unlike xschem's own ``.sym``; New/Delete Port supported) and a
+**Graphical** sub-tab -- a real, interactive
+``geometry_canvas.GeometryCanvas`` (the same shared widget xschem's
+own Symbols/Schematics use, see ``gui/xschem_view.py``'s own
+docstring) rendering every real ``Line``/``Arc``/``Text``/``PortSym``
+primitive to real scale, with Select (click/drag/Delete)/Line/Arc/Text
+tools. Real write-back for both sub-tabs (they edit the exact same
+real, live ``QucsSymbolGeometry``) via ``ihp/qucs_sym_writer.py``.
 
 Both share the parent ``App``'s own per-file cache
 (``App.get_parsed_qucs_symbol``/``get_parsed_qucs_component``), the
@@ -47,7 +51,9 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import qucs_sym as qucs_mod
+from . import geometry_adapters
 from .file_picker_utils import handle_action, update_action_button
+from .geometry_canvas import GeometryCanvas
 
 
 class QucsView(ttk.Frame):
@@ -308,8 +314,13 @@ class _SymbolsPane(ttk.Frame):
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
 
-        body = ttk.Frame(self)
-        body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        sub = ttk.Notebook(self)
+        sub.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        ports_frame = ttk.Frame(sub)
+        sub.add(ports_frame, text="Ports")
+
+        body = ports_frame
         body.columnconfigure(0, weight=2)
         body.columnconfigure(1, weight=1)
         body.rowconfigure(1, weight=1)
@@ -343,6 +354,55 @@ class _SymbolsPane(ttk.Frame):
         ttk.Label(right, text="Hint (real, trailing comment):").grid(row=5, column=0, sticky="w", pady=2)
         self.port_hint_var = tk.StringVar()
         ttk.Entry(right, textvariable=self.port_hint_var, state="readonly").grid(row=5, column=1, sticky="ew", pady=2)
+
+        graphical_frame = ttk.Frame(sub)
+        sub.add(graphical_frame, text="Graphical")
+        self.canvas_view = GeometryCanvas(
+            graphical_frame,
+            on_new_line=self._on_new_line, on_new_arc=self._on_new_arc, on_new_text=self._on_new_text,
+            on_scene_changed=self._on_canvas_changed,
+        )
+        self.canvas_view.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def _on_new_line(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_qucs_line(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_arc(self, x1, y1, x2, y2):
+        if self.current is not None:
+            geometry_adapters.new_qucs_arc(self.current, x1, y1, x2, y2)
+            self._reload_canvas()
+
+    def _on_new_text(self, x, y, content):
+        if self.current is not None:
+            geometry_adapters.new_qucs_text(self.current, x, y, content)
+            self._reload_canvas()
+
+    def _on_canvas_changed(self):
+        """A canvas delete can remove a real port -- refresh the Ports
+        table so it never shows a real port no longer in
+        ``QucsSymbolGeometry.ports``. Position-only drags don't need
+        this (this table's own values only refresh on reselect, and a
+        dragged port's row would be stale until then -- acceptable,
+        matching the read-only-until-reselect precedent elsewhere)."""
+        if self.current is not None:
+            self._refresh_ports_tree()
+
+    def _refresh_ports_tree(self):
+        for row in self.ports_tree.get_children():
+            self.ports_tree.delete(row)
+        self._port_by_iid = {}
+        if self.current is None:
+            return
+        for i, port in enumerate(self.current.ports):
+            iid = str(i)
+            self._port_by_iid[iid] = port
+            self.ports_tree.insert("", "end", iid=iid, values=self._port_row_values(port))
+
+    def _reload_canvas(self):
+        if self.current is not None:
+            self.canvas_view.set_scene(geometry_adapters.qucs_symbol_scene(self.current), auto_fit=False)
 
     def _update_action_button(self):
         update_action_button(self.action_button, self.pdk_root, self.file_var)
@@ -383,6 +443,7 @@ class _SymbolsPane(ttk.Frame):
             self.summary_var.set("No Qucs-S symbol data loaded -- has ihp/fetch.py been run?")
             self.current = None
             self._load_port_into_form(None)
+            self.canvas_view.set_scene(geometry_adapters.Scene())
             return
 
         self.current = self.app.get_parsed_qucs_symbol(path)
@@ -394,6 +455,7 @@ class _SymbolsPane(ttk.Frame):
             self.ports_tree.insert("", "end", iid=iid, values=self._port_row_values(port))
 
         self._load_port_into_form(None)
+        self.canvas_view.set_scene(geometry_adapters.qucs_symbol_scene(geometry))
         self.summary_var.set(f"{geometry.primitive_count} real drawing primitive(s), {len(geometry.ports)} real port(s)")
 
     def _on_port_select(self, _event=None):

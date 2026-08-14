@@ -95,20 +95,75 @@ class QucsPort:
 
 
 @dataclass
+class QucsLine:
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    color: str = "#000080"
+    width: int = 2
+    style: int = 1
+    condition: str = ""
+    line_no: int = 0
+
+
+@dataclass
+class QucsArc:
+    """Real, bounding-box-based arc (``x``/``y`` = the ellipse's own
+    real top-left corner, ``arcWidth``/``height`` = its own real full
+    bounding-box size) -- confirmed real, not a center/radius shape
+    the way xschem's own arc is. Real ``angle``/``len`` are in real
+    1/16-degree units (confirmed: real full-circle sweeps use
+    ``len="5760"`` = 360 * 16)."""
+
+    x: int
+    y: int
+    arc_width: int
+    height: int
+    angle: int
+    """Real start angle, in 1/16-degree units."""
+    sweep_len: int
+    """Real sweep length, in 1/16-degree units."""
+    color: str = "#000080"
+    width: int = 2
+    style: int = 1
+    condition: str = ""
+    line_no: int = 0
+
+
+@dataclass
+class QucsText:
+    x: int
+    y: int
+    size: int
+    color: str
+    text: str
+    condition: str = ""
+    line_no: int = 0
+
+
+@dataclass
 class QucsSymbolGeometry:
     source_path: Path
     ports: list[QucsPort] = field(default_factory=list)
+    lines: list[QucsLine] = field(default_factory=list)
+    arcs: list[QucsArc] = field(default_factory=list)
+    texts: list[QucsText] = field(default_factory=list)
     primitive_count: int = 0
     """Every real top-level drawing primitive (``Line``/``Arc``/
-    ``Text``/``PortSym``), not just ports -- a quick real complexity
-    summary; the non-port primitives' own geometry is not parsed
-    further, the same "structure, not graphics" precedent
-    ``ihp/xschem.py``'s own ``.sym`` parser already established."""
+    ``Text``/``PortSym``) -- a quick real complexity summary; now that
+    the real graphical editor (``gui/geometry_canvas.py``) exists,
+    ``lines``/``arcs``/``texts`` above hold every one of these
+    individually, not just a count."""
     all_parsed_port_line_nos: list[int] = field(default_factory=list)
-    """Every real port's own line number as originally parsed, in real
-    file order -- unlike ``ports``, never mutated by editing (New/
-    Delete Port); used by ``ihp/qucs_sym_writer.py`` to tell a real
-    deleted port apart from a non-port-primitive/comment gap."""
+    all_parsed_line_line_nos: list[int] = field(default_factory=list)
+    all_parsed_arc_line_nos: list[int] = field(default_factory=list)
+    all_parsed_text_line_nos: list[int] = field(default_factory=list)
+    """Every real primitive's own line number as originally parsed, in
+    real file order, one list per real shape kind -- unlike ``ports``/
+    ``lines``/``arcs``/``texts``, never mutated by editing (New/
+    Delete); used by ``ihp/qucs_sym_writer.py`` to tell a real deleted
+    primitive apart from a non-matching-kind/comment gap."""
 
 
 @dataclass
@@ -216,22 +271,58 @@ def parse_symbol_geometry(path: Path) -> QucsSymbolGeometry:
         if not match:
             continue
         geometry.primitive_count += 1
-        if match.group(1) != "PortSym":
+        kind = match.group(1)
+        if kind not in ("PortSym", "Line", "Arc", "Text"):
             continue
         tag_text = line.strip()[: line.strip().index("/>") + 2]
         try:
             el = ET.fromstring(tag_text)
         except ET.ParseError:
             continue  # a real, malformed primitive line -- never observed; skipped rather than crashing.
-        geometry.ports.append(
-            QucsPort(
-                x=_to_int(el.get("x", "0")), y=_to_int(el.get("y", "0")),
-                port_type=el.get("type", ""), angle=_to_int(el.get("angle", "0")),
-                condition=el.get("condition", ""), hint=match.group(2) or "",
-                line_no=line_no,
+
+        if kind == "PortSym":
+            geometry.ports.append(
+                QucsPort(
+                    x=_to_int(el.get("x", "0")), y=_to_int(el.get("y", "0")),
+                    port_type=el.get("type", ""), angle=_to_int(el.get("angle", "0")),
+                    condition=el.get("condition", ""), hint=match.group(2) or "",
+                    line_no=line_no,
+                )
             )
-        )
-        geometry.all_parsed_port_line_nos.append(line_no)
+            geometry.all_parsed_port_line_nos.append(line_no)
+        elif kind == "Line":
+            geometry.lines.append(
+                QucsLine(
+                    x1=_to_int(el.get("x1", "0")), y1=_to_int(el.get("y1", "0")),
+                    x2=_to_int(el.get("x2", "0")), y2=_to_int(el.get("y2", "0")),
+                    color=el.get("color", "#000080"), width=_to_int(el.get("width", "2")),
+                    style=_to_int(el.get("style", "1")), condition=el.get("condition", ""),
+                    line_no=line_no,
+                )
+            )
+            geometry.all_parsed_line_line_nos.append(line_no)
+        elif kind == "Arc":
+            geometry.arcs.append(
+                QucsArc(
+                    x=_to_int(el.get("x", "0")), y=_to_int(el.get("y", "0")),
+                    arc_width=_to_int(el.get("arcWidth", "0")), height=_to_int(el.get("height", "0")),
+                    angle=_to_int(el.get("angle", "0")), sweep_len=_to_int(el.get("len", "0")),
+                    color=el.get("color", "#000080"), width=_to_int(el.get("width", "2")),
+                    style=_to_int(el.get("style", "1")), condition=el.get("condition", ""),
+                    line_no=line_no,
+                )
+            )
+            geometry.all_parsed_arc_line_nos.append(line_no)
+        elif kind == "Text":
+            geometry.texts.append(
+                QucsText(
+                    x=_to_int(el.get("x", "0")), y=_to_int(el.get("y", "0")),
+                    size=_to_int(el.get("size", "12")), color=el.get("color", "#800000"),
+                    text=el.get("text", ""), condition=el.get("condition", ""),
+                    line_no=line_no,
+                )
+            )
+            geometry.all_parsed_text_line_nos.append(line_no)
 
     return geometry
 
