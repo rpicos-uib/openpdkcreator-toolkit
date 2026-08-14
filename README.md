@@ -27,6 +27,7 @@ python3 main.py fetch        # downloads the real IHP PDK into data/ (~734 MB, g
 python3 main.py inventory    # real per-tool file census, printed
 python3 main.py magic-tech   # real Magic .tech parse + cross-reference against the .lyp
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
+python3 main.py ngspice      # real ngspice .lib model-card summary: .model/.subckt statements
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
@@ -60,13 +61,15 @@ Tabs are grouped by what they represent, not left flat: **Overview**
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
-data -- **LEF** and **By Cell** as sub-tabs), and **Settings**
+data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (real
+ngspice model-card data -- **ngspice Models** as its one sub-tab so
+far, real `.model`/`.subckt` statements, read-only), and **Settings**
 (project-level settings -- not any one tool's PDK content -- **General**
-and **Tools** as sub-tabs). No empty **Simulation** top-level group
-exists yet -- there's no real parser behind ngspice/xschem/Qucs-S
-model/schematic data yet (see Future Work); adding one now would show
-fake completeness. **Technology**/**Cells** are the pattern a future
-group would repeat once a real parser exists for it.
+and **Tools** as sub-tabs). xschem/Qucs-S schematic data stays
+inventory-only (see the Overview tab) -- no real parser for either
+exists yet (see Future Work). **Technology**/**Cells**/**Simulation**
+are the pattern a future sub-tab would repeat once a real parser
+exists for it.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
@@ -295,6 +298,44 @@ highlighted straight to that cell's real line range within its
   (`start_line`/`end_line`) -- added specifically for
   `ihp/lef_writer.py`'s own write-back, which needs to locate exactly
   where a real pin's text lives to patch it in place.
+- **`openpdkcreator/ihp/spice_models.py`** -- a real, bounded ngspice
+  `.lib` model-card parser, the first concrete piece of the
+  **Simulation** GUI group (see Future Work): real
+  `.model NAME TYPE (key=value ...)`/`.model NAME TYPE key=value ...`
+  statements (both real, confirmed parenthesized and bare forms exist;
+  real keyword case varies file to file, matched case-insensitively
+  like every other keyword-driven parser here) and real
+  `.subckt NAME port1 port2 ... / .ends` blocks (the same bounded
+  shape `ihp/netlist.py`'s own CDL/SPICE `.SUBCKT` extraction already
+  uses). Real parameter values are kept as raw strings, not converted
+  to float -- some real BSIM/PSP model cards use a quoted formula
+  expression as a value (e.g. `vfbo = '-0.94312*sg13g2_lv_nmos_vfbo'`),
+  not a plain number. Real statements wrapping across lines via a
+  leading `+` continuation marker (SPICE's own convention, distinct
+  from Magic's trailing `\`) are joined first. **A real structural
+  fact found via a verification mismatch, not assumed**: a real
+  `.model` can sit *inside* a real `.subckt` body (a locally-scoped
+  model -- e.g. `resistors_mod.lib`'s own `rsil` subckt defines its own
+  `rmod_rsil` model) -- an early version only checked for `.model` at
+  top level and silently missed every nested one, caught by comparing
+  the parser's own count (26) against a raw `grep` count (61) across
+  all 32 real files; fixed by checking every real line for `.model`
+  regardless of subckt nesting. Verified for real: 61/61 real models
+  and 57/57 real subckts extracted exactly (including a real 371-real-
+  parameter PSP MOSFET model card parsed cleanly). Real `.LIB name ...
+  .ENDL` PVT-corner blocks (a real `.param NAME = value` list per
+  corner, confirmed real in the `corner*.lib` files) are deliberately
+  not parsed this pass.
+- **`openpdkcreator/gui/spice_models_view.py`** -- the **Simulation >
+  ngspice Models** tab (`SpiceModelsView`), the same file-picker +
+  Treeview shape as `lef_view.py` (no small, fixed set of "the real
+  ones" to enumerate -- all 32 real `.lib` files are shown). Two
+  sub-tabs, **Models** and **Subckts**; a model's own real parameter
+  list is shown as one raw `key=value` text column rather than a
+  parameter-by-parameter breakdown, since some real PSP model cards
+  carry 370+ real parameters. Read-only -- no editor exists for
+  ngspice model data. Verified for real, driven: switching files
+  reloads both trees with the correct real row counts.
 - **`openpdkcreator/gui/pin_editor.py`** -- `PinEditor`, a real macro
   pin list + New/Delete Pin + a Name/Direction/Use form, the same
   commit-on-switch pattern `LayersView`/`RulesView` already use.
@@ -939,10 +980,14 @@ models, ...), not just read/display layers. Concretely, still open:
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
-- A **Simulation** top-level GUI group (ngspice/xschem/Qucs-S models
-  and schematics), matching the **Technology**/**Cells** groups'
-  pattern -- still inventory-only today (see the Overview tab), no real
-  per-format parser exists yet.
+- The **Simulation** top-level GUI group now exists with its first
+  real sub-tab (**ngspice Models** -- `ihp/spice_models.py`, real
+  `.model`/`.subckt` extraction); xschem/Qucs-S schematic data stays
+  inventory-only (see the Overview tab), no real parser for either
+  exists yet -- more Simulation sub-tabs would repeat the same
+  file-picker/Treeview pattern once one does. ngspice's own real
+  `.LIB name ... .ENDL` PVT-corner blocks (a real `.param NAME = value`
+  list per corner) are also real, separate future work.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

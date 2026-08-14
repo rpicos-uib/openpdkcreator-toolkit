@@ -93,6 +93,7 @@ from openpdkcreator.ihp import liberty as liberty_mod
 from openpdkcreator.ihp import magic_tech as magic_tech_mod
 from openpdkcreator.ihp import netlist as netlist_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
+from openpdkcreator.ihp import spice_models as spice_models_mod
 from openpdkcreator.ihp import verilog as verilog_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
@@ -208,6 +209,33 @@ def cmd_lef(pdk_root: Path) -> int:
         print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
 
     print(f"\n{len(lef_files)} real .lef file(s): {total_layers} tech layer(s), {total_macros} macro(s) total.")
+    return 0
+
+
+def cmd_ngspice(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    lib_files = spice_models_mod.find_lib_files(pdk_root)
+    if not lib_files:
+        print(f"No .lib files found under {pdk_root}/libs.tech/ngspice/models/", file=sys.stderr)
+        return 2
+
+    total_models = 0
+    total_subckts = 0
+    for path in lib_files:
+        parsed = spice_models_mod.parse_lib_file(path)
+        total_models += len(parsed.models)
+        total_subckts += len(parsed.subckts)
+        detail = []
+        if parsed.models:
+            detail.append(f"{len(parsed.models)} model(s)")
+        if parsed.subckts:
+            detail.append(f"{len(parsed.subckts)} subckt(s)")
+        print(f"{path.relative_to(pdk_root)}: {', '.join(detail) if detail else '(nothing recognized)'}")
+
+    print(f"\n{len(lib_files)} real .lib file(s): {total_models} model(s), {total_subckts} subckt(s) total.")
     return 0
 
 
@@ -570,6 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("inventory", help="Print a per-tool file inventory.")
     sub.add_parser("magic-tech", help="Parse real Magic .tech files; cross-reference against the .lyp.")
     sub.add_parser("lef", help="Parse real LEF files: tech layers + macro/cell footprints.")
+    sub.add_parser("ngspice", help="Parse real ngspice .lib model cards: .model/.subckt statements.")
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
     cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
@@ -599,6 +628,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_magic_tech(args.pdk_root.resolve())
     if args.command == "lef":
         return cmd_lef(args.pdk_root.resolve())
+    if args.command == "ngspice":
+        return cmd_ngspice(args.pdk_root.resolve())
     if args.command == "drc":
         return cmd_drc(args.pdk_root.resolve())
     if args.command == "cells":

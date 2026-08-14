@@ -21,6 +21,13 @@ grouped by what they actually represent rather than left flat:
   inside each one, and edit its real LEF pins directly -- the exact
   same in-memory macro the LEF tab itself edits (see
   ``App.get_parsed_lef`` below).
+- **Simulation** -- real ngspice ``.lib`` model-card data (real
+  ``.model``/``.subckt`` statements -- ``ihp/spice_models.py``), one
+  sub-tab so far, **ngspice Models**, matching the **Technology**/
+  **Cells** groups' own file-picker/Treeview shape; read-only, no
+  editor exists for simulation model data. xschem/Qucs-S schematic
+  data stays inventory-only (see the Overview tab) -- no real parser
+  for either exists yet, so no sub-tab pretends otherwise.
 - **Settings** -- project-level settings, not any one tool's PDK
   content, two sub-tabs: **General** (``gui/settings_view.py``): this
   project's own editable name and where it lives on disk, versus the
@@ -31,12 +38,6 @@ grouped by what they actually represent rather than left flat:
   path, and a **Launch** button, a thin GUI wrapper around
   ``eda_tools.py``'s own existing check/launch logic, no new detection
   code of its own.
-
-Deliberately no "Simulation" top-level group yet -- there's no real
-parser behind ngspice/xschem/Qucs-S model/schematic data yet (still
-inventory-only, see the Overview tab) -- adding an empty tab for a
-domain nothing here actually reads yet would show fake completeness.
-**Technology**/**Cells** are the pattern to repeat once one exists.
 
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly via
@@ -117,6 +118,7 @@ from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
 from .magic_tech_view import MagicTechView
+from .spice_models_view import SpiceModelsView
 from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
 from .tools_view import ToolsView
@@ -172,6 +174,7 @@ class App(ttk.Frame):
         self._build_overview_tab()
         self._build_technology_group()
         self._build_cells_group()
+        self._build_simulation_group()
         self._build_settings_tab()
 
         self.status = tk.StringVar(value="Ready.")
@@ -466,6 +469,20 @@ class App(ttk.Frame):
         self.cells_notebook.add(cell_hub_frame, text="By Cell")
         self.cell_hub_view = CellHubView(cell_hub_frame, self)
         self.cell_hub_view.pack(fill="both", expand=True)
+
+    # -- Simulation group (ngspice) -------------------------------------------
+
+    def _build_simulation_group(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Simulation")
+
+        self.simulation_notebook = ttk.Notebook(frame)
+        self.simulation_notebook.pack(fill="both", expand=True)
+
+        ngspice_frame = ttk.Frame(self.simulation_notebook)
+        self.simulation_notebook.add(ngspice_frame, text="ngspice Models")
+        self.spice_models_view = SpiceModelsView(ngspice_frame, self.pdk_root)
+        self.spice_models_view.pack(fill="both", expand=True)
 
     # -- Settings tab -----------------------------------------------------
 
