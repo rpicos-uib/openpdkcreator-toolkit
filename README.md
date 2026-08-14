@@ -1141,8 +1141,9 @@ models, ...), not just read/display layers. Concretely, still open:
   structured-editable domain** -- LEF pins (`ihp/lef_writer.py`,
   verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
   verified against all 27 real files with an extracted rule), Magic
-  Types (`ihp/magic_tech_writer.py`, verified against both real
-  technologies' `.tech` files), CDL/SPICE/Verilog ports
+  Types/Planes/Contacts/Aliases (`ihp/magic_tech_writer.py`, verified
+  against both real technologies' `.tech` files -- see the dedicated
+  bullet below for Planes/Contacts/Aliases), CDL/SPICE/Verilog ports
   (`ihp/netlist_writer.py`/`ihp/verilog_writer.py`, verified against
   all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files), Liberty
   pin/timing-arc data (`ihp/liberty_writer.py`, verified against all
@@ -1155,13 +1156,59 @@ models, ...), not just read/display layers. Concretely, still open:
   `main.py export-lef`/`export-drc`/`export-magic-types`/
   `export-netlist`/`export-verilog`/`export-liberty`/`export-layers`).
   What's left is everything that's still read-only in its own
-  structured view -- Magic Tech's other domains -- for the same
-  reason: no editor -> no write-back path to build. GDS stays read-only
-  by design (real structural info only, no geometry-editing feature
-  exists or is planned this pass); Liberty's own real lookup-table
-  sub-groups stay unmodeled for the same bounded-scope reason as
-  everywhere else, not because a pin/timing-arc editor doesn't exist
-  anymore.
+  structured view -- Magic Tech's remaining eleven real sub-tabs (see
+  the dedicated bullet below for exactly which, and why they're a
+  deliberately different, harder shape) -- for the same reason: no
+  editor -> no write-back path to build. GDS stays read-only by design
+  (real structural info only, no geometry-editing feature exists or is
+  planned this pass); Liberty's own real lookup-table sub-groups stay
+  unmodeled for the same bounded-scope reason as everywhere else, not
+  because a pin/timing-arc editor doesn't exist anymore.
+- **Magic Tech write-back extended to Planes/Contacts/Aliases** --
+  three more of the fifteen real sub-tabs are now editable, alongside
+  Types. **A real, confirmed structural fact made this tractable
+  without repeating `_safe_prefix_line_count`'s own real
+  include-splicing caution per domain**: `planes` (83-98)/`types`
+  (104-260)/`contact` (266-298)/`aliases` (304-382) all sit in
+  `ihp-sg13g2.tech` well before its first real `include` line,
+  confirmed by direct inspection -- so all four share the exact same
+  real `safe_through` boundary already established for Types alone,
+  needing no new per-domain complexity. `PlaneEntry`/`ContactEntry`/
+  `AliasEntry` each gained a real `line_no` field, populated by one
+  new, shared `_scan_single_line_section` helper (`ihp/magic_tech.py`)
+  generalizing `_parse_types_with_lines`'s own real line-tracking
+  approach for domains whose every real entry sits on exactly one
+  line (unlike `types`' own plane+alias-list shape, which keeps its
+  own bespoke parser, unchanged). `ihp/magic_tech_writer.py`'s own
+  `render_tech_file` was generalized the same way, from a
+  Types-only patch into a shared `_render_section_patch` applied to
+  up to four active, non-overlapping real regions in one combined
+  pass, sorted by real file order -- confirmed real, driven: **all 6
+  real `.tech` files still export byte-identical with no edits**, and
+  a real edit/add/delete round-trip across Planes+Contacts+Aliases
+  simultaneously left Types/Compose/Connect and every untouched real
+  entry in the same file completely unaffected. The GUI side reuses a
+  new, generic `gui/simple_list_editor.py` (`SimpleListEditor`) --
+  list + form + New/Delete/Filter, the same commit-on-switch pattern
+  as Types' own bespoke editor, but written once and parameterized by
+  column/field names rather than hand-copied three more times, since
+  all three of these domains are flat, plain-string-field dataclasses
+  (unlike Types' own comma-split aliases list and boolean obsolete
+  combo, which stay hand-written). Planes/Contacts/Aliases edits also
+  now persist across a relaunch via `saves/*.yaml`
+  (`project_io.py`'s own `magic_planes`/`magic_contacts`/
+  `magic_aliases`, alongside the existing `magic_types`), not just
+  Types -- confirmed for real, driven: an edited plane/contact/alias
+  survives `File > Save Edits` and a simulated relaunch, and a real
+  `main.py export-magic-types` write-back afterward contains exactly
+  those edited values. **Deliberately still out of scope this pass**
+  (documented honestly, not silently dropped): Styles (124 real
+  entries, a real `type_name -> list[style_names]` shape less uniform
+  than the other three) and the much harder mini-DSL sections
+  (`cifoutput`/`cifinput`/`compose`/`connect`/`drc`/`extract`, eleven
+  real sub-tabs combined) -- none of these fit the "one flat entry per
+  line" shape this pass's shared machinery relies on; each would need
+  its own real editor design, real separate future work.
 - "Pre-pointed" Magic/KLayout launch guidance is back in
   `eda_tools.py`, pointed at real files this project has since
   downloaded and read: Magic launches with IHP's own real, official

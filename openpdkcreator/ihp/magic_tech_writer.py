@@ -1,37 +1,50 @@
-"""Real Magic Types write-back -- the third and final piece of native
+"""Real Magic write-back -- the third and final piece of native
 write-back serialization (after ``ihp/lef_writer.py`` and
 ``ihp/drc_writer.py``), same surgical, position-targeted discipline:
 re-reads the real *original* ``.tech`` file fresh from disk (always
 pristine, since export never writes to ``data/``) and patches only the
-real lines belonging to the currently-editable domain -- **Types**, a
-list + form pane, the only Magic Tech domain with a real form at all
-(see ``gui/magic_tech_view.py``'s own docstring). Every other real
-section (planes/contacts/aliases/styles/compose/connect/cifoutput/
-everything ``magic_tech.py`` doesn't parse) is copied verbatim,
-untouched -- there's no editor for them, so nothing to write back.
+real lines belonging to a currently-editable domain -- **Types**,
+**Planes**, **Contacts**, and **Aliases**, the four Magic Tech domains
+with a real form (see ``gui/magic_tech_view.py``'s own docstring).
+Every other real section (styles/compose/connect/cifoutput/cifinput/
+drc/extract/everything ``magic_tech.py`` doesn't parse) is copied
+verbatim, untouched -- there's no editor for them, so nothing to write
+back; deliberately bounded, not attempted for all fifteen real
+sub-tabs at once (see README's own Future Work note on the remaining
+gap).
 
-Each real type occupies exactly one real line (``[-]plane
-name,alias1,alias2``, no block structure to navigate, unlike LEF's
-``PIN``/``MACRO`` or DRC's multi-line ``.output()`` calls) --
-``ihp/magic_tech.py``'s own ``TypeEntry.line_no``/
-``MagicTechnology.all_parsed_type_line_nos`` (tracked at parse time,
-only when safely mappable back to real file line numbers -- see
-``_safe_prefix_line_count``'s own docstring) are used exactly the way
-``ihp/lef.py``'s ``LefPin.start_line``/``LefMacro.
-all_parsed_pin_ranges`` are: a deleted type's original line is omitted
-entirely; a brand-new type (``line_no == 0``) is appended just before
-the real ``types`` section's own closing ``end`` line; an existing
-type's line is regenerated fresh from its current in-memory fields
-(name/aliases/obsolete/plane), preserving only its original
-indentation -- there's no unmodeled per-type content to lose here
-(unlike a LEF pin's real ``PORT``/``ANTENNAMODEL`` data), since a real
-type line's entire real content is exactly the fields this project
-already models.
+Each real entry in all four editable domains occupies exactly one real
+line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT`` for a
+plane; ``TYPE LAYER1 LAYER2`` for a contact; ``NAME MEMBERS`` for an
+alias -- no block structure to navigate, unlike LEF's ``PIN``/``MACRO``
+or DRC's multi-line ``.output()`` calls), so all four share one
+generic patch routine, ``_render_section_patch``, parameterized by a
+per-domain line-render function -- rather than four near-duplicated
+copies of the same real positional-patch logic.
+``ihp/magic_tech.py``'s own ``TypeEntry.line_no``/``PlaneEntry.
+line_no``/``ContactEntry.line_no``/``AliasEntry.line_no`` (tracked at
+parse time, only when safely mappable back to real file line numbers
+-- see ``_safe_prefix_line_count``'s own docstring) are used exactly
+the way ``ihp/lef.py``'s ``LefPin.start_line``/``LefMacro.
+all_parsed_pin_ranges`` are: a deleted entry's original line is
+omitted entirely; a brand-new entry (``line_no == 0``) is appended
+just before its own real section's closing ``end`` line; an existing
+entry's line is regenerated fresh from its current in-memory fields,
+preserving only its original indentation/separator whitespace -- there
+'s no unmodeled per-entry content to lose in any of the four (unlike a
+LEF pin's real ``PORT``/``ANTENNAMODEL`` data), since a real entry
+line's entire real content is exactly the fields this project already
+models.
 
-If ``MagicTechnology.types_section_start_line`` is ``0`` (no real,
-safely-mappable ``types`` section was found in this exact file), the
-file is returned completely unmodified -- refusing to guess is safer
-than patching the wrong real position.
+All four real sections (confirmed real, not assumed: ``planes``
+83-98, ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382 in
+IHP's own real ``ihp-sg13g2.tech``) sit well before the file's own
+first real ``include`` line, so all four share the exact same real
+``safe_through`` boundary already established for Types alone. If a
+given domain's own section start/end line is ``0`` (not found at a
+safely-mappable position), that one domain's real lines are simply
+left untouched -- refusing to guess is safer than patching the wrong
+real position -- while the other three still patch normally.
 """
 
 from __future__ import annotations
@@ -43,6 +56,9 @@ from . import magic_tech as magic_tech_mod
 from . import text_utils
 
 _TYPE_LINE_RE = re.compile(r"^(\s*)(-)?(\S+)(\s+)(\S.*)$")
+_PLANE_LINE_RE = re.compile(r"^(\s*)(\S+)(\s*,\s*)(\S.*)$")
+_CONTACT_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S+)(\s+)(\S+)\s*$")
+_ALIAS_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -65,37 +81,87 @@ def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None
     return f"{indent}{prefix}{entry.plane}{separator}{names}"
 
 
-def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) -> str:
-    original_text = original_path.read_text(encoding="utf-8", errors="replace")
-    original_lines = original_text.splitlines()
+def _render_plane_line(entry: magic_tech_mod.PlaneEntry, original_line: str | None) -> str:
+    match = _PLANE_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else ""
+    separator = match.group(3) if match else ", "
+    return f"{indent}{entry.name}{separator}{entry.short_code}"
 
-    if tech.types_section_start_line == 0 or tech.types_section_end_line == 0:
-        return text_utils.join_preserving_trailing_newline(original_text, original_lines)
 
-    start_idx = tech.types_section_start_line - 1  # the 'types' keyword line itself
-    end_idx = tech.types_section_end_line - 1  # the section's own 'end' line
+def _render_contact_line(entry: magic_tech_mod.ContactEntry, original_line: str | None) -> str:
+    match = _CONTACT_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else ""
+    sep1 = match.group(3) if match else " "
+    sep2 = match.group(5) if match else " "
+    return f"{indent}{entry.contact_type}{sep1}{entry.layer1}{sep2}{entry.layer2}"
 
-    current_by_line = {entry.line_no: entry for entry in tech.types if entry.line_no}
 
-    output = original_lines[: start_idx + 1]  # everything up to and including 'types', verbatim
+def _render_alias_line(entry: magic_tech_mod.AliasEntry, original_line: str | None) -> str:
+    match = _ALIAS_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else ""
+    separator = match.group(3) if match else " "
+    return f"{indent}{entry.name}{separator}{entry.members_raw}"
+
+
+def _render_section_patch(
+    original_lines: list[str], start_line: int, end_line: int,
+    entries: list, all_line_nos: list[int], render_fn,
+) -> list[str]:
+    """One real section's own patched lines, from its own real keyword
+    line through its own real closing ``end`` (both inclusive,
+    verbatim) -- shared by all four editable domains, see this
+    module's own docstring."""
+
+    start_idx = start_line - 1
+    end_idx = end_line - 1
+    current_by_line = {entry.line_no: entry for entry in entries if entry.line_no}
+
+    output = [original_lines[start_idx]]  # the section's own keyword line, verbatim
     cursor = start_idx + 1
-    for orig_line_no in tech.all_parsed_type_line_nos:
+    for orig_line_no in all_line_nos:
         line_idx = orig_line_no - 1
         output.extend(original_lines[cursor:line_idx])  # verbatim gap (comments/blank lines)
         entry = current_by_line.get(orig_line_no)
         if entry is not None:
-            output.append(_render_type_line(entry, original_lines[line_idx]))
-        # else: this real type was deleted this session -- omit its original line entirely.
+            output.append(render_fn(entry, original_lines[line_idx]))
+        # else: this real entry was deleted this session -- omit its original line entirely.
         cursor = line_idx + 1
+    output.extend(original_lines[cursor:end_idx])
 
-    output.extend(original_lines[cursor:end_idx])  # rest of the section body, verbatim
-
-    for entry in tech.types:
+    for entry in entries:
         if entry.line_no == 0:
-            output.append(_render_type_line(entry, None))  # a type added this session
+            output.append(render_fn(entry, None))  # an entry added this session
 
     output.append(original_lines[end_idx])  # the section's own 'end' line, verbatim
-    output.extend(original_lines[end_idx + 1 :])  # everything after, verbatim
+    return output
+
+
+def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) -> str:
+    original_text = original_path.read_text(encoding="utf-8", errors="replace")
+    original_lines = original_text.splitlines()
+
+    candidate_sections = [
+        (tech.planes_section_start_line, tech.planes_section_end_line, tech.planes, tech.all_parsed_plane_line_nos, _render_plane_line),
+        (tech.types_section_start_line, tech.types_section_end_line, tech.types, tech.all_parsed_type_line_nos, _render_type_line),
+        (tech.contacts_section_start_line, tech.contacts_section_end_line, tech.contacts, tech.all_parsed_contact_line_nos, _render_contact_line),
+        (tech.aliases_section_start_line, tech.aliases_section_end_line, tech.aliases, tech.all_parsed_alias_line_nos, _render_alias_line),
+    ]
+    active_sections = sorted(
+        (s for s in candidate_sections if s[0] and s[1]), key=lambda s: s[0],
+    )
+
+    if not active_sections:
+        return text_utils.join_preserving_trailing_newline(original_text, original_lines)
+
+    output: list[str] = []
+    cursor = 0
+    for start_line, end_line, entries, all_line_nos, render_fn in active_sections:
+        start_idx = start_line - 1
+        output.extend(original_lines[cursor:start_idx])  # verbatim gap before this section
+        output.extend(_render_section_patch(original_lines, start_line, end_line, entries, all_line_nos, render_fn))
+        cursor = end_line  # end_line - 1 is the 0-indexed 'end' line, already appended; next gap starts right after.
+
+    output.extend(original_lines[cursor:])  # everything after the last patched section, verbatim
     return text_utils.join_preserving_trailing_newline(original_text, output)
 
 

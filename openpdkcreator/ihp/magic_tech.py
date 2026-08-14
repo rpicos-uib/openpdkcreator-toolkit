@@ -181,6 +181,12 @@ _DRC_VALUE_TO_MICRONS = 1000.0
 class PlaneEntry:
     name: str
     short_code: str
+    line_no: int = 0
+    """This plane's own real, 1-indexed source line number, tracked the
+    same way ``TypeEntry.line_no`` is (see ``_safe_prefix_line_count``)
+    -- ``0`` for a plane added this session, or one whose section this
+    parser can't safely map back to real source line numbers. Used by
+    ``ihp/magic_tech_writer.py`` for write-back."""
 
 
 @dataclass
@@ -207,6 +213,8 @@ class ContactEntry:
     contact_type: str
     layer1: str
     layer2: str
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``."""
 
 
 @dataclass
@@ -217,6 +225,8 @@ class AliasEntry:
     '*name' wildcard-prefixed entries and references to other aliases)
     -- resolving wildcard/alias-of-alias semantics is real, separate
     future work; kept verbatim so nothing is silently lost."""
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``."""
 
 
 @dataclass
@@ -509,6 +519,22 @@ class MagicTechnology:
     types_section_end_line: int = 0
     """The real, 1-indexed line number of the ``types`` section's own
     closing ``end``, in ``source_path``."""
+    all_parsed_plane_line_nos: list[int] = field(default_factory=list)
+    planes_section_start_line: int = 0
+    planes_section_end_line: int = 0
+    all_parsed_contact_line_nos: list[int] = field(default_factory=list)
+    contacts_section_start_line: int = 0
+    contacts_section_end_line: int = 0
+    all_parsed_alias_line_nos: list[int] = field(default_factory=list)
+    aliases_section_start_line: int = 0
+    aliases_section_end_line: int = 0
+    """Planes/Contacts/Aliases each get the exact same real
+    line-tracking bookkeeping as ``types`` above (see
+    ``all_parsed_type_line_nos``/``types_section_start_line``/
+    ``types_section_end_line``'s own docstrings) -- confirmed real,
+    not assumed: all three sections sit in ``ihp-sg13g2.tech`` well
+    before its first real ``include`` line, the same safely-mappable
+    real region ``types`` itself already relies on."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -592,17 +618,61 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
     return sections
 
 
-def _parse_planes(lines: list[str]) -> list[PlaneEntry]:
+def _scan_single_line_section(lines, section_name, safe_through, parse_entry):
+    """Shared real line-tracking scan for a section whose every real
+    entry sits on exactly one real line (``planes``/``contact``/
+    ``aliases`` -- unlike ``types``, whose own real per-line shape is
+    distinct enough it keeps its own ``_parse_types_with_lines``).
+    Same real approach: scans the full, combined ``lines`` (not a
+    pre-sectioned body, unlike ``_split_sections``'s own real body
+    lists, which carry no line-number info at all), tracking each real
+    entry's own line number only when ``line_no <= safe_through`` (see
+    ``_safe_prefix_line_count``). *parse_entry(stripped_line)* returns
+    a real entry object (with its own ``line_no`` field, set here) or
+    ``None`` to skip a non-entry real line. Returns (entries,
+    all_line_nos, section_start_line, section_end_line)."""
+
     entries = []
-    for line in lines:
-        stripped = line.strip()
+    all_line_nos: list[int] = []
+    section_start = section_end = 0
+    in_section = False
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+        if not in_section:
+            if stripped == section_name:
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
         if not stripped or stripped.startswith("#"):
             continue
-        if "," not in stripped:
+        entry = parse_entry(stripped)
+        if entry is None:
             continue
-        name, _, short = stripped.partition(",")
-        entries.append(PlaneEntry(name=name.strip(), short_code=short.strip()))
-    return entries
+        safe_line_no = line_no if section_start and line_no <= safe_through else 0
+        if safe_line_no:
+            all_line_nos.append(safe_line_no)
+        entry.line_no = safe_line_no
+        entries.append(entry)
+
+    return entries, all_line_nos, section_start, section_end
+
+
+def _parse_plane_line(stripped: str) -> PlaneEntry | None:
+    if "," not in stripped:
+        return None
+    name, _, short = stripped.partition(",")
+    return PlaneEntry(name=name.strip(), short_code=short.strip())
+
+
+def _parse_planes_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "planes", safe_through, _parse_plane_line)
 
 
 def _parse_types_with_lines(
@@ -658,30 +728,28 @@ def _parse_types_with_lines(
     return entries, all_line_nos, section_start, section_end
 
 
-def _parse_contacts(lines: list[str]) -> list[ContactEntry]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped == "stackable":
-            continue
-        parts = stripped.split()
-        if len(parts) != 3:
-            continue
-        entries.append(ContactEntry(contact_type=parts[0], layer1=parts[1], layer2=parts[2]))
-    return entries
+def _parse_contact_line(stripped: str) -> ContactEntry | None:
+    if stripped == "stackable":
+        return None
+    parts = stripped.split()
+    if len(parts) != 3:
+        return None
+    return ContactEntry(contact_type=parts[0], layer1=parts[1], layer2=parts[2])
 
 
-def _parse_aliases(lines: list[str]) -> list[AliasEntry]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split(None, 1)
-        if len(parts) != 2:
-            continue
-        entries.append(AliasEntry(name=parts[0], members_raw=parts[1].strip()))
-    return entries
+def _parse_contacts_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "contact", safe_through, _parse_contact_line)
+
+
+def _parse_alias_line(stripped: str) -> AliasEntry | None:
+    parts = stripped.split(None, 1)
+    if len(parts) != 2:
+        return None
+    return AliasEntry(name=parts[0], members_raw=parts[1].strip())
+
+
+def _parse_aliases_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "aliases", safe_through, _parse_alias_line)
 
 
 def _parse_styles(lines: list[str]) -> list[StyleEntry]:
@@ -975,9 +1043,15 @@ def parse_tech_file(path: Path) -> MagicTechnology:
         _parse_types_with_lines(lines, safe_through)
     )
 
-    tech.planes = _parse_planes(sections.get("planes", []))
-    tech.contacts = _parse_contacts(sections.get("contact", []))
-    tech.aliases = _parse_aliases(sections.get("aliases", []))
+    tech.planes, tech.all_parsed_plane_line_nos, tech.planes_section_start_line, tech.planes_section_end_line = (
+        _parse_planes_with_lines(lines, safe_through)
+    )
+    tech.contacts, tech.all_parsed_contact_line_nos, tech.contacts_section_start_line, tech.contacts_section_end_line = (
+        _parse_contacts_with_lines(lines, safe_through)
+    )
+    tech.aliases, tech.all_parsed_alias_line_nos, tech.aliases_section_start_line, tech.aliases_section_end_line = (
+        _parse_aliases_with_lines(lines, safe_through)
+    )
     tech.styles = _parse_styles(sections.get("styles", []))
     tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
     tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))

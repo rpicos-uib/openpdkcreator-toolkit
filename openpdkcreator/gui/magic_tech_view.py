@@ -11,17 +11,26 @@ Recipes**, plus **Compose**/**Connect**/**DRC (Magic)**/**Extract**/
 **Extract Coefficients**/**Extract Devices**/**Extract Misc** (real
 ``cifinput``/``compose``/``connect``/``drc``/``extract`` section
 content -- see ``ihp/magic_tech.py``'s own docstring for exactly
-what's extracted from each and why). **Types**
-is editable (a list + form pane, New/Delete Type, the same
+what's extracted from each and why). **Types**/**Planes**/
+**Contacts**/**Aliases** are editable -- Types keeps its own
+hand-written list + form pane (a real comma-split aliases list, a
+boolean obsolete combo); Planes/Contacts/Aliases share one generic,
+reusable `simple_list_editor.SimpleListEditor` instead (flat,
+plain-string-field dataclasses, a clean fit for one shared
+implementation rather than three hand-copies of the same
 commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
-already use) -- every other domain stays read-only for now (each would
-need its own form; Types was the one asked for). Editing is in-memory,
-same as DRC Rules/LEF pins, with native write-back into the real
-``.tech`` file via ``ihp/magic_tech_writer.py`` (``File > Export
-Edited Magic Types``/``main.py export-magic-types``). "View File"
-opens the real, underlying ``.tech`` file directly
-(``file_view_dialog.view_file_dialog``), which *can* be edited, as raw
-text.
+already use). Every other domain stays read-only for now (each would
+need its own real editor design -- Styles' own real
+`type_name -> list[style_names]` shape and the harder mini-DSL
+sections aren't a clean fit for either existing editor shape; see
+README's own Future Work). Editing is in-memory, same as DRC Rules/
+LEF pins, with native write-back into the real ``.tech`` file via
+``ihp/magic_tech_writer.py`` (``File > Export Edited Magic
+Types``/``main.py export-magic-types`` -- despite the menu/command
+label, this now writes back all four editable domains at once, not
+just Types). "View File" opens the real, underlying ``.tech`` file
+directly (``file_view_dialog.view_file_dialog``), which *can* be
+edited, as raw text.
 """
 
 from __future__ import annotations
@@ -33,6 +42,7 @@ from tkinter import ttk
 from ..ihp import magic_tech as magic_tech_mod
 from .file_view_dialog import view_file_dialog
 from .list_filter import build_filter_row, matches
+from .simple_list_editor import SimpleListEditor
 
 OBSOLETE_VALUES = ("", "yes")
 
@@ -68,10 +78,26 @@ class MagicTechView(ttk.Frame):
         sub = ttk.Notebook(self)
         sub.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-        self.planes_tree = self._make_tab(sub, "Planes", ("name", "short_code"), (200, 100))
+        self.planes_editor = self._build_simple_editor(
+            sub, "Planes", [("name", "Name", 200), ("short_code", "Short Code", 100)],
+            lambda: magic_tech_mod.PlaneEntry(name="newplane", short_code="np"),
+            entry_label="Plane",
+            help_text="Real Magic .tech plane: 'name, short_code'.",
+        )
         self._build_types_tab(sub)
-        self.contacts_tree = self._make_tab(sub, "Contacts", ("contact_type", "layer1", "layer2"), (140, 160, 160))
-        self.aliases_tree = self._make_tab(sub, "Aliases", ("name", "members"), (200, 560))
+        self.contacts_editor = self._build_simple_editor(
+            sub, "Contacts",
+            [("contact_type", "Contact Type", 140), ("layer1", "Layer 1", 160), ("layer2", "Layer 2", 160)],
+            lambda: magic_tech_mod.ContactEntry(contact_type="newcontact", layer1="", layer2=""),
+            entry_label="Contact",
+            help_text="Real Magic .tech contact: 'type layer1 layer2'.",
+        )
+        self.aliases_editor = self._build_simple_editor(
+            sub, "Aliases", [("name", "Name", 200), ("members_raw", "Members", 460)],
+            lambda: magic_tech_mod.AliasEntry(name="newalias", members_raw=""),
+            entry_label="Alias",
+            help_text="Real Magic .tech alias: 'name member1,member2,...'.",
+        )
         self.styles_tree = self._make_tab(sub, "Styles", ("type_name", "style_names"), (160, 560))
         self.cif_tree = self._make_tab(sub, "CIF Layers", ("name", "gds_pairs"), (200, 400))
         self._build_cifinput_tab(sub)
@@ -161,6 +187,16 @@ class MagicTechView(ttk.Frame):
         tree.pack(fill="both", expand=True)
         return tree
 
+    def _build_simple_editor(
+        self, notebook: ttk.Notebook, title: str, columns: list[tuple[str, str, int]],
+        new_entry_factory, entry_label: str, help_text: str,
+    ) -> SimpleListEditor:
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text=title)
+        editor = SimpleListEditor(frame, columns, new_entry_factory, entry_label=entry_label, help_text=help_text)
+        editor.pack(fill="both", expand=True)
+        return editor
+
     def _build_types_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="Types")
@@ -234,15 +270,28 @@ class MagicTechView(ttk.Frame):
     # -- persistence hooks (project_io.py) -----------------------------------
 
     def commit_pending_edits(self):
-        """Flushes whatever's mid-edit in the Types form into its
-        ``TypeEntry`` before the caller reads/saves state -- otherwise
-        a field typed but not yet committed (no selection change since)
-        would be silently dropped from a save."""
+        """Flushes whatever's mid-edit in the Types/Planes/Contacts/
+        Aliases forms into their own real entries before the caller
+        reads/saves state -- otherwise a field typed but not yet
+        committed (no selection change since) would be silently
+        dropped from a save."""
 
         self._commit_form_to_type()
+        self.planes_editor.commit_pending_edits()
+        self.contacts_editor.commit_pending_edits()
+        self.aliases_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
+
+    def collect_planes_by_tech(self) -> dict[str, list[magic_tech_mod.PlaneEntry]]:
+        return {name: tech.planes for name, tech in self.technologies.items()}
+
+    def collect_contacts_by_tech(self) -> dict[str, list[magic_tech_mod.ContactEntry]]:
+        return {name: tech.contacts for name, tech in self.technologies.items()}
+
+    def collect_aliases_by_tech(self) -> dict[str, list[magic_tech_mod.AliasEntry]]:
+        return {name: tech.aliases for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -264,9 +313,11 @@ class MagicTechView(ttk.Frame):
 
     def _refresh_all(self):
         self._commit_form_to_type()
+        self.planes_editor.commit_pending_edits()
+        self.contacts_editor.commit_pending_edits()
+        self.aliases_editor.commit_pending_edits()
         for tree in (
-            self.planes_tree, self.contacts_tree,
-            self.aliases_tree, self.styles_tree, self.cif_tree,
+            self.styles_tree, self.cif_tree,
             self.cifinput_ignore_tree, self.cifinput_hints_tree, self.cifinput_recipes_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
@@ -278,17 +329,17 @@ class MagicTechView(ttk.Frame):
         tech = self._current_tech()
         if tech is None:
             self.summary_var.set("No Magic .tech data loaded -- has ihp/fetch.py been run?")
+            self.planes_editor.set_entries(None)
+            self.contacts_editor.set_entries(None)
+            self.aliases_editor.set_entries(None)
             self._refresh_types()
             return
 
-        for plane in tech.planes:
-            self.planes_tree.insert("", "end", values=(plane.name, plane.short_code))
+        self.planes_editor.set_entries(tech.planes)
         self.type_plane_combo["values"] = [plane.name for plane in tech.planes]
         self._refresh_types()
-        for contact in tech.contacts:
-            self.contacts_tree.insert("", "end", values=(contact.contact_type, contact.layer1, contact.layer2))
-        for alias in tech.aliases:
-            self.aliases_tree.insert("", "end", values=(alias.name, alias.members_raw))
+        self.contacts_editor.set_entries(tech.contacts)
+        self.aliases_editor.set_entries(tech.aliases)
         for style in tech.styles:
             self.styles_tree.insert("", "end", values=(style.type_name, ", ".join(style.style_names)))
         for cif_layer in tech.cif_layers:

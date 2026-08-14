@@ -33,7 +33,7 @@ from pathlib import Path
 import yaml
 
 from .ihp.lef import LefPin, LefPort
-from .ihp.magic_tech import TypeEntry
+from .ihp.magic_tech import AliasEntry, ContactEntry, PlaneEntry, TypeEntry
 from .models import DesignRule
 
 SAVE_DIR = Path(__file__).resolve().parents[1] / "saves"
@@ -49,8 +49,15 @@ def save_state(
     magic_types: dict[str, list[TypeEntry]],
     lef_pins: dict[str, dict[str, list[LefPin]]],
     project_name: str = "",
+    magic_planes: dict[str, list[PlaneEntry]] | None = None,
+    magic_contacts: dict[str, list[ContactEntry]] | None = None,
+    magic_aliases: dict[str, list[AliasEntry]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
+    *magic_planes*/*magic_contacts*/*magic_aliases*: the same real
+    shape, one dict per newly-editable Magic Tech domain (see
+    ``ihp/magic_tech_writer.py``'s own docstring) -- optional and
+    default to empty so existing callers/save files stay valid.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
     matching ``LefView.lef_files``'s own keys) -> macro name -> its
     current Pins list. *project_name*: the user's own editable label
@@ -67,6 +74,18 @@ def save_state(
         "magic_types": {
             tech_name: [dataclasses.asdict(t) for t in types]
             for tech_name, types in magic_types.items()
+        },
+        "magic_planes": {
+            tech_name: [dataclasses.asdict(p) for p in planes]
+            for tech_name, planes in (magic_planes or {}).items()
+        },
+        "magic_contacts": {
+            tech_name: [dataclasses.asdict(c) for c in contacts]
+            for tech_name, contacts in (magic_contacts or {}).items()
+        },
+        "magic_aliases": {
+            tech_name: [dataclasses.asdict(a) for a in aliases]
+            for tech_name, aliases in (magic_aliases or {}).items()
         },
         "lef_pins": {
             lef_path: {
@@ -86,6 +105,9 @@ class LoadedState:
     magic_types: dict[str, list[TypeEntry]]
     lef_pins: dict[str, dict[str, list[LefPin]]]
     project_name: str = ""
+    magic_planes: dict[str, list[PlaneEntry]] = dataclasses.field(default_factory=dict)
+    magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
+    magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
 
 
 def _load_lef_pin(raw: dict) -> LefPin:
@@ -104,6 +126,18 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [TypeEntry(**t) for t in types]
         for tech_name, types in data.get("magic_types", {}).items()
     }
+    magic_planes = {
+        tech_name: [PlaneEntry(**p) for p in planes]
+        for tech_name, planes in data.get("magic_planes", {}).items()
+    }
+    magic_contacts = {
+        tech_name: [ContactEntry(**c) for c in contacts]
+        for tech_name, contacts in data.get("magic_contacts", {}).items()
+    }
+    magic_aliases = {
+        tech_name: [AliasEntry(**a) for a in aliases]
+        for tech_name, aliases in data.get("magic_aliases", {}).items()
+    }
     lef_pins = {
         lef_path: {
             macro_name: [_load_lef_pin(p) for p in pins]
@@ -114,6 +148,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
     return LoadedState(
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
+        magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
     )
 
 
