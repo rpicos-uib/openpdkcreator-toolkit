@@ -72,16 +72,19 @@ injectable ``get_lef`` hook so ``CellHubView`` can route through this
 same cache too).
 
 **Native write-back** (``export.py``, **File > Export Edited LEF
-Files** / **Export Edited DRC Rules** / **Export Edited Magic Types**):
-unlike ``project_io.py``'s own program-format ``saves/``, this writes
-real, valid text back into the real file formats -- ``.lef`` (pin
-edits, ``ihp/lef_writer.py``), DRC Rules (a rule's ``rule_id``/
-``description`` patched into its real ``.drc`` script's own
-``.output()`` call, its ``value`` into the one real JSON config file
-it actually lives in -- ``ihp/drc_writer.py``), and Magic Types (a
-type's own real one-line entry in its real ``.tech`` file --
-``ihp/magic_tech_writer.py``) -- all via surgical, position-targeted
-text splicing, everything else preserved byte-for-byte, to a new
+Files** / **DRC Rules** / **Magic Types** / **CDL/SPICE Ports** /
+**Verilog Ports**): unlike ``project_io.py``'s own program-format
+``saves/``, this writes real, valid text back into the real file
+formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``), DRC Rules (a
+rule's ``rule_id``/``description`` patched into its real ``.drc``
+script's own ``.output()`` call, its ``value`` into the one real JSON
+config file it actually lives in -- ``ihp/drc_writer.py``), Magic
+Types (a type's own real one-line entry in its real ``.tech`` file --
+``ihp/magic_tech_writer.py``), and CDL/SPICE/Verilog port lists (a real
+``.SUBCKT``/``*.PININFO`` pair or real ``module``/``input``/``output``/
+``inout`` declarations -- ``ihp/netlist_writer.py``/
+``ihp/verilog_writer.py``) -- all via surgical, position-targeted text
+splicing, everything else preserved byte-for-byte, to a new
 ``export/`` tree mirroring each file's own real relative path under
 ``pdk_root``. Never touches ``data/``. This covers every currently
 structured-editable domain -- see README's Future Work for what's
@@ -101,6 +104,8 @@ from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
 from ..ihp import layers as layers_mod
 from ..ihp import lef as lef_mod
+from ..ihp import netlist as netlist_mod
+from ..ihp import verilog as verilog_mod
 from ..models import DesignRule, Layer
 from .cell_hub_view import CellHubView
 from .file_view_dialog import view_file_dialog
@@ -142,6 +147,12 @@ class App(ttk.Frame):
         # -- see this module's own docstring.
         self.lef_cache: dict[Path, lef_mod.LefFile] = {}
         self.lef_pin_overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
+        # Same real reason, same fix, for CDL/SPICE/Verilog port edits
+        # via the By Cell tab's own "Edit ... Ports" dialogs -- without
+        # this, switching families and back would silently discard any
+        # in-memory port edit (cells.py re-parses fresh on every call).
+        self.netlist_cache: dict[Path, list[netlist_mod.NetlistCell]] = {}
+        self.verilog_cache: dict[Path, list[verilog_mod.VerilogModule]] = {}
 
         self._update_title()
         root.geometry("1100x650")
@@ -193,6 +204,18 @@ class App(ttk.Frame):
         for path, parsed in self.lef_cache.items():
             self._apply_lef_overrides(str(path.relative_to(self.pdk_root)), parsed)
 
+    # -- shared netlist/Verilog parsing (CellHubView's own Ports dialogs) ---
+
+    def get_parsed_netlist(self, path: Path) -> list[netlist_mod.NetlistCell]:
+        if path not in self.netlist_cache:
+            self.netlist_cache[path] = netlist_mod.find_cells(path)
+        return self.netlist_cache[path]
+
+    def get_parsed_verilog(self, path: Path) -> list[verilog_mod.VerilogModule]:
+        if path not in self.verilog_cache:
+            self.verilog_cache[path] = verilog_mod.find_modules(path)
+        return self.verilog_cache[path]
+
     def collect_lef_pin_overrides(self) -> dict[str, dict[str, list[lef_mod.LefPin]]]:
         """Every macro's current pin list, for every real ``.lef`` file
         parsed so far this session (files never visited via either the
@@ -215,6 +238,8 @@ class App(ttk.Frame):
         file_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
         file_menu.add_command(label="Export Edited DRC Rules (open_pdks format)", command=self._export_drc_rules)
         file_menu.add_command(label="Export Edited Magic Types (open_pdks format)", command=self._export_magic_types)
+        file_menu.add_command(label="Export Edited CDL/SPICE Ports (open_pdks format)", command=self._export_netlist_files)
+        file_menu.add_command(label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -269,6 +294,30 @@ class App(ttk.Frame):
             return
         self.status.set(f"Exported {len(written)} real .tech file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
 
+    def _export_netlist_files(self):
+        """Writes real, patched CDL/SPICE text for every real
+        ``.cdl``/``.spice`` file parsed this session (By Cell tab's own
+        Edit CDL/SPICE Ports dialogs) -- see ``export.py``'s/
+        ``ihp/netlist_writer.py``'s own docstrings."""
+
+        written = export_mod.export_netlist_files(self.pdk_root, self.netlist_cache)
+        if not written:
+            self.status.set("No CDL/SPICE files parsed this session -- nothing to export (visit By Cell first).")
+            return
+        self.status.set(f"Exported {len(written)} real CDL/SPICE file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
+    def _export_verilog_files(self):
+        """Writes real, patched Verilog text for every real ``.v`` file
+        parsed this session (By Cell tab's own Edit Verilog Ports
+        dialog) -- see ``export.py``'s/``ihp/verilog_writer.py``'s own
+        docstrings."""
+
+        written = export_mod.export_verilog_files(self.pdk_root, self.verilog_cache)
+        if not written:
+            self.status.set("No Verilog files parsed this session -- nothing to export (visit By Cell first).")
+            return
+        self.status.set(f"Exported {len(written)} real .v file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
         then writes DRC Rules/Magic Types/LEF pins/the project name out
@@ -299,6 +348,8 @@ class App(ttk.Frame):
             save_path.unlink()
         self.lef_cache.clear()
         self.lef_pin_overrides = {}
+        self.netlist_cache.clear()
+        self.verilog_cache.clear()
         self.set_project_name(DEFAULT_PROJECT_NAME)
         self.settings_view.refresh()
         self.lef_view.load()

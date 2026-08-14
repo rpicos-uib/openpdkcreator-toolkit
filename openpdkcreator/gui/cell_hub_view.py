@@ -43,6 +43,21 @@ structure, shown as a plain text line (not a raw file View, since GDS
 is binary) below the View buttons. Degrades honestly, not silently, if
 ``klayout.db`` isn't installed in this environment: "present, but not
 parsed" rather than pretending there's nothing there.
+
+**CDL/SPICE/Verilog ports** are also real, structured-editable data
+(``ihp/netlist.py``'s ``NetlistPort``/``ihp/verilog.py``'s
+``VerilogPort`` -- real per-port direction from a real CDL
+``*.PININFO`` comment or real Verilog ``input``/``output``/``inout``
+declarations, honestly blank where the real source has none, e.g.
+every real SPICE file or SRAM's own CDL files). An **Edit ... Ports**
+button next to each real **View** button opens a small modal dialog
+(``port_dialog.edit_ports_dialog``) hosting ``port_editor.PortEditor``,
+the same commit-on-switch shape ``pin_editor.PinEditor`` uses. Like
+LEF pins, these parse through a shared, App-owned cache
+(``App.get_parsed_netlist``/``get_parsed_verilog``) so an edit survives
+a family switch -- the exact same real bug class already found and
+fixed for LEF pins, applied here from the start rather than
+rediscovered.
 """
 
 from __future__ import annotations
@@ -51,8 +66,11 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..ihp import cells as cells_mod
+from ..ihp import netlist as netlist_mod
+from ..ihp import verilog as verilog_mod
 from .file_view_dialog import view_file_dialog
 from .pin_editor import PinEditor
+from .port_dialog import edit_ports_dialog
 
 _CHECK = "✓"
 
@@ -122,21 +140,39 @@ class CellHubView(ttk.Frame):
         )
 
         self.view_buttons: dict[str, ttk.Button] = {}
-        for i, key in enumerate(("lef", "cdl", "spice", "verilog"), start=1):
-            btn = ttk.Button(middle, text=f"View {key.upper()}", command=lambda k=key: self._view(k), state="disabled")
-            btn.grid(row=i, column=0, sticky="ew", pady=2)
+        self.edit_ports_buttons: dict[str, ttk.Button] = {}
+        row = 1
+        for key in ("lef", "cdl", "spice", "verilog"):
+            row_frame = ttk.Frame(middle)
+            row_frame.grid(row=row, column=0, sticky="ew", pady=2)
+            btn = ttk.Button(row_frame, text=f"View {key.upper()}", command=lambda k=key: self._view(k), state="disabled")
+            btn.pack(side="left")
             self.view_buttons[key] = btn
+            if key != "lef":
+                # LEF's own structured editing lives in the Pins pane
+                # (its pin *content* is editable, not its port list --
+                # a macro's real pins aren't added/removed the way a
+                # netlist/module's real ports are). CDL/SPICE/Verilog
+                # have no such pane, so they get their own small button.
+                edit_btn = ttk.Button(
+                    row_frame, text="Edit Ports", command=lambda k=key: self._edit_ports(k), state="disabled",
+                )
+                edit_btn.pack(side="left", padx=(4, 0))
+                self.edit_ports_buttons[key] = edit_btn
+            row += 1
 
         self.gds_var = tk.StringVar()
         ttk.Label(middle, textvariable=self.gds_var, foreground="#444", wraplength=220, justify="left").grid(
-            row=5, column=0, sticky="w", pady=(6, 0)
+            row=row, column=0, sticky="w", pady=(6, 0)
         )
+        row += 1
 
         ttk.Label(middle, text="Liberty (one per real corner file):").grid(
-            row=6, column=0, sticky="w", pady=(10, 2)
+            row=row, column=0, sticky="w", pady=(10, 2)
         )
+        row += 1
         self.liberty_list = tk.Listbox(middle, height=6)
-        self.liberty_list.grid(row=7, column=0, sticky="ew")
+        self.liberty_list.grid(row=row, column=0, sticky="ew")
         self.liberty_list.bind("<Double-Button-1>", self._view_selected_liberty)
 
         right = ttk.Frame(body)
@@ -185,7 +221,12 @@ class CellHubView(ttk.Frame):
             self._show_cell(None)
             return
 
-        self.cell_index = cells_mod.build_cell_index(self.pdk_root, family, get_lef=self.app.get_parsed_lef)
+        self.cell_index = cells_mod.build_cell_index(
+            self.pdk_root, family,
+            get_lef=self.app.get_parsed_lef,
+            get_netlist_cells=self.app.get_parsed_netlist,
+            get_verilog_modules=self.app.get_parsed_verilog,
+        )
         show_all = self.show_all_var.get()
         shown = 0
         for name in sorted(self.cell_index):
@@ -232,6 +273,8 @@ class CellHubView(ttk.Frame):
             self.detail_var.set("Select a cell.")
             for btn in self.view_buttons.values():
                 btn.configure(state="disabled")
+            for btn in self.edit_ports_buttons.values():
+                btn.configure(state="disabled")
             self.gds_var.set("")
             self.pin_editor.set_macro(None)
             self._show_pin_editor(False)
@@ -242,6 +285,9 @@ class CellHubView(ttk.Frame):
         self.view_buttons["cdl"].configure(state="normal" if cv.cdl_cell else "disabled")
         self.view_buttons["spice"].configure(state="normal" if cv.spice_cell else "disabled")
         self.view_buttons["verilog"].configure(state="normal" if cv.verilog_module else "disabled")
+        self.edit_ports_buttons["cdl"].configure(state="normal" if cv.cdl_cell else "disabled")
+        self.edit_ports_buttons["spice"].configure(state="normal" if cv.spice_cell else "disabled")
+        self.edit_ports_buttons["verilog"].configure(state="normal" if cv.verilog_module else "disabled")
         for cell_entry, path in cv.liberty_entries:
             self.liberty_list.insert("end", path.name)
 
@@ -284,6 +330,26 @@ class CellHubView(ttk.Frame):
             view_file_dialog(self, cv.spice_source, cv.spice_cell.start_line, cv.spice_cell.end_line)
         elif key == "verilog" and cv.verilog_module is not None and cv.verilog_source is not None:
             view_file_dialog(self, cv.verilog_source, cv.verilog_module.start_line, cv.verilog_module.end_line)
+
+    def _edit_ports(self, key: str):
+        cv = self.current_cell
+        if cv is None:
+            return
+        if key == "cdl" and cv.cdl_cell is not None:
+            edit_ports_dialog(
+                self, f"CDL Ports -- {cv.name}", cv.cdl_cell.ports,
+                lambda name: netlist_mod.NetlistPort(name=name),
+            )
+        elif key == "spice" and cv.spice_cell is not None:
+            edit_ports_dialog(
+                self, f"SPICE Ports -- {cv.name}", cv.spice_cell.ports,
+                lambda name: netlist_mod.NetlistPort(name=name),
+            )
+        elif key == "verilog" and cv.verilog_module is not None:
+            edit_ports_dialog(
+                self, f"Verilog Ports -- {cv.name}", cv.verilog_module.ports,
+                lambda name: verilog_mod.VerilogPort(name=name), has_width=True,
+            )
 
     def _view_selected_liberty(self, _event=None):
         cv = self.current_cell

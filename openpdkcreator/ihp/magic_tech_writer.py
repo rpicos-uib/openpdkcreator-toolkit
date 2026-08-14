@@ -40,6 +40,7 @@ import re
 from pathlib import Path
 
 from . import magic_tech as magic_tech_mod
+from . import text_utils
 
 _TYPE_LINE_RE = re.compile(r"^(\s*)(-)?(\S+)(\s+)(\S.*)$")
 
@@ -65,10 +66,11 @@ def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None
 
 
 def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) -> str:
-    original_lines = original_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    original_text = original_path.read_text(encoding="utf-8", errors="replace")
+    original_lines = original_text.splitlines()
 
     if tech.types_section_start_line == 0 or tech.types_section_end_line == 0:
-        return "\n".join(original_lines) + "\n"
+        return text_utils.join_preserving_trailing_newline(original_text, original_lines)
 
     start_idx = tech.types_section_start_line - 1  # the 'types' keyword line itself
     end_idx = tech.types_section_end_line - 1  # the section's own 'end' line
@@ -94,7 +96,7 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
 
     output.append(original_lines[end_idx])  # the section's own 'end' line, verbatim
     output.extend(original_lines[end_idx + 1 :])  # everything after, verbatim
-    return "\n".join(output) + "\n"
+    return text_utils.join_preserving_trailing_newline(original_text, output)
 
 
 def export_tech_file(tech: magic_tech_mod.MagicTechnology, export_path: Path) -> None:

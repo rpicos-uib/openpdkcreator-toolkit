@@ -33,6 +33,8 @@ python3 main.py gds          # real GDS structural summary (bbox/shape counts) -
 python3 main.py export-lef   # real, patched .lef write-back to export/ (byte-identical with no edits)
 python3 main.py export-drc   # real, patched DRC-rule write-back to export/ (byte-identical with no edits)
 python3 main.py export-magic-types   # real, patched Magic Types write-back to export/ (byte-identical with no edits)
+python3 main.py export-netlist   # real, patched .cdl/.spice port write-back to export/ (byte-identical with no edits)
+python3 main.py export-verilog   # real, patched .v port write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
@@ -76,6 +78,11 @@ either tab is immediately visible, and saves the same way, from the
 other). A cell with no real LEF macro (an internal netlist sub-element
 with no macro of its own -- common in `sg13g2_sram`) shows a plain
 "nothing to edit here" note instead, not a broken/empty editor.
+**CDL/SPICE/Verilog ports** are also editable, via a small **Edit
+Ports** dialog next to each real **View** button -- real per-port
+direction from a real CDL `*.PININFO` comment or real Verilog
+`input`/`output`/`inout` declarations, add/delete/rename/redirect, the
+same commit-on-switch pattern as everywhere else.
 
 **Settings > General** holds two deliberately distinct,
 separately-labeled pairs, so they never get confused now that this
@@ -304,19 +311,43 @@ highlighted straight to that cell's real line range within its
   actual data: correct row/form population, New/Delete both work,
   **View Source** opens the exact real file and highlights the right
   lines, and the live diagram/`layer_colors()` both render correctly.
-- **`openpdkcreator/ihp/netlist.py`/`verilog.py`/`liberty.py`** -- real,
-  deliberately lightweight "cell boundary" detectors: real
-  `.subckt`/`.ends` pairs for CDL/SPICE (case-insensitive -- CDL's real
-  files use `.SUBCKT`/`.ENDS`, SPICE's use lowercase, the same lesson
-  as `lef.py`'s `Via`/`ViaRULE` finding), real `module`/`endmodule`
-  pairs for Verilog, and real, brace-depth-counted `cell (NAME) { ...
-  }` groups for Liberty (unlike the other three, a Liberty cell nests
+- **`openpdkcreator/ihp/netlist.py`/`verilog.py`** -- real cell/module
+  boundary detectors (`.subckt`/`.ends` for CDL/SPICE, case-insensitive
+  -- CDL's real files use `.SUBCKT`/`.ENDS`, SPICE's use lowercase, the
+  same lesson as `lef.py`'s `Via`/`ViaRULE` finding; `module`/
+  `endmodule` for Verilog) that now also extract **real per-port
+  structure**, matching `lef.py`'s own `LefPin` in ambition: CDL's real
+  `*.PININFO name:I name:O name:B ...` comment (confirmed 100% real
+  coverage -- 130/130 SUBCKTs -- across `sg13g2_io`/`sg13g2_stdcell`'s
+  CDL, and confirmed real *absence* across all of `sg13g2_sram`'s own
+  CDL -- 0/2338 -- an honest real gap, not a parser gap; `I`/`O`/`B`
+  map to `INPUT`/`OUTPUT`/`INOUT`); Verilog's own real `input`/
+  `output`/`inout` declarations (plus a real bus `[msb:lsb]` width,
+  confirmed real and common in SRAM modules). **Two real, previously-
+  unnoticed bugs found and fixed while extending these for real port
+  editing, not assumed**: (1) a real `.SUBCKT` header can wrap its port
+  list across `+`-continuation lines -- confirmed real and common in
+  `sg13g2_sram`'s own internal sub-elements (dozens in one file alone)
+  -- the original parser silently truncated those cells' real port
+  lists at the line break, since only the real, single-line top-level
+  hard-macro SUBCKTs happened to avoid it, so the bug never surfaced in
+  the By Cell hub's own top-level-only default view; (2) a real
+  Verilog `module` header can wrap across multiple lines -- confirmed
+  real in *every one* of IHP's own 28 real SRAM top-level macros -- the
+  original parser required the closing `)` on the same line, so it
+  found **zero** real Verilog modules for any real SRAM macro at all.
+  Both fixed by joining continuation/multi-line headers before parsing.
+  Verified for real: per-file cell counts now match real `.SUBCKT`
+  grep ground truth exactly (4060/4060 across all 28 real SRAM CDL
+  files); the real SRAM top-level macro's Verilog module is now found,
+  with correct real bus port widths (e.g. `A_ADDR`: `input [9:0]`).
+- **`openpdkcreator/ihp/liberty.py`** -- real, brace-depth-counted
+  `cell (NAME) { ... }` boundary detection (a Liberty cell nests
   further real groups inside it, so a fixed closing keyword doesn't
-  exist -- confirmed by reading the real file). Each is real, bounded
-  scope: cell name + real source line range only, never a full
-  netlist/behavioral/timing parser. Verified for real: all three found
-  exactly 84 real cells in `sg13g2_stdcell`'s combined files, matching
-  LEF's own 84 macros exactly.
+  exist -- confirmed by reading the real file). Real, bounded scope:
+  cell name + real source line range only, never a full timing parser
+  -- still read-only, no per-pin/timing-arc model exists to edit (see
+  Future Work).
 - **`openpdkcreator/ihp/gds.py`** -- real, bounded GDS structural
   extraction, via KLayout's own real Python API (`klayout.db`) --
   lazily imported (`_import_klayout_db`, `KLayoutUnavailable`), so
@@ -387,7 +418,62 @@ highlighted straight to that cell's real line range within its
   `sg13g2_and2_1` block inside their much larger combined files, a real
   pin edit made here survives a save + simulated relaunch, and
   `sg13g2_a21o_1`'s real GDS summary line matches `ihp/gds.py`'s own
-  directly-verified numbers exactly.
+  directly-verified numbers exactly. **Edit ... Ports** buttons next
+  to the CDL/SPICE/Verilog **View** buttons open a small modal
+  (`port_dialog.edit_ports_dialog`) hosting `port_editor.PortEditor` --
+  add/delete/rename a real port, edit its real direction (and, for
+  Verilog, real bus width) -- parsing through the same kind of shared,
+  App-owned cache as LEF pins (`App.get_parsed_netlist`/
+  `get_parsed_verilog`), applied here from the start rather than
+  rediscovered: confirmed for real that switching families and back
+  reuses the same cached, possibly-edited `VerilogModule` object
+  (identity-checked), not a silent re-parse that would have discarded
+  the edit -- the exact bug class already found and fixed for LEF pins
+  earlier this project.
+- **`openpdkcreator/gui/port_editor.py`** -- `PortEditor`, a real port
+  list + New/Delete Port + a Name/Direction[/Width] form, the same
+  commit-on-switch pattern `PinEditor` uses -- duck-typed across CDL/
+  SPICE's `NetlistPort` and Verilog's `VerilogPort` (structurally
+  similar but not identical -- only Verilog has a real bus width) via
+  a `port_factory` callback for New Port, rather than two near-
+  identical widgets.
+- **`openpdkcreator/ihp/netlist_writer.py`/`verilog_writer.py`** --
+  real, open_pdks-format write-back for CDL/SPICE/Verilog ports,
+  completing native write-back serialization for every currently
+  structured-editable domain. Unlike the other writers, there's no
+  single stable per-entry line/range to patch in place cleanly (a real
+  `.SUBCKT` header can wrap across `+`-continuations in a way that's
+  awkward to token-patch), so both instead compare each cell/module's
+  *current* port list against a **fresh re-parse** of the same real
+  original file: unchanged -- the real original header/declaration
+  text is kept byte-for-byte, wrapping and all; changed -- regenerated
+  cleanly as a single real line (header) plus, for CDL, a fresh real
+  `*.PININFO` line (inserted new if the cell had none at all -- e.g.
+  every real `sg13g2_sram` CDL cell -- when a direction is assigned),
+  or for Verilog, every real declaration line replaced with one fresh
+  line per port at the position of the first original one. Verified
+  for real against the actual downloaded data: **all 30 real `.cdl` +
+  1 real `.spice` + 35 real `.v` files export byte-identical to their
+  real originals with no edits**; real, driven round-trips for a CDL
+  direction edit (through the real `*.PININFO` line), a new/deleted
+  CDL port, a fresh `*.PININFO` insertion on a real SRAM cell that had
+  none, a Verilog direction edit, and a real bus-width edit on the
+  real multi-line-header SRAM module -- each confirmed to leave every
+  *other* real cell/module in the file unchanged.
+- **`openpdkcreator/ihp/text_utils.py`** -- one real, shared fix for
+  all five writers above: `join_preserving_trailing_newline`. **A
+  third real bug, found by `main.py export-full`'s own smoking-gun
+  round-trip test at full-PDK scale, not by any single writer's own
+  narrower per-file tests**: every writer unconditionally appended a
+  trailing newline to its output, silently changing real byte content
+  for the 21 real files (all of `sg13g2_sram`'s own Verilog modules)
+  that don't actually end with one -- invisible to each writer's own
+  test because that test's own comparison logic *also* normalized the
+  real original's trailing newline before comparing, masking the exact
+  same bug it should have caught. Fixed once, shared, re-verified
+  clean across a real two-generation `export-full` round-trip of the
+  complete ~744 MB IHP deck (orig-vs-A, A-vs-B, and orig-vs-B all
+  perfectly identical, structurally and byte-for-byte).
 - **`openpdkcreator/project_io.py`** -- program-format persistence for
   the editable domains above (DRC Rules/Magic Types/LEF pins/the
   Settings tab's project name), modeled on `OpenPDKCreator`'s own
@@ -604,14 +690,14 @@ highlighted straight to that cell's real line range within its
   matching total real byte size (769,423,550 bytes each), and a
   permission-bits spot check.
 
-Native write-back serialization is now complete for all three
-currently structured-editable domains -- LEF pins, DRC Rules, and
-Magic Types -- and independently verified faithful across the entire
-real PDK via the smoking-gun round-trip test above, not just per-writer
-sample tests. Everything still read-only (Layers, Magic Tech's other
-five domains, CDL/SPICE/Verilog/Liberty content, GDS) has no
-write-back for the same reason it has no editor yet -- see Future
-Work.
+Native write-back serialization is now complete for every currently
+structured-editable domain -- LEF pins, DRC Rules, Magic Types, and
+CDL/SPICE/Verilog ports -- and independently re-verified faithful
+across the entire real PDK via `main.py export-full`'s own smoking-gun
+round-trip test, not just per-writer sample tests. Everything still
+read-only (Layers, Magic Tech's other five domains, Liberty
+pin/timing-arc content, GDS) has no write-back for the same reason it
+has no editor yet -- see Future Work.
 - **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
   sub-tab (`ToolsView`): real, live status of every tool in
   `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
@@ -670,22 +756,26 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Native write-back serialization: **done for all three currently
-  structured-editable domains** -- LEF pins (`ihp/lef_writer.py`,
+- Native write-back serialization: **done for every currently
+  structured-editable domain** -- LEF pins (`ihp/lef_writer.py`,
   verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
-  verified against all 27 real files with an extracted rule), and
-  Magic Types (`ihp/magic_tech_writer.py`, verified against both real
-  technologies' `.tech` files) -- every one byte-identical with no
-  edits, plus real, driven edit round-trips (`export.py`, `File >
-  Export Edited LEF Files`/`DRC Rules`/`Magic Types`, `main.py
-  export-lef`/`export-drc`/`export-magic-types`). What's left is
-  everything that's still read-only in its own structured view --
-  Layers, Magic Tech's other five domains, and CDL/SPICE/Verilog/
-  Liberty port/cell-boundary data (real boundaries only, no per-port
-  model exists to edit yet) -- for the same reason: no editor -> no
-  write-back path to build. GDS stays read-only by design (real
-  structural info only, no geometry-editing feature exists or is
-  planned this pass).
+  verified against all 27 real files with an extracted rule), Magic
+  Types (`ihp/magic_tech_writer.py`, verified against both real
+  technologies' `.tech` files), and CDL/SPICE/Verilog ports
+  (`ihp/netlist_writer.py`/`ihp/verilog_writer.py`, verified against
+  all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files) -- every
+  one byte-identical with no edits, plus real, driven edit round-trips,
+  and independently re-verified faithful across the *entire* real PDK
+  at once via `main.py export-full`'s own smoking-gun round-trip test
+  (`export.py`, `File > Export Edited ...`, `main.py
+  export-lef`/`export-drc`/`export-magic-types`/`export-netlist`/
+  `export-verilog`). What's left is everything that's still read-only
+  in its own structured view -- Layers, Magic Tech's other five
+  domains, and Liberty (real cell *boundaries* only, no pin/timing-arc
+  model exists to edit yet -- see `liberty.py`'s own docstring) -- for
+  the same reason: no editor -> no write-back path to build. GDS stays
+  read-only by design (real structural info only, no geometry-editing
+  feature exists or is planned this pass).
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
@@ -693,12 +783,11 @@ models, ...), not just read/display layers. Concretely, still open:
   and schematics), matching the **Technology**/**Cells** groups'
   pattern -- still inventory-only today (see the Overview tab), no real
   per-format parser exists yet.
-- Extending By Cell's editing beyond pins: CDL/SPICE/Verilog currently
-  only expose a cell name + flat port-name list (no per-port direction/
-  type model exists to edit -- see `ihp/netlist.py`/`verilog.py`'s own
-  docstrings), and Liberty only real cell *boundaries*, no timing data
-  -- each would need its own real, structured model first, the same way
-  `ihp/lef.py`'s `LefPin` already exists for pins.
+- Liberty pin/timing-arc data (still only real cell *boundaries* --
+  `liberty.py`) -- would need its own real, structured model first, the
+  same way `ihp/lef.py`'s `LefPin`/`ihp/netlist.py`'s `NetlistPort`
+  already exist for pins/ports, before an editor (and write-back) could
+  follow the same pattern.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.

@@ -63,14 +63,23 @@ def discover_families(pdk_root: Path) -> list[str]:
 def build_cell_index(
     pdk_root: Path, family: str,
     get_lef: Callable[[Path], lef_mod.LefFile] | None = None,
+    get_netlist_cells: Callable[[Path], list[netlist_mod.NetlistCell]] | None = None,
+    get_verilog_modules: Callable[[Path], list[verilog_mod.VerilogModule]] | None = None,
 ) -> dict[str, CellViews]:
-    """*get_lef*: an optional parse-with-caching hook (the GUI passes
-    ``App.get_parsed_lef``, so the very same ``LefMacro`` objects --
-    and any in-memory pin edits on them -- are shared with the LEF tab
-    rather than re-parsed fresh here; the CLI and tests leave this
-    ``None`` and get a plain, uncached parse each call)."""
+    """*get_lef*/*get_netlist_cells*/*get_verilog_modules*: optional
+    parse-with-caching hooks (the GUI passes ``App.get_parsed_lef``/
+    ``get_parsed_netlist``/``get_parsed_verilog``, so the very same
+    ``LefMacro``/``NetlistCell``/``VerilogModule`` objects -- and any
+    in-memory port edits on them -- are shared with the LEF tab and
+    across a family switch, rather than re-parsed fresh here on every
+    call, which would otherwise silently discard edits the moment the
+    user switched families and back -- the exact same real bug already
+    found and fixed for LEF pins. The CLI and tests leave these
+    ``None`` and get a plain, uncached parse each call."""
 
     parse_lef = get_lef or lef_mod.parse_lef_file
+    parse_netlist = get_netlist_cells or netlist_mod.find_cells
+    parse_verilog = get_verilog_modules or verilog_mod.find_modules
     family_dir = pdk_root / "libs.ref" / family
     index: dict[str, CellViews] = {}
 
@@ -90,7 +99,7 @@ def build_cell_index(
     cdl_dir = family_dir / "cdl"
     if cdl_dir.is_dir():
         for cdl_path in sorted(cdl_dir.glob("*.cdl")):
-            for cell in netlist_mod.find_cells(cdl_path):
+            for cell in parse_netlist(cdl_path):
                 cv = get_or_create(cell.name)
                 cv.cdl_cell = cell
                 cv.cdl_source = cdl_path
@@ -98,7 +107,7 @@ def build_cell_index(
     spice_dir = family_dir / "spice"
     if spice_dir.is_dir():
         for spice_path in sorted(spice_dir.glob("*.spice")):
-            for cell in netlist_mod.find_cells(spice_path):
+            for cell in parse_netlist(spice_path):
                 cv = get_or_create(cell.name)
                 cv.spice_cell = cell
                 cv.spice_source = spice_path
@@ -106,7 +115,7 @@ def build_cell_index(
     verilog_dir = family_dir / "verilog"
     if verilog_dir.is_dir():
         for v_path in sorted(verilog_dir.glob("*.v")):
-            for module in verilog_mod.find_modules(v_path):
+            for module in parse_verilog(v_path):
                 cv = get_or_create(module.name)
                 cv.verilog_module = module
                 cv.verilog_source = v_path

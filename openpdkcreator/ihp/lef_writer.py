@@ -45,6 +45,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import lef as lef_mod
+from . import text_utils
 
 
 def _leading_whitespace(line: str) -> str:
@@ -114,7 +115,8 @@ def render_lef_file(original_path: Path, parsed: lef_mod.LefFile) -> str:
     the real original file -- a real, direct correctness check (see
     ``main.py export-lef``'s own verification)."""
 
-    original_lines = original_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    original_text = original_path.read_text(encoding="utf-8", errors="replace")
+    original_lines = original_text.splitlines()
     output: list[str] = []
     cursor = 0  # next un-emitted original line index (0-based)
 
@@ -155,7 +157,7 @@ def render_lef_file(original_path: Path, parsed: lef_mod.LefFile) -> str:
         cursor = macro_end_idx + 1
 
     output.extend(original_lines[cursor:])  # everything after the last macro, verbatim
-    return "\n".join(output) + "\n"
+    return text_utils.join_preserving_trailing_newline(original_text, output)
 
 
 def export_lef_file(parsed: lef_mod.LefFile, export_path: Path) -> None:

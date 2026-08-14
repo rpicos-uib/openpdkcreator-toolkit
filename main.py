@@ -18,31 +18,36 @@ real, downloaded deck: a line assigning a real
 width()/space()/sep() result to a variable, cross-referenced against
 a real JSON values file, feeding a same-variable .output() call).
 Also aggregates one real cell's views across ``libs.ref/<family>/*/``
-(LEF/CDL/SPICE/Verilog/Liberty -- lightweight, real boundary-detection
-parsers for each, not full netlist/behavioral/timing parsers: cell
-name + port list + the real source line range only; GDS -- real
-bounding box + per-layer shape count via KLayout's own real Python API,
-``klayout.db``, lazily imported so every other command here still runs
-without it installed). Magic's own ``compose``/``connect`` sections are
-fully parsed, and one real pattern each is pulled out of its harder
-``drc`` (``width``/``spacing``, 166 real checks) and ``extract``
-(``resist``/``planeorder``, 44 real entries) mini-rule-languages --
-see ``ihp/magic_tech.py``'s own docstring for exact real coverage and
+(LEF/CDL/SPICE/Verilog -- real per-port structure, direction included
+(a real CDL ``*.PININFO`` comment or real Verilog ``input``/
+``output``/``inout`` declarations), not just a name list; Liberty --
+still only cell name + real source line range, no content parser
+exists; GDS -- real bounding box + per-layer shape count via KLayout's
+own real Python API, ``klayout.db``, lazily imported so every other
+command here still runs without it installed). Magic's own
+``compose``/``connect`` sections are fully parsed, and one real
+pattern each is pulled out of its harder ``drc`` (``width``/
+``spacing``, 166 real checks) and ``extract`` (``resist``/
+``planeorder``, 44 real entries) mini-rule-languages -- see
+``ihp/magic_tech.py``'s own docstring for exact real coverage and
 what's still not attempted (``cifinput``, ``device``, the rest of
-``drc``/``extract``). No attempt at LEF via-stack geometry. Real,
-open_pdks-format write-back now exists for all three currently
-structured-editable domains -- LEF pins
-(``export-lef``/``export.py``/``ihp/lef_writer.py``), DRC Rules
+``drc``/``extract``). No attempt at LEF via-stack geometry or Liberty
+timing content. Real, open_pdks-format write-back now exists for
+every currently structured-editable domain -- LEF pins
+(``export-lef``/``ihp/lef_writer.py``), DRC Rules
 (``export-drc``/``ihp/drc_writer.py`` -- a rule's ``rule_id``/
 ``description`` patched into its real ``.drc`` script, its ``value``
-into the one real JSON config file it actually lives in), and Magic
-Types (``export-magic-types``/``ihp/magic_tech_writer.py`` -- a
-type's own real one-line entry in its real ``.tech`` file) -- all
-surgical, position-targeted patching into a new ``export/`` tree,
-never touching ``data/``. The much larger end goal -- editing/
-creating/generating arbitrary PDK file types, not just reading/
-displaying them -- is explicit, tracked future work, still only
-partially attempted here.
+into the one real JSON config file it actually lives in), Magic Types
+(``export-magic-types``/``ihp/magic_tech_writer.py`` -- a type's own
+real one-line entry in its real ``.tech`` file), and CDL/SPICE/Verilog
+ports (``export-netlist``/``export-verilog``/``ihp/netlist_writer.py``/
+``ihp/verilog_writer.py``) -- all surgical, position-targeted patching
+into a new ``export/`` tree, never touching ``data/``, and
+independently re-verified faithful across the *entire* real PDK via
+``export-full``'s own smoking-gun round-trip test. The much larger end
+goal -- editing/creating/generating arbitrary PDK file types, not just
+reading/displaying them -- is explicit, tracked future work, still
+only partially attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
@@ -54,6 +59,8 @@ partially attempted here.
     python3 main.py export-lef            # real LEF write-back verification (no-edit == byte-identical)
     python3 main.py export-drc            # real DRC Rule write-back verification
     python3 main.py export-magic-types    # real Magic Types write-back verification
+    python3 main.py export-netlist        # real CDL/SPICE port write-back verification
+    python3 main.py export-verilog        # real Verilog port write-back verification
     python3 main.py export-full --dest D  # a complete, standalone PDK tree (round-trip fidelity testing)
     python3 main.py gui                   # Overview, Technology, Cells, Settings tabs
 """
@@ -73,7 +80,9 @@ from openpdkcreator.ihp import inventory as inventory_mod
 from openpdkcreator.ihp import layers as layers_mod
 from openpdkcreator.ihp import lef as lef_mod
 from openpdkcreator.ihp import magic_tech as magic_tech_mod
+from openpdkcreator.ihp import netlist as netlist_mod
 from openpdkcreator.ihp import reconcile as reconcile_mod
+from openpdkcreator.ihp import verilog as verilog_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
 
@@ -385,6 +394,74 @@ def cmd_export_magic_types(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_export_netlist(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    netlist_cache = {
+        path: netlist_mod.find_cells(path)
+        for pattern in ("libs.ref/*/cdl/*.cdl", "libs.ref/*/spice/*.spice")
+        for path in pdk_root.glob(pattern)
+    }
+    if not netlist_cache:
+        print(f"No .cdl/.spice files found under {pdk_root}/libs.ref/", file=sys.stderr)
+        return 2
+
+    written = export_mod.export_netlist_files(pdk_root, netlist_cache)
+
+    mismatches = []
+    for export_path in written:
+        relpath = export_path.relative_to(export_mod.EXPORT_ROOT / pdk_root.name)
+        original_path = pdk_root / relpath
+        if export_path.read_text(encoding="utf-8", errors="replace") != original_path.read_text(encoding="utf-8", errors="replace"):
+            mismatches.append(original_path)
+
+    print(f"Exported {len(written)} real .cdl/.spice file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(written) - len(mismatches)}/{len(written)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_export_verilog(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    verilog_cache = {path: verilog_mod.find_modules(path) for path in pdk_root.glob("libs.ref/*/verilog/*.v")}
+    if not verilog_cache:
+        print(f"No .v files found under {pdk_root}/libs.ref/", file=sys.stderr)
+        return 2
+
+    written = export_mod.export_verilog_files(pdk_root, verilog_cache)
+
+    mismatches = []
+    for export_path in written:
+        relpath = export_path.relative_to(export_mod.EXPORT_ROOT / pdk_root.name)
+        original_path = pdk_root / relpath
+        if export_path.read_text(encoding="utf-8", errors="replace") != original_path.read_text(encoding="utf-8", errors="replace"):
+            mismatches.append(original_path)
+
+    print(f"Exported {len(written)} real .v file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(written) - len(mismatches)}/{len(written)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_export_full(pdk_root: Path, dest: Path) -> int:
     """A complete, real, standalone PDK tree at *dest* (see
     ``export.export_full_pdk``'s own docstring) -- the "smoking gun"
@@ -447,6 +524,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("export-lef", help="Export real, patched .lef files to export/ (byte-identical with no edits).")
     sub.add_parser("export-drc", help="Export real, patched DRC scripts + JSON config to export/ (byte-identical with no edits).")
     sub.add_parser("export-magic-types", help="Export real, patched .tech files to export/ (byte-identical with no edits).")
+    sub.add_parser("export-netlist", help="Export real, patched .cdl/.spice files to export/ (byte-identical with no edits).")
+    sub.add_parser("export-verilog", help="Export real, patched .v files to export/ (byte-identical with no edits).")
     export_full_parser = sub.add_parser(
         "export-full", help="Export a complete, standalone PDK tree -- for round-trip fidelity testing.",
     )
@@ -477,6 +556,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_export_drc(args.pdk_root.resolve())
     if args.command == "export-magic-types":
         return cmd_export_magic_types(args.pdk_root.resolve())
+    if args.command == "export-netlist":
+        return cmd_export_netlist(args.pdk_root.resolve())
+    if args.command == "export-verilog":
+        return cmd_export_verilog(args.pdk_root.resolve())
     if args.command == "export-full":
         return cmd_export_full(args.pdk_root.resolve(), args.dest.resolve())
     if args.command == "gui":

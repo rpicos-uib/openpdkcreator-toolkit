@@ -5,15 +5,16 @@ valid, patched files to a new ``export/`` tree, mirroring each file's
 own real relative path under its ``pdk_root`` -- never touching the
 real, downloaded ``data/`` copy.
 
-Covers all three currently-editable domains: LEF pins
-(``ihp/lef_writer.py``'s own docstring explains exactly how the
-patching preserves everything this project's LEF model doesn't
-capture), DRC Rules (``ihp/drc_writer.py``'s own docstring explains the
-real ``.drc``-script-vs-JSON-config split), and Magic Types
-(``ihp/magic_tech_writer.py``). Every other real, non-editable domain
-(CDL/SPICE/Verilog/Liberty content, GDS, Layers, ...) has no write-back
-because there's no editor for it either -- see README's own Future
-Work.
+Covers every currently-editable domain: LEF pins (``ihp/lef_writer.py``'s
+own docstring explains exactly how the patching preserves everything
+this project's LEF model doesn't capture), DRC Rules
+(``ihp/drc_writer.py``'s own docstring explains the real
+``.drc``-script-vs-JSON-config split), Magic Types
+(``ihp/magic_tech_writer.py``), and CDL/SPICE/Verilog ports
+(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``). Liberty (real
+cell *boundaries* only, no content parsed) and every other real,
+non-editable domain (GDS, Layers, ...) has no write-back because
+there's no editor for it either -- see README's own Future Work.
 """
 
 from __future__ import annotations
@@ -27,6 +28,10 @@ from .ihp import lef as lef_mod
 from .ihp import lef_writer
 from .ihp import magic_tech as magic_tech_mod
 from .ihp import magic_tech_writer
+from .ihp import netlist as netlist_mod
+from .ihp import netlist_writer
+from .ihp import verilog as verilog_mod
+from .ihp import verilog_writer
 from .models import DesignRule
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -118,18 +123,50 @@ def export_magic_types(
     return written
 
 
+def export_netlist_files(
+    pdk_root: Path, netlist_cache: dict[Path, list[netlist_mod.NetlistCell]], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.cdl``/``.spice`` file in *netlist_cache* (the GUI
+    passes only files parsed this session via ``App.get_parsed_netlist``;
+    ``export_full_pdk``/``main.py export-netlist`` pass every real
+    file, freshly parsed). Returns the real export paths written."""
+
+    written = []
+    for source_path, cells in netlist_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        netlist_writer.export_netlist_file(cells, source_path, export_path)
+        written.append(export_path)
+    return written
+
+
+def export_verilog_files(
+    pdk_root: Path, verilog_cache: dict[Path, list[verilog_mod.VerilogModule]], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.v`` file in *verilog_cache* (the GUI passes only
+    files parsed this session via ``App.get_parsed_verilog``;
+    ``export_full_pdk``/``main.py export-verilog`` pass every real
+    file, freshly parsed). Returns the real export paths written."""
+
+    written = []
+    for source_path, modules in verilog_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        verilog_writer.export_verilog_file(modules, source_path, export_path)
+        written.append(export_path)
+    return written
+
+
 def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     """A complete, real, standalone open_pdks-format PDK tree at
     *dest_root* -- every real file under *pdk_root* copied verbatim
     (``shutil.copytree``, so ``dest_root`` starts as an exact, complete
-    clone -- GDS/Liberty/CDL/SPICE/Verilog/docs/qa/every other real
-    file this project has no editor for included, not just the small
-    subset the other ``export_*`` functions above touch), then every
-    real LEF/DRC/Magic-Types file is re-rendered on top through its own
-    real writer, freshly parsed straight from *pdk_root* with no GUI
-    session or edits involved -- a real no-op patch, but one that
-    exercises every real writer against every real file in the whole
-    PDK, not a hand-picked sample. Refuses to run if *dest_root*
+    clone -- Liberty/GDS/docs/qa/every other real file this project has
+    no editor for included, not just the small subset the other
+    ``export_*`` functions above touch), then every real LEF/DRC/
+    Magic-Types/CDL/SPICE/Verilog file is re-rendered on top through
+    its own real writer, freshly parsed straight from *pdk_root* with
+    no GUI session or edits involved -- a real no-op patch, but one
+    that exercises every real writer against every real file in the
+    whole PDK, not a hand-picked sample. Refuses to run if *dest_root*
     already exists (never silently overwrites)."""
 
     if dest_root.exists():
@@ -160,3 +197,13 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
         if tech.name:
             technologies[tech.name] = tech
     export_magic_types(pdk_root, technologies, dest_root)
+
+    netlist_cache = {
+        path: netlist_mod.find_cells(path)
+        for pattern in ("libs.ref/*/cdl/*.cdl", "libs.ref/*/spice/*.spice")
+        for path in pdk_root.glob(pattern)
+    }
+    export_netlist_files(pdk_root, netlist_cache, dest_root)
+
+    verilog_cache = {path: verilog_mod.find_modules(path) for path in pdk_root.glob("libs.ref/*/verilog/*.v")}
+    export_verilog_files(pdk_root, verilog_cache, dest_root)
