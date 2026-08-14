@@ -29,7 +29,8 @@ python3 main.py magic-tech   # real Magic .tech parse + cross-reference against 
 python3 main.py lef          # real LEF parse summary: tech layers + macro/cell footprints
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
-python3 main.py gui          # Overview / Technology / Cells tabs (needs a real X11/Xvnc display)
+python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
+python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
 
 `main.py gui` needs a real X11/Xvnc display -- this host has none locally (no
@@ -270,6 +271,25 @@ highlighted straight to that cell's real line range within its
   netlist/behavioral/timing parser. Verified for real: all three found
   exactly 84 real cells in `sg13g2_stdcell`'s combined files, matching
   LEF's own 84 macros exactly.
+- **`openpdkcreator/ihp/gds.py`** -- real, bounded GDS structural
+  extraction, via KLayout's own real Python API (`klayout.db`) --
+  lazily imported (`_import_klayout_db`, `KLayoutUnavailable`), so
+  every other command here (`inventory`/`lef`/`drc`/`cells`, none of
+  which need it) keeps working in environments without it, including
+  this project's own host (confirmed: `klayout` isn't installed there,
+  only inside the IIC-OSIC-TOOLS container this project's own
+  `start_eda_container.sh` launches -- a missing import raises a real,
+  honest error, not a silently empty result). For each real top-level
+  GDS structure: its own real bounding box in microns (via the file's
+  own real database unit, `Layout.dbu`) and a real per-`(layer,
+  datatype)` shape count -- `Cell.bbox()` is KLayout's own real,
+  hierarchical bbox (includes child instances), not this module
+  reimplementing geometry math; shape counts are direct, not flattened
+  through instances. Real result against `sg13g2_stdcell.gds`: 84 real
+  structures (matching LEF's own 84 macros), `sg13g2_a21o_1`'s real
+  bbox `(-0.24, -0.22, 3.6, 4.17)` µm / 72 real shapes across 9 real
+  layers; `sg13g2_io.gds` (69 MB) parses in under 0.1s -- no real
+  performance concern even for the largest real file.
 - **`openpdkcreator/ihp/cells.py`** -- aggregates one real cell's views
   across `libs.ref/<family>/*/` into one `CellViews` record, handling
   a real, confirmed structural fact: IHP's own families use *two*
@@ -284,10 +304,13 @@ highlighted straight to that cell's real line range within its
   netlists alone define **2338** real subckts once internal
   sub-elements are included (bitcells, sense amps, ... -- only 28 of
   which are the real, top-level hard macros), confirming the default
-  "top-level only" filter is the right call, not arbitrary. GDS
-  presence is a flag only (no real GDS parser exists -- see Future
-  Work); `sg13g2_pr` (GDS-only, confirmed) correctly indexes to zero
-  real cells, not a bug.
+  "top-level only" filter is the right call, not arbitrary. GDS is
+  real content (`gds_cell`, via `ihp/gds.py`) when `klayout.db` is
+  importable, degrading to a presence-only flag (`gds_present`,
+  distinguished from `None` vs. "genuinely nothing to find" via
+  `KLayoutUnavailable`) when it isn't, never a silent gap; `sg13g2_pr`
+  (GDS-only, confirmed) correctly indexes to zero real cells, not a
+  bug.
 - **`openpdkcreator/gui/cell_hub_view.py`** -- the **By Cell** tab
   (`CellHubView`): a family picker, a cell list (LEF/CDL/SPICE/
   Verilog/Liberty/GDS presence at a glance, a "Show internal sub-cells
@@ -305,13 +328,20 @@ highlighted straight to that cell's real line range within its
   away and back, and both save the same way. A macro-less internal
   sub-cell (no real LEF macro of its own -- common browsing
   `sg13g2_sram` with "show all" on) shows a plain "nothing to edit
-  here" note in the Pins pane's place, confirmed not to crash. Verified
-  for real, driven against the actual data: correct counts and view
-  flags across all four real families, `sg13g2_sram`'s full 2338-row
-  "show all" render in 0.18s (no real performance concern), the
-  CDL/Verilog **View** buttons both land on and highlight the exact
-  real `sg13g2_and2_1` block inside their much larger combined files,
-  and a real pin edit made here survives a save + simulated relaunch.
+  here" note in the Pins pane's place, confirmed not to crash. Also
+  shows a real GDS structural summary line (bbox size + shape/layer
+  counts, via `ihp/gds.py`) for the selected cell when `klayout.db` is
+  importable -- a plain text line, not a raw file **View** (GDS is
+  binary), degrading to an honest "present, but not parsed" note
+  rather than silently showing nothing when it isn't. Verified for
+  real, driven against the actual data: correct counts and view flags
+  across all four real families, `sg13g2_sram`'s full 2338-row "show
+  all" render in 0.18s (no real performance concern), the CDL/Verilog
+  **View** buttons both land on and highlight the exact real
+  `sg13g2_and2_1` block inside their much larger combined files, a real
+  pin edit made here survives a save + simulated relaunch, and
+  `sg13g2_a21o_1`'s real GDS summary line matches `ihp/gds.py`'s own
+  directly-verified numbers exactly.
 - **`openpdkcreator/project_io.py`** -- program-format persistence for
   the editable domains above (DRC Rules/Magic Types/LEF pins/the
   Settings tab's project name), modeled on `OpenPDKCreator`'s own
@@ -382,11 +412,11 @@ models, ...), not just read/display layers. Concretely, still open:
 - Deep parsers for Magic's `drc`/`extract`/`cifinput`/`connect`/
   `compose` sections (each its own real, separate mini rule-language --
   `drc` and `extract` in particular are the Magic equivalent of
-  KLayout's DRC Ruby DSL), real GDS content (still only a presence flag
-  -- `cells.py`), Liberty's own real pin/timing-arc data (still only
-  real cell *boundaries* -- `liberty.py`), and LEF's own `VIA`/
-  `ViaRULE` via-stack geometry -- no generic parser for any of these
-  exists yet.
+  KLayout's DRC Ruby DSL), Liberty's own real pin/timing-arc data
+  (still only real cell *boundaries* -- `liberty.py`), and LEF's own
+  `VIA`/`ViaRULE` via-stack geometry -- no generic parser for any of
+  these exists yet. (Real GDS content -- bbox/shape counts, not full
+  geometry -- is done: `ihp/gds.py`, via `klayout.db`.)
 - Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
   reliable `width()/space()/sep()` -> `.output()` pattern (61 real
   rules); the other 94 real, honestly-skipped constructs are composite

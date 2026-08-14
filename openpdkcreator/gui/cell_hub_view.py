@@ -35,6 +35,14 @@ a single shared, App-owned cache (``ihp/cells.py``'s own
 this), so a pin edited here is immediately visible on the LEF tab too,
 and vice versa -- not two independently-drifting copies of the same
 real pin list.
+
+**GDS**: real, not just a presence flag, when ``klayout.db`` is
+importable (``ihp/gds.py``, lazily imported) -- a real bounding box
+and per-layer shape count for the selected cell's own real GDS
+structure, shown as a plain text line (not a raw file View, since GDS
+is binary) below the View buttons. Degrades honestly, not silently, if
+``klayout.db`` isn't installed in this environment: "present, but not
+parsed" rather than pretending there's nothing there.
 """
 
 from __future__ import annotations
@@ -119,11 +127,16 @@ class CellHubView(ttk.Frame):
             btn.grid(row=i, column=0, sticky="ew", pady=2)
             self.view_buttons[key] = btn
 
+        self.gds_var = tk.StringVar()
+        ttk.Label(middle, textvariable=self.gds_var, foreground="#444", wraplength=220, justify="left").grid(
+            row=5, column=0, sticky="w", pady=(6, 0)
+        )
+
         ttk.Label(middle, text="Liberty (one per real corner file):").grid(
-            row=5, column=0, sticky="w", pady=(10, 2)
+            row=6, column=0, sticky="w", pady=(10, 2)
         )
         self.liberty_list = tk.Listbox(middle, height=6)
-        self.liberty_list.grid(row=6, column=0, sticky="ew")
+        self.liberty_list.grid(row=7, column=0, sticky="ew")
         self.liberty_list.bind("<Double-Button-1>", self._view_selected_liberty)
 
         right = ttk.Frame(body)
@@ -219,6 +232,7 @@ class CellHubView(ttk.Frame):
             self.detail_var.set("Select a cell.")
             for btn in self.view_buttons.values():
                 btn.configure(state="disabled")
+            self.gds_var.set("")
             self.pin_editor.set_macro(None)
             self._show_pin_editor(False)
             return
@@ -230,6 +244,17 @@ class CellHubView(ttk.Frame):
         self.view_buttons["verilog"].configure(state="normal" if cv.verilog_module else "disabled")
         for cell_entry, path in cv.liberty_entries:
             self.liberty_list.insert("end", path.name)
+
+        if cv.gds_cell is not None:
+            l, b, r, t = cv.gds_cell.bbox_microns or (0, 0, 0, 0)
+            self.gds_var.set(
+                f"GDS: {r - l:.2f} x {t - b:.2f} µm bbox, "
+                f"{cv.gds_cell.total_shapes} real shape(s) across {len(cv.gds_cell.shapes_by_layer)} layer(s)"
+            )
+        elif cv.gds_present:
+            self.gds_var.set("GDS: present, but not parsed (klayout.db unavailable here)")
+        else:
+            self.gds_var.set("GDS: none")
 
         self.pins_header_var.set(f"Pins -- {cv.name}" if cv.lef_macro else "Pins")
         self.pin_editor.set_macro(cv.lef_macro)

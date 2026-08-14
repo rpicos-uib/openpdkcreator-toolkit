@@ -14,11 +14,12 @@ directory and lets the per-format parser (``netlist``/``verilog``/
 ``liberty``/``lef``) find however many cells live inside each one, so
 both real organizations work without special-casing either.
 
-GDS views are inventoried (a flag: does a real ``.gds`` exist for this
-family) but never content-parsed -- no real GDS parser exists yet, see
-README's Future Work. ``sg13g2_pr`` is GDS-only (confirmed: zero real
-files under any other real view directory) -- its cell index is
-genuinely empty, not a bug.
+GDS views: ``gds_present`` (does a real ``.gds`` exist for this cell)
+still works even where KLayout isn't installed; when it is, ``gds_cell``
+carries real structural content (bounding box, per-layer shape count)
+via ``ihp/gds.py`` (KLayout's own real Python API, lazily imported) --
+``sg13g2_pr`` is GDS-only (confirmed: zero real files under any other
+real view directory) -- its cell index is genuinely empty, not a bug.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from . import gds as gds_mod
 from . import lef as lef_mod
 from . import liberty as liberty_mod
 from . import netlist as netlist_mod
@@ -47,6 +49,8 @@ class CellViews:
     verilog_source: Path | None = None
     liberty_entries: list[tuple[liberty_mod.LibertyCell, Path]] = field(default_factory=list)
     gds_present: bool = False
+    gds_cell: gds_mod.GdsCell | None = None
+    gds_source: Path | None = None
 
 
 def discover_families(pdk_root: Path) -> list[str]:
@@ -116,17 +120,42 @@ def build_cell_index(
 
     gds_dir = family_dir / "gds"
     if gds_dir.is_dir():
-        gds_names = {p.stem for p in gds_dir.glob("*.gds")}
+        gds_paths = sorted(gds_dir.glob("*.gds"))
+        gds_names = {p.stem for p in gds_paths}
         if len(gds_names) == 1 and next(iter(gds_names)) not in index:
             # One real combined file (e.g. sg13g2_stdcell.gds): every
             # real cell discovered above has a real GDS inside it,
             # just not split out.
+            gds_path = gds_paths[0]
+            real_cells = _try_find_gds_cells(gds_path)
             for cv in index.values():
                 cv.gds_present = True
+                if real_cells is not None and cv.name in real_cells:
+                    cv.gds_cell = real_cells[cv.name]
+                    cv.gds_source = gds_path
         else:
             # Per-macro convention (e.g. sg13g2_sram): one real file
             # per cell, matched by name.
-            for cv in index.values():
-                cv.gds_present = cv.name in gds_names
+            for gds_path in gds_paths:
+                cv = index.get(gds_path.stem)
+                if cv is None:
+                    continue
+                cv.gds_present = True
+                real_cells = _try_find_gds_cells(gds_path)
+                if real_cells is not None and cv.name in real_cells:
+                    cv.gds_cell = real_cells[cv.name]
+                    cv.gds_source = gds_path
 
     return index
+
+
+def _try_find_gds_cells(gds_path: Path) -> dict[str, gds_mod.GdsCell] | None:
+    """``None`` (not an empty dict) when ``klayout.db`` simply isn't
+    importable here -- distinct from a real file with genuinely no
+    matching structures, so callers don't mistake 'can't check' for
+    'checked, and there's nothing.'"""
+
+    try:
+        return gds_mod.find_cells(gds_path)
+    except gds_mod.KLayoutUnavailable:
+        return None

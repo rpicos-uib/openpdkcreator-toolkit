@@ -20,13 +20,15 @@ a real JSON values file, feeding a same-variable .output() call).
 Also aggregates one real cell's views across ``libs.ref/<family>/*/``
 (LEF/CDL/SPICE/Verilog/Liberty -- lightweight, real boundary-detection
 parsers for each, not full netlist/behavioral/timing parsers: cell
-name + port list + the real source line range only). No attempt at GDS
-parsing, LEF via-stack geometry, or Magic's drc/extract/cifinput/
-connect/compose sections (each its own real, separate mini
-rule-language) -- that's real, separate future work. The much larger
-end goal -- editing/creating/generating arbitrary PDK file types, not
-just reading/displaying them -- is explicit, tracked future work, not
-attempted here.
+name + port list + the real source line range only; GDS -- real
+bounding box + per-layer shape count via KLayout's own real Python API,
+``klayout.db``, lazily imported so every other command here still runs
+without it installed). No attempt at LEF via-stack geometry, or Magic's
+drc/extract/cifinput/connect/compose sections (each its own real,
+separate mini rule-language) -- that's real, separate future work. The
+much larger end goal -- editing/creating/generating arbitrary PDK file
+types, not just reading/displaying them -- is explicit, tracked future
+work, not attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
@@ -34,7 +36,8 @@ attempted here.
     python3 main.py lef                   # real LEF parse summary (tech layers + macros)
     python3 main.py drc                   # real KLayout DRC-deck rule extraction summary
     python3 main.py cells                 # real per-cell view aggregation, one family at a time
-    python3 main.py gui                   # Overview, Technology, Cells tabs
+    python3 main.py gds                   # real GDS structural summary (needs klayout.db)
+    python3 main.py gui                   # Overview, Technology, Cells, Settings tabs
 """
 
 from __future__ import annotations
@@ -46,6 +49,7 @@ from pathlib import Path
 from openpdkcreator.ihp import cells as cells_mod
 from openpdkcreator.ihp import drc as drc_mod
 from openpdkcreator.ihp import fetch as fetch_mod
+from openpdkcreator.ihp import gds as gds_mod
 from openpdkcreator.ihp import inventory as inventory_mod
 from openpdkcreator.ihp import layers as layers_mod
 from openpdkcreator.ihp import lef as lef_mod
@@ -202,10 +206,49 @@ def cmd_cells(pdk_root: Path, family: str | None) -> int:
                 views.append("verilog")
             if cv.liberty_entries:
                 views.append(f"liberty x{len(cv.liberty_entries)}")
-            if cv.gds_present:
-                views.append("gds")
+            if cv.gds_cell is not None:
+                views.append(f"gds({len(cv.gds_cell.shapes_by_layer)}L,{cv.gds_cell.total_shapes}shapes)")
+            elif cv.gds_present:
+                views.append("gds(presence only -- klayout unavailable)")
             print(f"  {name}: {', '.join(views) if views else '(no real view recognized)'}")
         print()
+    return 0
+
+
+def cmd_gds(pdk_root: Path, family: str | None) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    try:
+        gds_mod.check_available()
+    except gds_mod.KLayoutUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    families = cells_mod.discover_families(pdk_root)
+    if not families:
+        print(f"No families found under {pdk_root}/libs.ref/", file=sys.stderr)
+        return 2
+    targets = [family] if family else families
+    for fam in targets:
+        if fam not in families:
+            print(f"Unknown family {fam!r}. Real families: {', '.join(families)}", file=sys.stderr)
+            return 2
+        gds_dir = pdk_root / "libs.ref" / fam / "gds"
+        if not gds_dir.is_dir():
+            print(f"=== {fam}: no gds/ directory ===\n")
+            continue
+        total_structures = 0
+        total_shapes = 0
+        print(f"=== {fam} ===")
+        for gds_path in sorted(gds_dir.glob("*.gds")):
+            real_cells = gds_mod.find_cells(gds_path)
+            shapes = sum(c.total_shapes for c in real_cells.values())
+            total_structures += len(real_cells)
+            total_shapes += shapes
+            print(f"  {gds_path.relative_to(pdk_root)}: {len(real_cells)} real structure(s), {shapes} real shape(s)")
+        print(f"  -> {total_structures} real structure(s) total, {total_shapes} real shape(s) total\n")
     return 0
 
 
@@ -238,6 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("drc", help="Extract real design rules from the real KLayout DRC deck.")
     cells_parser = sub.add_parser("cells", help="Aggregate one real cell's views across libs.ref/<family>/*/.")
     cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
+    gds_parser = sub.add_parser("gds", help="Real GDS structural summary (bbox/shape counts) via klayout.db.")
+    gds_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -256,6 +301,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_drc(args.pdk_root.resolve())
     if args.command == "cells":
         return cmd_cells(args.pdk_root.resolve(), args.family)
+    if args.command == "gds":
+        return cmd_gds(args.pdk_root.resolve(), args.family)
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1
