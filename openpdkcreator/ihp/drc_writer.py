@@ -81,6 +81,16 @@ def _locate(text: str, check_line: int, output_line: int) -> tuple[str | None, r
             value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(match.group(4))
             value_var = value_match.group(1) if value_match else None
             break
+    if value_var is None:
+        # Not a width()/space()/sep() result -- check the other real
+        # pattern ihp/drc.py extracts from, .enclosed(outer, value.um,
+        # ...), before giving up on a real JSON key.
+        for match in drc_mod._ENCLOSURE_CALL_RE.finditer(text):
+            line_no = text.count("\n", 0, match.start()) + 1
+            if line_no == check_line:
+                value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(match.group(4))
+                value_var = value_match.group(1) if value_match else None
+                break
     json_key = value_var_to_key.get(value_var) if value_var else None
 
     output_match = None

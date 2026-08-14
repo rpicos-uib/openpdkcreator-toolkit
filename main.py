@@ -15,8 +15,9 @@ class/size/site/symmetry, PINs with direction/use/port layers+rect
 counts, OBS layers), and a real KLayout DRC-deck rule extractor (the
 same, already-proven-elsewhere regex pattern, pointed at the full,
 real, downloaded deck: a line assigning a real
-width()/space()/sep() result to a variable, cross-referenced against
-a real JSON values file, feeding a same-variable .output() call).
+width()/space()/sep() result -- or a real two-layer .enclosed() result
+-- to a variable, cross-referenced against a real JSON values file,
+feeding a same-variable .output() call).
 Also aggregates one real cell's views across ``libs.ref/<family>/*/``
 (LEF/CDL/SPICE/Verilog -- real per-port structure, direction included
 (a real CDL ``*.PININFO`` comment or real Verilog ``input``/

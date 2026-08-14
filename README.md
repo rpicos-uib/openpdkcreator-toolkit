@@ -311,17 +311,31 @@ highlighted straight to that cell's real line range within its
   extraction, adapted from OpenPDKCreator's own `import_open_pdks.py`
   (that logic already proved itself against a real *subset* of this
   exact IHP deck -- this module points the same, unmodified pattern at
-  the **full** real deck: 42 real `.drc` files, not a sample). Real
-  result: **61 real design rules** extracted, all 61 with a real,
+  the **full** real deck: 42 real `.drc` files, not a sample), extended
+  with a second real, recognizable pattern beyond the original
+  `width()`/`space()`/`sep()`: a real `inner_expr.enclosed(outer_expr,
+  value.um, mode)` two-layer enclosure check (confirmed real and
+  common -- 22 real occurrences across 13 real files, always this
+  exact shape), mapped to the existing `min_enclosure` check type,
+  whose own `Inner layer`/`Outer layer` roles already match KLayout's
+  own real semantics exactly. Real result: **75 real design rules**
+  extracted (61 width/space/sep + 14 enclosure), all with a real,
   resolved numeric value (100% resolution against the real JSON config
-  -- hand-checked: `M1.a`'s `0.16` matches both the real
-  `sg13g2_tech_default.json` and the real source line,
-  `rule_decks/beol/5_16_metal1.drc:31`), and **94** composite/derived
-  constructs honestly reported as not-auto-extracted, never dropped
-  silently. One real, interesting finding worth noting: some real rule
-  IDs themselves contain a literal Ruby string-interpolation template
-  (`M#{met_no}.a`, from a real per-metal-layer loop in the source) --
-  captured verbatim, not silently mangled.
+  -- hand-checked: `M1.a`'s `0.16` and the new `V1.c`'s `0.01` both
+  match both the real `sg13g2_tech_default.json` and their real source
+  lines), and **86** composite/derived constructs (down from 94)
+  honestly reported as not-auto-extracted, never dropped silently. A
+  real gap found and fixed while adding this:
+  `ihp/drc_writer.py`'s own `_locate` (which re-derives a rule's real
+  JSON key on write-back) only re-ran the width/space/sep regex, so a
+  newly-extracted enclosure rule's edited `value` silently failed to
+  reach the real JSON file -- caught immediately by a real, driven
+  round-trip test on `V1.c`, fixed by having `_locate` also check the
+  new enclosure regex before giving up. One real, interesting finding
+  worth noting: some real rule IDs themselves contain a literal Ruby
+  string-interpolation template (`M#{met_no}.a`, from a real
+  per-metal-layer loop in the source) -- captured verbatim, not
+  silently mangled.
 - **`openpdkcreator/schema.py`** -- `CheckTypeSpec`/`CHECK_TYPES`/
   `CHECK_TYPE_ORDER`, copied verbatim from OpenPDKCreator's own
   `scripts/pdk_wizard/schema.py` -- already confirmed fully
@@ -854,11 +868,13 @@ models, ...), not just read/display layers. Concretely, still open:
   direction/capacitance/function per pin, related_pin/timing_type/
   timing_sense/when per
   timing arc -- is also done: `ihp/liberty.py`.)
-- Wider KLayout DRC-deck coverage: `ihp/drc.py` only extracts the one
-  reliable `width()/space()/sep()` -> `.output()` pattern (61 real
-  rules); the other 94 real, honestly-skipped constructs are composite
-  checks (`.enc()`, multi-step derived regions, ...) with no reliable,
-  generic pattern to extract yet.
+- Wider KLayout DRC-deck coverage: `ihp/drc.py` now extracts two
+  reliable patterns -- `width()`/`space()`/`sep()` and `.enclosed()` --
+  -> `.output()` (75 real rules total); the other 86 real,
+  honestly-skipped constructs are multi-step composite/derived checks
+  (angle/acute-corner checks, antenna-ratio accumulation, density
+  windows, ...) with no single reliable, generic pattern left to
+  extract.
 - Native write-back serialization: **done for every currently
   structured-editable domain** -- LEF pins (`ihp/lef_writer.py`,
   verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
