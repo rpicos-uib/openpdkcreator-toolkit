@@ -48,10 +48,22 @@ each harder, mini-rule-language section rather than a full interpreter:
   the reasonable inference that one real file's one real section
   shares one real internal unit scale, not a fresh independent
   confirmation of that specific check kind.
-  ``surround``/``edge4way``/``variants``/``widespacing``/``angles``/
-  ``cifwidth``/``cifspacing``/``cifmaxwidth``/... remain real, separate
-  future work -- their own real shapes are less uniform (variable
-  argument counts, nested real layer-boolean expressions like
+
+  A fourth real, cleanly tabular kind is extracted separately, into its
+  own ``MagicAngleCheck``, not folded into the above: real
+  ``angles <layer> <degrees> "message"`` statements (17/17 real lines
+  match, including one real line needing the section's own backslash-
+  continuation join). Same real message-quoting shape as
+  ``width``/``maxwidth``, so it reuses that same regex structure -- but
+  a real angle is a plain degree count (45/90), not a length, so the
+  real, empirically-confirmed ``/1000`` micron conversion is
+  deliberately *not* applied here; forcing it into ``MagicDrcCheck``'s
+  own ``value_um`` field would have been a real, silent unit lie.
+
+  ``surround``/``edge4way``/``variants``/``widespacing``/``cifwidth``/
+  ``cifspacing``/``cifmaxwidth``/... remain real, separate future work
+  -- their own real shapes are less uniform (variable argument counts,
+  nested real layer-boolean expressions like
   ``~(alldiffhv,allpoly,*pdiff,*nsd,*ntap)/a``, or, for ``variants``, a
   real conditional-scoping directive rather than a check at all), so
   extending the ``width``-style pattern to them isn't a safe reuse.
@@ -127,6 +139,7 @@ _COMPOSE_VERBS = ("compose", "decompose", "paint")
 _WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _MAXWIDTH_RE = re.compile(r'^maxwidth\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
+_ANGLES_RE = re.compile(r'^angles\s+(\S+)\s+(\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _TRAILING_PARENS_RE = re.compile(r"\(([^()]+)\)\s*$")
 _RESIST_RE = re.compile(r"^resist\s+(\S+)\s+(-?\d+)\s*$")
 _PLANEORDER_RE = re.compile(r"^planeorder\s+(\S+)\s+(\d+)\s*$")
@@ -272,6 +285,21 @@ class MagicDrcCheck:
 
 
 @dataclass
+class MagicAngleCheck:
+    """One real 'angles <layer> <degrees> "message"' statement from
+    the drc section -- a real permitted-angle constraint. Deliberately
+    a separate dataclass from ``MagicDrcCheck``, not folded into its
+    own ``value_um`` field: a real angle is a plain degree count
+    (45/90), not a length, so the real, empirically-confirmed
+    ``/1000`` micron conversion ``width``/``spacing``/``maxwidth`` use
+    would be a real, silent unit lie if applied here."""
+
+    layer: str
+    degrees: int
+    message: str
+
+
+@dataclass
 class ExtractResist:
     """One real per-layer sheet-resistance value from the extract
     section (milliohms/square, per the real file's own comment). Real
@@ -350,11 +378,15 @@ class MagicTechnology:
     compose: list[ComposeStatement] = field(default_factory=list)
     connect: list[ConnectRule] = field(default_factory=list)
     drc_checks: list[MagicDrcCheck] = field(default_factory=list)
+    drc_angle_checks: list[MagicAngleCheck] = field(default_factory=list)
+    """Real 'angles' statements -- see ``MagicAngleCheck``'s own
+    docstring for why these are a separate list, not folded into
+    ``drc_checks``."""
     drc_skipped: list[str] = field(default_factory=list)
-    """Real 'width'/'spacing' lines found but not matched -- e.g. the
-    one real, confirmed defect in IHP's own file (a message string
-    missing its closing quote). Every *other* real drc-section
-    construct (surround/edge4way/maxwidth/variants/...) was never
+    """Real 'width'/'spacing'/'maxwidth'/'angles' lines found but not
+    matched -- e.g. the one real, confirmed defect in IHP's own file
+    (a message string missing its closing quote). Every *other* real
+    drc-section construct (surround/edge4way/variants/...) was never
     attempted and isn't listed here -- see this module's own
     docstring."""
     extract_resist: list[ExtractResist] = field(default_factory=list)
@@ -671,8 +703,9 @@ def _join_backslash_continuations(lines: list[str]) -> list[str]:
     return joined
 
 
-def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[str]]:
+def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[MagicAngleCheck], list[str]]:
     checks: list[MagicDrcCheck] = []
+    angle_checks: list[MagicAngleCheck] = []
     skipped: list[str] = []
     for line in _join_backslash_continuations(lines):
         stripped = line.strip()
@@ -712,7 +745,14 @@ def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[str]]
                 value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
                 rule_ids_raw=id_match.group(1) if id_match else None,
             ))
-    return checks, skipped
+        elif stripped.startswith("angles "):
+            match = _ANGLES_RE.match(stripped)
+            if match is None:
+                skipped.append(stripped)
+                continue
+            layer, degrees, message = match.groups()
+            angle_checks.append(MagicAngleCheck(layer=layer, degrees=int(degrees), message=message))
+    return checks, angle_checks, skipped
 
 
 def _parse_extract_resist(lines: list[str]) -> list[ExtractResist]:
@@ -809,7 +849,7 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))
     tech.compose = _parse_compose(sections.get("compose", []))
     tech.connect = _parse_connect(sections.get("connect", []))
-    tech.drc_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
+    tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.extract_resist = _parse_extract_resist(sections.get("extract", []))
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
     tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))

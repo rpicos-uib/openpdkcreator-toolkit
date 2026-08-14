@@ -301,6 +301,14 @@ class MagicTechView(ttk.Frame):
                 "", "end",
                 values=(check.check_type, layers_text, f"{check.value_um:g}", check.rule_ids_raw or "", check.message),
             )
+        for angle_check in tech.drc_angle_checks:
+            # Real degrees, not microns -- the '°' suffix keeps this
+            # column honest rather than implying the same unit as
+            # width/spacing/maxwidth's own real value_um.
+            self.drc_tree.insert(
+                "", "end",
+                values=("angles", angle_check.layer, f"{angle_check.degrees}°", "", angle_check.message),
+            )
         for resist in tech.extract_resist:
             self.extract_resist_tree.insert("", "end", values=(resist.layer_spec, resist.milliohms_per_square))
         for name, order in tech.extract_plane_order:
@@ -318,7 +326,7 @@ class MagicTechView(ttk.Frame):
             f"planes:{len(tech.planes)} types:{len(tech.types)} contacts:{len(tech.contacts)} "
             f"aliases:{len(tech.aliases)} styles:{len(tech.styles)} cif_layers:{len(tech.cif_layers)} "
             f"compose:{len(tech.compose)} connect:{len(tech.connect)} "
-            f"drc_checks:{len(tech.drc_checks)}({len(tech.drc_skipped)} skipped) "
+            f"drc_checks:{len(tech.drc_checks)}+{len(tech.drc_angle_checks)}angles({len(tech.drc_skipped)} skipped) "
             f"extract_resist:{len(tech.extract_resist)} "
             f"extract_cap_coefficients:{len(tech.extract_cap_coefficients)} "
             f"extract_devices:{len(tech.extract_devices)}"

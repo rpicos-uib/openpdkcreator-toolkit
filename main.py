@@ -146,7 +146,8 @@ def cmd_magic_tech(pdk_root: Path) -> int:
                 f"cifinput_layer_hints:{len(tech.cifinput_layer_hints)}"
             )
         print(
-            f"  drc_checks:{len(tech.drc_checks)} ({len(tech.drc_skipped)} real line(s) not matched)  "
+            f"  drc_checks:{len(tech.drc_checks)}  drc_angle_checks:{len(tech.drc_angle_checks)} "
+            f"({len(tech.drc_skipped)} real line(s) not matched)  "
             f"extract_resist:{len(tech.extract_resist)}  extract_plane_order:{len(tech.extract_plane_order)}"
         )
         if tech.extract_cap_coefficients or tech.extract_devices:

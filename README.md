@@ -260,6 +260,11 @@ highlighted straight to that cell's real line range within its
     `width`/`spacing`; the same factor is applied to `maxwidth` on the
     reasonable inference that one real file's one section shares one
     real internal unit scale, not a fresh independent confirmation.
+    A fourth real kind, `angles <layer> <degrees> "message"`, is
+    extracted separately (17/17 real lines match) into its own
+    `MagicAngleCheck` rather than folded into the above: a real angle
+    is a plain degree count, not a length, so the real `/1000` micron
+    conversion is deliberately not applied to it.
   - `extract`: real per-layer sheet resistance (`resist`, 30/33 real
     lines -- milliohms/square, the other 3 are real non-numeric config
     entries, not a parsing gap) and real plane ordering (`planeorder`,
@@ -312,8 +317,9 @@ highlighted straight to that cell's real line range within its
   its own form). Verified for real, driven against the actual
   downloaded data: all thirteen sub-tabs' row counts match
   `magic-tech`'s own CLI output exactly (39 compose/20 connect/192 DRC
-  checks/30 resist/23 cifinput-ignored/133 cifinput-hints/506 extract
-  cap coefficients/50 extract devices), switching technologies
+  checks + 17 angle checks/30 resist/23 cifinput-ignored/133
+  cifinput-hints/506 extract cap coefficients/50 extract devices),
+  switching technologies
   correctly reloads every sub-tab, editing a real type's
   name/aliases/obsolete commits
   immediately and survives a technology switch, and a spot-checked real
@@ -1026,7 +1032,7 @@ models, ...), not just read/display layers. Concretely, still open:
   coefficients and `device` statements are now done, see
   `magic_tech.py`'s own docstring), the much larger real remainder of
   `drc` (`surround`/`edge4way`/`cifmaxwidth`/`variants`/`widespacing`/
-  `angles`/`cifwidth`/`cifspacing`/... -- `width`/`spacing`/`maxwidth`
+  `cifwidth`/`cifspacing`/... -- `width`/`spacing`/`maxwidth`/`angles`
   are done; the remainder's own real shapes are less uniform -- variable
   argument counts, nested real layer-boolean expressions, or, for
   `variants`, a real conditional-scoping directive rather than a check
