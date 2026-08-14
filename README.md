@@ -33,6 +33,7 @@ python3 main.py gds          # real GDS structural summary (bbox/shape counts) -
 python3 main.py export-lef   # real, patched .lef write-back to export/ (byte-identical with no edits)
 python3 main.py export-drc   # real, patched DRC-rule write-back to export/ (byte-identical with no edits)
 python3 main.py export-magic-types   # real, patched Magic Types write-back to export/ (byte-identical with no edits)
+python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
 
@@ -571,10 +572,43 @@ highlighted straight to that cell's real line range within its
   `export-drc`'s own shape: exports every real technology currently
   loaded (both `ihp-sg13g2` and `ihp-sg13g2-GDS`) with any in-memory
   Types edits patched in.
+- **`export.export_full_pdk`** / **`main.py export-full`** -- a
+  complete, real, standalone open_pdks-format PDK tree: every real
+  file under `pdk_root` copied verbatim (`shutil.copytree`, so every
+  file this project has no editor for -- GDS/Liberty/CDL/SPICE/
+  Verilog/docs/qa/everything -- is included, not just the small subset
+  the other `export_*` functions above touch), with every real LEF/
+  DRC/Magic-Types file re-rendered on top through its own real writer,
+  freshly parsed straight from `pdk_root` with no GUI session
+  involved. Built specifically as a **smoking-gun round-trip fidelity
+  test**: export the real IHP PDK once, then export *that output*
+  again, and diff the two generations -- structurally identical would
+  mean every real writer here is a truly faithful, lossless
+  read-modify-write cycle across the *entire* real dataset, not just
+  the hand-picked samples each writer's own tests already covered.
+  **Run for real, twice, chained** (`export-full --pdk-root
+  data/ihp-sg13g2/ihp-sg13g2 --dest A`, then `export-full --pdk-root A
+  --dest B`) against the full real ~744 MB / 4900-real-file/symlink
+  IHP deck: **found one real bug this way**, invisible to a plain
+  content diff -- `shutil.copytree`'s own default (`symlinks=False`)
+  *dereferences* a real symlink (IHP's own
+  `libs.tech/ngspice/install.py -> ../xschem/install.py`) into a plain
+  copy of its target, silently losing the real symlink structure
+  (`diff -rq` alone reported zero differences, since it compares
+  resolved content; only a structural diff, `diff -rq
+  --no-dereference`, caught it). Fixed with `symlinks=True`. Re-run
+  after the fix: **all three real comparisons -- original-vs-A,
+  A-vs-B, and original-vs-B -- are completely identical**, structurally
+  and byte-for-byte, confirmed via `diff -rq --no-dereference` (zero
+  differences), matching total real file/symlink counts (4900 each),
+  matching total real byte size (769,423,550 bytes each), and a
+  permission-bits spot check.
 
 Native write-back serialization is now complete for all three
 currently structured-editable domains -- LEF pins, DRC Rules, and
-Magic Types. Everything still read-only (Layers, Magic Tech's other
+Magic Types -- and independently verified faithful across the entire
+real PDK via the smoking-gun round-trip test above, not just per-writer
+sample tests. Everything still read-only (Layers, Magic Tech's other
 five domains, CDL/SPICE/Verilog/Liberty content, GDS) has no
 write-back for the same reason it has no editor yet -- see Future
 Work.

@@ -18,6 +18,7 @@ Work.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from .ihp import drc as drc_mod
@@ -32,26 +33,34 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXPORT_ROOT = PROJECT_ROOT / "export"
 
 
-def export_path_for(pdk_root: Path, source_path: Path) -> Path:
-    return EXPORT_ROOT / pdk_root.name / source_path.relative_to(pdk_root)
+def export_path_for(pdk_root: Path, source_path: Path, dest_root: Path | None = None) -> Path:
+    """*dest_root* defaults to this project's own ``EXPORT_ROOT /
+    pdk_root.name`` (the GUI/CLI session-export destination); passed
+    explicitly by ``export_full_pdk`` to target an arbitrary directory
+    instead (e.g. a smoking-gun round-trip test's own scratch dir)."""
+
+    dest_root = dest_root if dest_root is not None else (EXPORT_ROOT / pdk_root.name)
+    return dest_root / source_path.relative_to(pdk_root)
 
 
-def export_lef_files(pdk_root: Path, lef_cache: dict[Path, lef_mod.LefFile]) -> list[Path]:
-    """Every real ``.lef`` file parsed so far this session (files never
-    visited have nothing to export -- they're still exactly their real,
-    on-disk starting state, unchanged, and copying them unedited would
-    just be noise). Returns the real export paths written."""
+def export_lef_files(
+    pdk_root: Path, lef_cache: dict[Path, lef_mod.LefFile], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.lef`` file in *lef_cache* (the GUI passes only
+    files parsed this session; ``export_full_pdk``/``main.py
+    export-lef`` pass every real file, freshly parsed). Returns the
+    real export paths written."""
 
     written = []
     for source_path, parsed in lef_cache.items():
-        export_path = export_path_for(pdk_root, source_path)
+        export_path = export_path_for(pdk_root, source_path, dest_root)
         lef_writer.export_lef_file(parsed, export_path)
         written.append(export_path)
     return written
 
 
 def export_drc_rules(
-    pdk_root: Path, drc_root: Path, design_rules: list[DesignRule],
+    pdk_root: Path, drc_root: Path, design_rules: list[DesignRule], dest_root: Path | None = None,
 ) -> tuple[list[Path], list[str]]:
     """Every real ``.drc`` file with at least one real, resolvable
     rule (grouped by real source file, all real edits in a file
@@ -77,7 +86,7 @@ def export_drc_rules(
         source_path = pdk_root / relpath
         text, value_edits = drc_writer.render_drc_file(source_path, rules)
         all_value_edits.update(value_edits)
-        export_path = export_path_for(pdk_root, source_path)
+        export_path = export_path_for(pdk_root, source_path, dest_root)
         export_path.parent.mkdir(parents=True, exist_ok=True)
         export_path.write_text(text, encoding="utf-8")
         written.append(export_path)
@@ -85,7 +94,7 @@ def export_drc_rules(
     json_path = drc_mod.find_json_config_path(drc_root)
     if all_value_edits and json_path is not None:
         json_text = drc_writer.render_json_config(json_path, all_value_edits)
-        export_json_path = export_path_for(pdk_root, json_path)
+        export_json_path = export_path_for(pdk_root, json_path, dest_root)
         export_json_path.parent.mkdir(parents=True, exist_ok=True)
         export_json_path.write_text(json_text, encoding="utf-8")
         written.append(export_json_path)
@@ -94,16 +103,60 @@ def export_drc_rules(
 
 
 def export_magic_types(
-    pdk_root: Path, technologies: dict[str, magic_tech_mod.MagicTechnology],
+    pdk_root: Path, technologies: dict[str, magic_tech_mod.MagicTechnology], dest_root: Path | None = None,
 ) -> list[Path]:
-    """Every real technology currently loaded (both real IHP
-    technologies, ``ihp-sg13g2`` and ``ihp-sg13g2-GDS``) -- with any
-    in-memory Types edits patched in. Returns the real export paths
-    written."""
+    """Every real technology in *technologies* (the GUI passes every
+    technology currently loaded; ``export_full_pdk``/``main.py
+    export-magic-types`` pass every real technology, freshly parsed).
+    Returns the real export paths written."""
 
     written = []
     for tech in technologies.values():
-        export_path = export_path_for(pdk_root, tech.source_path)
+        export_path = export_path_for(pdk_root, tech.source_path, dest_root)
         magic_tech_writer.export_tech_file(tech, export_path)
         written.append(export_path)
     return written
+
+
+def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
+    """A complete, real, standalone open_pdks-format PDK tree at
+    *dest_root* -- every real file under *pdk_root* copied verbatim
+    (``shutil.copytree``, so ``dest_root`` starts as an exact, complete
+    clone -- GDS/Liberty/CDL/SPICE/Verilog/docs/qa/every other real
+    file this project has no editor for included, not just the small
+    subset the other ``export_*`` functions above touch), then every
+    real LEF/DRC/Magic-Types file is re-rendered on top through its own
+    real writer, freshly parsed straight from *pdk_root* with no GUI
+    session or edits involved -- a real no-op patch, but one that
+    exercises every real writer against every real file in the whole
+    PDK, not a hand-picked sample. Refuses to run if *dest_root*
+    already exists (never silently overwrites)."""
+
+    if dest_root.exists():
+        raise FileExistsError(f"{dest_root} already exists -- remove it first (this never overwrites blindly).")
+    # symlinks=True: a real, confirmed bug found via the smoking-gun
+    # round-trip test -- shutil.copytree's own default (symlinks=False)
+    # *dereferences* a real symlink (IHP's own
+    # libs.tech/ngspice/install.py -> ../xschem/install.py) into a
+    # plain file copy of its target, silently losing the real symlink
+    # structure. A plain content diff (e.g. 'diff -rq' without
+    # --no-dereference) doesn't catch this -- it compares resolved
+    # content and reports no difference -- so the bug only surfaced via
+    # a real, structural comparison (--no-dereference) across the full
+    # exported tree.
+    shutil.copytree(pdk_root, dest_root, symlinks=True)
+
+    lef_cache = {path: lef_mod.parse_lef_file(path) for path in lef_mod.find_lef_files(pdk_root)}
+    export_lef_files(pdk_root, lef_cache, dest_root)
+
+    drc_root = drc_mod.find_drc_root(pdk_root)
+    if drc_root is not None:
+        rules, _skipped_extraction = drc_mod.extract_design_rules(pdk_root, drc_root)
+        export_drc_rules(pdk_root, drc_root, rules, dest_root)
+
+    technologies: dict[str, magic_tech_mod.MagicTechnology] = {}
+    for path in magic_tech_mod.find_tech_files(pdk_root):
+        tech = magic_tech_mod.parse_tech_file(path)
+        if tech.name:
+            technologies[tech.name] = tech
+    export_magic_types(pdk_root, technologies, dest_root)
