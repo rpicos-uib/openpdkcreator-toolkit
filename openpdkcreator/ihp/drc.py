@@ -43,15 +43,30 @@ def find_drc_root(pdk_root: Path) -> Path | None:
     return candidate if candidate.is_dir() else None
 
 
-def _load_json_config(search_root: Path) -> dict[str, float]:
+def find_json_config_path(search_root: Path) -> Path | None:
+    """The one real JSON file under *search_root* with a top-level
+    ``drc_rules`` object -- confirmed real: exactly one such file
+    exists in IHP's own deck
+    (``rule_decks/sg13g2_tech_default.json``). Exposed separately from
+    ``_load_json_config`` so ``ihp/drc_writer.py`` can patch the real
+    file directly rather than re-deriving its path independently."""
+
     for candidate in sorted(search_root.rglob("*.json")):
         try:
             data = json.loads(candidate.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(data, dict) and isinstance(data.get("drc_rules"), dict):
-            return {k: v for k, v in data["drc_rules"].items() if isinstance(v, (int, float))}
-    return {}
+            return candidate
+    return None
+
+
+def _load_json_config(search_root: Path) -> dict[str, float]:
+    path = find_json_config_path(search_root)
+    if path is None:
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in data["drc_rules"].items() if isinstance(v, (int, float))}
 
 
 def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[DesignRule], list[str]]:

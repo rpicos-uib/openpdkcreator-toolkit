@@ -30,15 +30,18 @@ fully parsed, and one real pattern each is pulled out of its harder
 see ``ihp/magic_tech.py``'s own docstring for exact real coverage and
 what's still not attempted (``cifinput``, ``device``, the rest of
 ``drc``/``extract``). No attempt at LEF via-stack geometry. Real,
-open_pdks-format write-back now exists for LEF pins specifically
-(``export-lef``/``export.py``/``ihp/lef_writer.py``) -- surgical,
-line-range-targeted patching of the real ``.lef`` text into a new
-``export/`` tree, never touching ``data/``; DRC Rules/Magic Types stay
-program-format-only (``project_io.py``'s own ``saves/``), not yet
-written back into their real ``.drc``/``.tech`` formats. The much
-larger end goal -- editing/creating/generating arbitrary PDK file
-types, not just reading/displaying them -- is explicit, tracked future
-work, still only partially attempted here.
+open_pdks-format write-back now exists for LEF pins
+(``export-lef``/``export.py``/``ihp/lef_writer.py``) and DRC Rules
+(``export-drc``/``ihp/drc_writer.py`` -- a rule's ``rule_id``/
+``description`` patched into its real ``.drc`` script, its ``value``
+into the one real JSON config file it actually lives in) -- both
+surgical, position-targeted patching into a new ``export/`` tree,
+never touching ``data/``. Magic Types stay program-format-only
+(``project_io.py``'s own ``saves/``), not yet written back into the
+real ``.tech`` format. The much larger end goal -- editing/creating/
+generating arbitrary PDK file types, not just reading/displaying
+them -- is explicit, tracked future work, still only partially
+attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
@@ -306,6 +309,42 @@ def cmd_export_lef(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_export_drc(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    drc_root = drc_mod.find_drc_root(pdk_root)
+    if drc_root is None:
+        print(f"No DRC deck found under {pdk_root}/libs.tech/klayout/tech/drc/", file=sys.stderr)
+        return 2
+
+    rules, _skipped_extraction = drc_mod.extract_design_rules(pdk_root, drc_root)
+    written, skipped_writeback = export_mod.export_drc_rules(pdk_root, drc_root, rules)
+
+    mismatches = []
+    for export_path in written:
+        relpath = export_path.relative_to(export_mod.EXPORT_ROOT / pdk_root.name)
+        original_path = pdk_root / relpath
+        if export_path.read_text(encoding="utf-8", errors="replace") != original_path.read_text(encoding="utf-8", errors="replace"):
+            mismatches.append(original_path)
+
+    print(f"Exported {len(written)} real file(s) (DRC scripts + JSON config) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(written) - len(mismatches)}/{len(written)} are."
+    )
+    if skipped_writeback:
+        print(f"{len(skipped_writeback)} rule(s) with no real, resolvable source position (hand-authored, not written back): "
+              f"{', '.join(skipped_writeback)}")
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -338,6 +377,7 @@ def build_parser() -> argparse.ArgumentParser:
     gds_parser = sub.add_parser("gds", help="Real GDS structural summary (bbox/shape counts) via klayout.db.")
     gds_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
     sub.add_parser("export-lef", help="Export real, patched .lef files to export/ (byte-identical with no edits).")
+    sub.add_parser("export-drc", help="Export real, patched DRC scripts + JSON config to export/ (byte-identical with no edits).")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -360,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_gds(args.pdk_root.resolve(), args.family)
     if args.command == "export-lef":
         return cmd_export_lef(args.pdk_root.resolve())
+    if args.command == "export-drc":
+        return cmd_export_drc(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

@@ -72,14 +72,17 @@ injectable ``get_lef`` hook so ``CellHubView`` can route through this
 same cache too).
 
 **Native write-back** (``export.py``, **File > Export Edited LEF
-Files**): unlike ``project_io.py``'s own program-format ``saves/``,
-this writes real, valid ``.lef`` text -- every file parsed this
-session, pin edits patched in via surgical, line-range-targeted text
-splicing (``ihp/lef_writer.py``), everything else preserved
-byte-for-byte -- to a new ``export/`` tree, mirroring each file's own
-real relative path under ``pdk_root``. Never touches ``data/``. Scoped
-to LEF pins only so far; DRC Rules/Magic Types stay ``saves/``-only,
-real, separate future work (see README).
+Files** / **Export Edited DRC Rules**): unlike ``project_io.py``'s own
+program-format ``saves/``, this writes real, valid text back into the
+real file formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``) and
+now DRC Rules too (a rule's ``rule_id``/``description`` patched into
+its real ``.drc`` script's own ``.output()`` call; its ``value``
+patched into the one real JSON config file that value actually lives
+in -- ``ihp/drc_writer.py``) -- via surgical, position-targeted text
+splicing, everything else preserved byte-for-byte, to a new
+``export/`` tree mirroring each file's own real relative path under
+``pdk_root``. Never touches ``data/``. Magic Types still stay
+``saves/``-only, real, separate future work (see README).
 """
 
 from __future__ import annotations
@@ -127,6 +130,7 @@ class App(ttk.Frame):
         self.pdk_root = pdk_root
         self.project = ProjectState()
         self.lyp_path: Path | None = None
+        self.drc_root: Path | None = None
         self.project_name = DEFAULT_PROJECT_NAME
 
         # Shared real-LEF-parse cache + saved-pin-override state, owned
@@ -206,6 +210,7 @@ class App(ttk.Frame):
         file_menu.add_command(label="Reload from Real Files", command=self._reload_from_real_files)
         file_menu.add_separator()
         file_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
+        file_menu.add_command(label="Export Edited DRC Rules (open_pdks format)", command=self._export_drc_rules)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -224,6 +229,28 @@ class App(ttk.Frame):
             self.status.set("No LEF files parsed this session -- nothing to export (visit the LEF or By Cell tab first).")
             return
         self.status.set(f"Exported {len(written)} real .lef file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
+    def _export_drc_rules(self):
+        """Writes real, patched DRC-deck text (the .drc scripts a
+        rule_id/description live in, plus the one real JSON config
+        file a rule's value lives in) for every rule with real,
+        resolvable provenance -- see ``export.py``'s/
+        ``ihp/drc_writer.py``'s own docstrings. A hand-authored rule
+        (New Rule, no real source position) can't be written back --
+        reported in the status line, not silently dropped."""
+
+        self.rules_view.commit_pending_edits()
+        if self.drc_root is None:
+            self.status.set("No DRC deck found -- nothing to export.")
+            return
+        written, skipped = export_mod.export_drc_rules(self.pdk_root, self.drc_root, self.project.design_rules)
+        if not written:
+            self.status.set("No real DRC rules to export.")
+            return
+        status = f"Exported {len(written)} real file(s) (DRC scripts + JSON config) to {export_mod.EXPORT_ROOT / self.pdk_root.name}"
+        if skipped:
+            status += f"; {len(skipped)} hand-authored rule(s) skipped (no real source to write back to): {', '.join(skipped)}"
+        self.status.set(status)
 
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
@@ -382,8 +409,8 @@ class App(ttk.Frame):
         self.project.layers = parsed
         self.layers_view.refresh()
 
-        drc_root = drc_mod.find_drc_root(self.pdk_root)
-        rules, skipped = drc_mod.extract_design_rules(self.pdk_root, drc_root)
+        self.drc_root = drc_mod.find_drc_root(self.pdk_root)
+        rules, skipped = drc_mod.extract_design_rules(self.pdk_root, self.drc_root)
         self.project.design_rules = rules
         self.drc_skipped_count = len(skipped)
         self.rules_view.refresh()

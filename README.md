@@ -31,6 +31,7 @@ python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
 python3 main.py export-lef   # real, patched .lef write-back to export/ (byte-identical with no edits)
+python3 main.py export-drc   # real, patched DRC-rule write-back to export/ (byte-identical with no edits)
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
 
@@ -475,6 +476,56 @@ highlighted straight to that cell's real line range within its
   exported file, and confirmed the edit is there -- and confirmed a
   real `.lef` file never parsed this session is correctly *not*
   exported (nothing to write for a file with no possible edits).
+- **`openpdkcreator/ihp/drc_writer.py`** -- real, open_pdks-format
+  write-back for DRC Rules, extending native write-back serialization
+  beyond LEF pins. `ihp/drc.py`'s own extraction already established
+  a real, two-file split -- a rule's `rule_id`/`description` live in
+  its real `.drc` Ruby script's own `result_var.output("ID",
+  "description")` call; its `value` lives in the one real JSON config
+  file's `drc_rules['KEY']` entry (the script itself never contains a
+  literal numeric threshold, only a variable traced back to that JSON
+  lookup) -- so write-back patches each field into its own real file,
+  never conflating the two. **Surgical, character-offset-based
+  patching**: `_locate` re-derives which real JSON key (if any) backs
+  a rule's value, and the exact real `.output()` regex match, by
+  re-running `ihp/drc.py`'s own extraction regexes directly (imported,
+  not duplicated) against the rule's own real `source_provenance` --
+  then only the exact substrings the id/description occupy are
+  replaced, leaving everything else (surrounding Ruby code, other
+  rules, comments, formatting) untouched. **A real, common wrinkle
+  handled deliberately**: 61 of IHP's own real `.output()` calls have
+  a real `"<section> : ..."` prefix before the description
+  `DesignRule.description` actually keeps (`ihp/drc.py` splits on the
+  first real `" : "`) -- write-back reconstructs the original prefix
+  verbatim and splices only the (possibly-edited) suffix back in,
+  rather than silently discarding that real prefix text for over a
+  third of IHP's own real rules. **A second real bug found and fixed
+  while building this, of the exact same shape as the LEF writer's
+  `ANTENNAMODEL` one**: an earlier version always reformatted every
+  referenced JSON value via `repr(float(...))`, even ones nobody
+  edited -- which silently rewrote a real, confirmed case
+  (`"Padb_b": 70.00`) to `70.0`, breaking the no-edit-is-byte-identical
+  guarantee; fixed by comparing the real numeric value first and
+  skipping the substitution entirely when nothing actually changed.
+  Only rules with real, resolvable provenance can be written back --
+  a hand-authored New Rule has no real source position, and is
+  reported by `rule_id`, never silently dropped. Verified for real
+  against the actual downloaded data: **all 27 real files (every `.drc`
+  script with an extracted rule, plus the JSON config) export
+  byte-identical to their real originals with no edits**; a value edit
+  (`Act.a` 0.15 -> 0.20) patches only that one real JSON key, 377
+  others untouched, and the `.drc` script itself stays untouched (no
+  value lives there); a rule_id + description edit (on a real
+  `" : "`-prefixed rule, `V1.b`) patches exactly the id and description
+  substrings in the real `.drc` file, confirmed by diffing every line
+  against the original; a hand-authored rule is correctly reported as
+  skipped, not silently dropped.
+- **`main.py export-drc`** / **File > Export Edited DRC Rules**
+  (`app.py`) -- CLI and GUI actions, matching `export-lef`'s own shape:
+  export every rule with real provenance, report byte-identical counts
+  and any hand-authored rules skipped. Verified for real, driven:
+  edited a rule's value via the real DRC Rules form, exported, and
+  confirmed the real JSON config reflects it.
 - **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
   sub-tab (`ToolsView`): real, live status of every tool in
   `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
@@ -533,27 +584,27 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Native write-back serialization: **LEF pins are done** -- real,
-  surgical, line-range-targeted write-back into real `.lef` text
-  (`ihp/lef_writer.py`/`export.py`, `File > Export Edited LEF Files`/
-  `main.py export-lef`), verified against all 32 real files
-  (byte-identical with no edits; real edit/new-pin/deleted-pin
-  round-trips). **DRC Rules and Magic Types are not** -- both are
-  genuinely *structured*-editable (add/edit/delete through a real
-  form, not raw text) and persist across a relaunch (`project_io.py`,
-  `saves/<pdk name>.yaml`), but that's still a separate program
-  format, not a write into the real, on-disk `.drc`/`.tech` file
-  itself. Each needs its own real design pass, harder than LEF's:
-  Magic Types would need the same surgical, line-range approach
-  extended to `magic_tech.py` (which doesn't track source lines yet);
-  DRC Rules would need to patch a real KLayout Ruby DSL script (a
-  `.output()` call's own real JSON-config-referenced value), a
-  materially different real file format from LEF's block-structured
-  text. Layers/Magic Tech's other domains/CDL/SPICE/Verilog/Liberty
-  port and cell-boundary data (real boundaries only, no per-port model
-  to edit yet) stay read-only in their own structured views for the
-  same reason DRC Rules/Magic Types aren't write-back-capable yet (no
-  write-back path -> no reason to build a form there first).
+- Native write-back serialization: **LEF pins and DRC Rules are done**
+  -- real, surgical, position-targeted write-back into real `.lef` text
+  (`ihp/lef_writer.py`, verified against all 32 real files) and real
+  `.drc`/JSON text (`ihp/drc_writer.py`, verified against all 27 real
+  files with an extracted rule) -- both byte-identical with no edits,
+  plus real, driven edit round-trips (`export.py`, `File > Export
+  Edited LEF Files`/`Export Edited DRC Rules`, `main.py
+  export-lef`/`export-drc`). **Magic Types are not** -- genuinely
+  *structured*-editable (add/edit/delete through a real form, not raw
+  text) and persist across a relaunch (`project_io.py`, `saves/<pdk
+  name>.yaml`), but that's still a separate program format, not a
+  write into the real, on-disk `.tech` file itself. Needs the same
+  surgical, line-range approach LEF/DRC both now use, extended to
+  `magic_tech.py` (which doesn't track real source lines yet, unlike
+  `ihp/lef.py`'s `LefPin`/`LefMacro` or DRC's own
+  `source_provenance`-based positions). Layers/Magic Tech's other
+  domains/CDL/SPICE/Verilog/Liberty port and cell-boundary data (real
+  boundaries only, no per-port model to edit yet) stay read-only in
+  their own structured views for the same reason Magic Types aren't
+  write-back-capable yet (no write-back path -> no reason to build a
+  form there first).
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
