@@ -42,13 +42,21 @@ each harder, mini-rule-language section rather than a full interpreter:
   comment -- 30 of 33 real lines; the other 3 are real non-numeric
   config entries, ``blocktypes``/``obstypes``/``comment None``, not a
   parsing gap) and real plane ordering (``planeorder <name> <int>``,
-  14/14). The much larger real remainder of this section --
+  14/14). Also the real parasitic-capacitance-coefficient lines --
   ``defaultoverlap``/``defaultsideoverlap``/``defaultareacap``/
-  ``defaultperimeter``/``defaultsidewall`` (505 real parasitic-
-  capacitance-coefficient lines combined) and ``device``/``devresist``/
-  ``contact``/``antenna``/``disconnect``/``substrate`` -- is real,
-  separate future work; ``device`` in particular is its own real
-  transistor-model mini-language.
+  ``defaultperimeter``/``defaultsidewall`` (506 real lines combined,
+  every real line for a given directive sharing the exact same real
+  token count -- confirmed directly, not assumed -- so leading args
+  and trailing numeric value(s) split at a fixed, real, per-directive
+  position; argument *semantics* deliberately not asserted, same
+  "don't guess" discipline ``ComposeStatement`` already uses) -- and
+  every real ``device <class> <model> <type> ...`` statement (50 real
+  entries, some wrapped across lines with a trailing '\\' and joined
+  via ``_join_backslash_continuations`` first, the same helper the
+  ``drc`` section's own wrapped statements use; class/model/type kept
+  as real, confirmed-positional fields, everything after kept raw).
+  ``devresist``/``contact``/``antenna``/``disconnect``/``substrate``
+  remain real, separate future work.
 
 - ``cifinput``: two real, cleanly tabular facts pulled out of the
   section, its own real geometry-boolean recipe blocks (``layer``/
@@ -103,6 +111,17 @@ _SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"
 _TRAILING_PARENS_RE = re.compile(r"\(([^()]+)\)\s*$")
 _RESIST_RE = re.compile(r"^resist\s+(\S+)\s+(-?\d+)\s*$")
 _PLANEORDER_RE = re.compile(r"^planeorder\s+(\S+)\s+(\d+)\s*$")
+_EXTRACT_CAP_DIRECTIVES = {
+    # directive -> real, confirmed real leading-arg count (every real
+    # line for that directive has the exact same real token count --
+    # checked directly, not assumed; anything past the leading args is
+    # the line's own trailing numeric value(s)).
+    "defaultareacap": 2,
+    "defaultperimeter": 2,
+    "defaultsidewall": 2,
+    "defaultoverlap": 4,
+    "defaultsideoverlap": 4,
+}
 # Magic's own real value -> micron conversion for the drc section's
 # width/spacing statements -- empirically confirmed (not from a local
 # spec), see this module's own docstring.
@@ -248,6 +267,48 @@ class ExtractResist:
 
 
 @dataclass
+class ExtractCapCoefficient:
+    """One real 'defaultoverlap'/'defaultsideoverlap'/'defaultareacap'/
+    'defaultperimeter'/'defaultsidewall' line from the extract
+    section -- a real parasitic-capacitance coefficient. Argument
+    *semantics* (which token means e.g. "over" vs "under", or which
+    physical quantity a trailing number is) are deliberately not
+    asserted -- no authoritative real source was available this pass
+    to cross-check against (unlike the ``drc`` section's own
+    empirically-confirmed ``/1000`` unit factor) -- kept raw and
+    positional, same 'don't guess further' discipline
+    ``ComposeStatement``/``AliasEntry`` already use. Every real line
+    for a given ``directive`` has the exact same real token count
+    (confirmed by direct inspection, not assumed), so ``args``/
+    ``values`` split at a fixed, real, per-directive position -- see
+    ``_EXTRACT_CAP_DIRECTIVES``."""
+
+    directive: str
+    args: tuple[str, ...]
+    values: tuple[float, ...]
+
+
+@dataclass
+class ExtractDevice:
+    """One real 'device <class> <model> <type> ...' statement from the
+    extract section's own real transistor/resistor/capacitor-model
+    mini-language. ``devclass``/``model``/``type_name`` are real,
+    confirmed-positional fields (always tokens 2/3/4 across all 50 real
+    entries); everything after is kept raw and positional (a mix of
+    real terminal-layer references and 'key=value' parameter mappings)
+    -- same 'don't guess further semantics' discipline as
+    ``ExtractCapCoefficient``. Real lines can wrap across multiple
+    physical lines with a trailing '\\' -- joined first via
+    ``_join_backslash_continuations``, the same helper the ``drc``
+    section's own real wrapped statements already use."""
+
+    devclass: str
+    model: str
+    type_name: str
+    rest: tuple[str, ...]
+
+
+@dataclass
 class MagicTechnology:
     source_path: Path
     included_files: list[str] = field(default_factory=list)
@@ -279,6 +340,13 @@ class MagicTechnology:
     docstring."""
     extract_resist: list[ExtractResist] = field(default_factory=list)
     extract_plane_order: list[tuple[str, int]] = field(default_factory=list)
+    extract_cap_coefficients: list[ExtractCapCoefficient] = field(default_factory=list)
+    """Real defaultoverlap/defaultsideoverlap/defaultareacap/
+    defaultperimeter/defaultsidewall lines -- see
+    ``ExtractCapCoefficient``'s own docstring."""
+    extract_devices: list[ExtractDevice] = field(default_factory=list)
+    """Real 'device ...' statements -- see ``ExtractDevice``'s own
+    docstring."""
     unparsed_sections: list[str] = field(default_factory=list)
     """Real section names found (directly or via include) that this
     pass deliberately does not parse -- see this module's own
@@ -636,6 +704,41 @@ def _parse_extract_plane_order(lines: list[str]) -> list[tuple[str, int]]:
     return entries
 
 
+def _parse_extract_cap_coefficients(lines: list[str]) -> list[ExtractCapCoefficient]:
+    entries = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        arg_count = _EXTRACT_CAP_DIRECTIVES.get(parts[0])
+        if arg_count is None or len(parts) <= arg_count:
+            continue
+        args = tuple(parts[1 : 1 + arg_count])
+        value_tokens = parts[1 + arg_count :]
+        try:
+            values = tuple(float(token) for token in value_tokens)
+        except ValueError:
+            continue
+        entries.append(ExtractCapCoefficient(directive=parts[0], args=args, values=values))
+    return entries
+
+
+def _parse_extract_devices(lines: list[str]) -> list[ExtractDevice]:
+    entries = []
+    for line in _join_backslash_continuations(lines):
+        stripped = line.strip()
+        if not stripped.startswith("device "):
+            continue
+        parts = stripped.split()
+        if len(parts) < 4:
+            continue
+        entries.append(
+            ExtractDevice(devclass=parts[1], model=parts[2], type_name=parts[3], rest=tuple(parts[4:]))
+        )
+    return entries
+
+
 def parse_tech_file(path: Path) -> MagicTechnology:
     included: list[str] = []
     lines = _load_lines_with_includes(path, included)
@@ -678,6 +781,8 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.drc_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.extract_resist = _parse_extract_resist(sections.get("extract", []))
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
+    tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))
+    tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)

@@ -145,6 +145,11 @@ def cmd_magic_tech(pdk_root: Path) -> int:
             f"  drc_checks:{len(tech.drc_checks)} ({len(tech.drc_skipped)} real line(s) not matched)  "
             f"extract_resist:{len(tech.extract_resist)}  extract_plane_order:{len(tech.extract_plane_order)}"
         )
+        if tech.extract_cap_coefficients or tech.extract_devices:
+            print(
+                f"  extract_cap_coefficients:{len(tech.extract_cap_coefficients)}  "
+                f"extract_devices:{len(tech.extract_devices)}"
+            )
         for skipped_line in tech.drc_skipped:
             print(f"    not matched: {skipped_line}")
         if tech.unparsed_sections:

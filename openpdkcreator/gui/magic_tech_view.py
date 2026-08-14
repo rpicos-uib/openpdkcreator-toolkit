@@ -6,10 +6,12 @@ separate technologies; the fragment files ``include``d into
 picker since they were never meant to be viewed standalone).
 
 A sub-`Notebook` per real, tabular data domain -- planes/types/
-contacts/aliases/styles/CIF layers, plus **Compose**/**Connect**/
-**DRC (Magic)**/**Extract** (real ``compose``/``connect``/``drc``/
-``extract`` section content -- see ``ihp/magic_tech.py``'s own
-docstring for exactly what's extracted from each and why). **Types**
+contacts/aliases/styles/CIF layers/**CIF Input**, plus
+**Compose**/**Connect**/**DRC (Magic)**/**Extract**/**Extract
+Coefficients**/**Extract Devices** (real ``cifinput``/``compose``/
+``connect``/``drc``/``extract`` section content -- see
+``ihp/magic_tech.py``'s own docstring for exactly what's extracted
+from each and why). **Types**
 is editable (a list + form pane, New/Delete Type, the same
 commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
 already use) -- every other domain stays read-only for now (each would
@@ -80,6 +82,8 @@ class MagicTechView(ttk.Frame):
             (80, 220, 80, 100, 300),
         )
         self._build_extract_tab(sub)
+        self._build_extract_coefficients_tab(sub)
+        self._build_extract_devices_tab(sub)
 
     def _build_extract_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -105,6 +109,14 @@ class MagicTechView(ttk.Frame):
             self.extract_plane_order_tree.heading(col, text=col.title())
             self.extract_plane_order_tree.column(col, width=width, anchor="w")
         self.extract_plane_order_tree.grid(row=1, column=1, sticky="nsew")
+
+    def _build_extract_coefficients_tab(self, notebook: ttk.Notebook):
+        columns = ("directive", "args", "values")
+        self.extract_coeff_tree = self._make_tab(notebook, "Extract Coefficients", columns, (140, 260, 160))
+
+    def _build_extract_devices_tab(self, notebook: ttk.Notebook):
+        columns = ("devclass", "model", "type_name", "rest")
+        self.extract_devices_tree = self._make_tab(notebook, "Extract Devices", columns, (110, 160, 110, 400))
 
     def _build_cifinput_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -250,6 +262,7 @@ class MagicTechView(ttk.Frame):
             self.cifinput_ignore_tree, self.cifinput_hints_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
+            self.extract_coeff_tree, self.extract_devices_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -292,6 +305,13 @@ class MagicTechView(ttk.Frame):
             self.extract_resist_tree.insert("", "end", values=(resist.layer_spec, resist.milliohms_per_square))
         for name, order in tech.extract_plane_order:
             self.extract_plane_order_tree.insert("", "end", values=(name, order))
+        for coeff in tech.extract_cap_coefficients:
+            values_text = ", ".join(f"{v:g}" for v in coeff.values)
+            self.extract_coeff_tree.insert("", "end", values=(coeff.directive, " ".join(coeff.args), values_text))
+        for device in tech.extract_devices:
+            self.extract_devices_tree.insert(
+                "", "end", values=(device.devclass, device.model, device.type_name, " ".join(device.rest)),
+            )
 
         summary = (
             f"format {tech.format} | v{tech.version} -- {tech.description} | "
@@ -299,7 +319,9 @@ class MagicTechView(ttk.Frame):
             f"aliases:{len(tech.aliases)} styles:{len(tech.styles)} cif_layers:{len(tech.cif_layers)} "
             f"compose:{len(tech.compose)} connect:{len(tech.connect)} "
             f"drc_checks:{len(tech.drc_checks)}({len(tech.drc_skipped)} skipped) "
-            f"extract_resist:{len(tech.extract_resist)}"
+            f"extract_resist:{len(tech.extract_resist)} "
+            f"extract_cap_coefficients:{len(tech.extract_cap_coefficients)} "
+            f"extract_devices:{len(tech.extract_devices)}"
         )
         if tech.included_files:
             summary += f" | includes: {', '.join(tech.included_files)}"
