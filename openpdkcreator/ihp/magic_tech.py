@@ -102,6 +102,15 @@ class TypeEntry:
     obsolete: bool = False
     """The leading '-' flag Magic uses for internal/no-longer-directly-
     painted types (e.g. '-active hvnmosesd,...')."""
+    line_no: int = 0
+    """This type's own real, 1-indexed source line number in
+    ``MagicTechnology.source_path`` -- ``0`` for a type created this
+    session (New Type, no real source position) *or* one whose real
+    ``types`` section this parser can't safely map back to
+    ``source_path``'s own line numbers (see
+    ``_safe_prefix_line_count``'s own docstring). Used by
+    ``ihp/magic_tech_writer.py`` to patch just this type's own real
+    line in place on export."""
 
 
 @dataclass
@@ -228,6 +237,24 @@ class MagicTechnology:
     """Real section names found (directly or via include) that this
     pass deliberately does not parse -- see this module's own
     docstring for why."""
+    all_parsed_type_line_nos: list[int] = field(default_factory=list)
+    """Every real type's own line number as originally parsed, in real
+    file order -- unlike ``types``, never mutated by editing (New/
+    Delete Type); mirrors ``ihp/lef.py``'s ``LefMacro.
+    all_parsed_pin_ranges``, used by ``ihp/magic_tech_writer.py`` to
+    tell a real deleted type apart from a comment/blank-line gap.
+    Excludes any real type line this parser couldn't safely map back
+    to ``source_path``'s own line numbers (see
+    ``_safe_prefix_line_count``)."""
+    types_section_start_line: int = 0
+    """The real, 1-indexed line number of the ``types`` keyword
+    itself, in ``source_path`` -- ``0`` if the real ``types`` section
+    wasn't found at a safely-mappable position (see
+    ``_safe_prefix_line_count``'s own docstring); write-back leaves the
+    whole file untouched in that case rather than guess."""
+    types_section_end_line: int = 0
+    """The real, 1-indexed line number of the ``types`` section's own
+    closing ``end``, in ``source_path``."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -260,6 +287,28 @@ def _load_lines_with_includes(path: Path, included: list[str], _seen: set[Path] 
             continue
         lines.append(raw_line)
     return lines
+
+
+def _safe_prefix_line_count(path: Path) -> int:
+    """How many of *path*'s own real leading lines are guaranteed to
+    appear at the exact same real line number in
+    ``_load_lines_with_includes``'s combined, spliced view -- every
+    line before *path*'s own first real ``include`` statement (all of
+    it, if there's none). Confirmed true for IHP's own real
+    ``ihp-sg13g2.tech``: its real ``types`` section (and everything
+    ``ihp/magic_tech_writer.py`` needs to write back) sits well before
+    its first real ``include`` line. Not assumed true in general --
+    write-back for a real ``types`` line past this boundary is
+    deliberately refused (``TypeEntry.line_no`` stays ``0``) rather
+    than risk patching the wrong real position in the wrong real
+    file."""
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    line_no = 0
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        if _INCLUDE_RE.match(raw_line.strip()):
+            return line_no - 1
+    return line_no
 
 
 def _split_sections(lines: list[str]) -> dict[str, list[str]]:
@@ -302,24 +351,57 @@ def _parse_planes(lines: list[str]) -> list[PlaneEntry]:
     return entries
 
 
-def _parse_types(lines: list[str]) -> list[TypeEntry]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
+def _parse_types_with_lines(
+    lines: list[str], safe_through: int,
+) -> tuple[list[TypeEntry], list[int], int, int]:
+    """Unlike every other ``_parse_*`` function here, this one scans
+    the full, combined (include-spliced) ``lines`` list itself, not a
+    pre-sectioned body -- it needs each real type's own combined-space
+    line number to decide whether write-back can safely map it back to
+    *source_path*'s own real line numbers (``line_no <= safe_through``,
+    see ``_safe_prefix_line_count``). Returns (entries,
+    all_parsed_type_line_nos, section_start_line, section_end_line);
+    the last two are ``0`` if no safely-mappable real ``types`` section
+    was found at all."""
+
+    entries: list[TypeEntry] = []
+    all_line_nos: list[int] = []
+    section_start = section_end = 0
+    in_types = False
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+        if not in_types:
+            if stripped == "types":
+                in_types = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            in_types = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
         if not stripped or stripped.startswith("#"):
             continue
         obsolete = stripped.startswith("-")
-        if obsolete:
-            stripped = stripped[1:]
-        parts = stripped.split(None, 1)
+        body = stripped[1:] if obsolete else stripped
+        parts = body.split(None, 1)
         if len(parts) != 2:
             continue
         plane, names_raw = parts
         names = [n.strip() for n in names_raw.split(",") if n.strip()]
         if not names:
             continue
-        entries.append(TypeEntry(plane=plane, canonical_name=names[0], aliases=names[1:], obsolete=obsolete))
-    return entries
+        safe_line_no = line_no if section_start and line_no <= safe_through else 0
+        if safe_line_no:
+            all_line_nos.append(safe_line_no)
+        entries.append(TypeEntry(
+            plane=plane, canonical_name=names[0], aliases=names[1:], obsolete=obsolete,
+            line_no=safe_line_no,
+        ))
+
+    return entries, all_line_nos, section_start, section_end
 
 
 def _parse_contacts(lines: list[str]) -> list[ContactEntry]:
@@ -509,8 +591,12 @@ def parse_tech_file(path: Path) -> MagicTechnology:
         elif stripped.startswith("requires"):
             tech.requires = stripped.split(None, 1)[1].strip()
 
+    safe_through = _safe_prefix_line_count(path)
+    tech.types, tech.all_parsed_type_line_nos, tech.types_section_start_line, tech.types_section_end_line = (
+        _parse_types_with_lines(lines, safe_through)
+    )
+
     tech.planes = _parse_planes(sections.get("planes", []))
-    tech.types = _parse_types(sections.get("types", []))
     tech.contacts = _parse_contacts(sections.get("contact", []))
     tech.aliases = _parse_aliases(sections.get("aliases", []))
     tech.styles = _parse_styles(sections.get("styles", []))

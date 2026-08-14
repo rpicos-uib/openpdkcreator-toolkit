@@ -32,6 +32,7 @@ python3 main.py cells        # real per-cell view aggregation, one real family a
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
 python3 main.py export-lef   # real, patched .lef write-back to export/ (byte-identical with no edits)
 python3 main.py export-drc   # real, patched DRC-rule write-back to export/ (byte-identical with no edits)
+python3 main.py export-magic-types   # real, patched Magic Types write-back to export/ (byte-identical with no edits)
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
 
@@ -526,6 +527,57 @@ highlighted straight to that cell's real line range within its
   and any hand-authored rules skipped. Verified for real, driven:
   edited a rule's value via the real DRC Rules form, exported, and
   confirmed the real JSON config reflects it.
+- **`openpdkcreator/ihp/magic_tech_writer.py`** -- real, open_pdks-format
+  write-back for Magic Types, the third and final currently-editable
+  domain (after LEF pins and DRC Rules). Each real type occupies
+  exactly one real line (`[-]plane name,alias1,alias2` -- no block
+  structure to navigate, unlike LEF's `PIN`/`MACRO` or DRC's multi-line
+  `.output()` calls), so `ihp/magic_tech.py` gained the same real
+  source-line tracking LEF already has (`TypeEntry.line_no`,
+  `MagicTechnology.all_parsed_type_line_nos`), used exactly the same
+  way: a deleted type's original line is omitted, a brand-new type is
+  appended before the real `types` section's own closing `end`, and an
+  existing type's line is regenerated from its current fields. **A
+  real, defensive safety measure, not just an optimization**: since
+  `ihp-sg13g2.tech` splices in four included fragment files
+  (`cifout`/`cifin`/`drc`/`extract`) that would shift real line numbers
+  in the combined, parsed view relative to the real file on disk, line
+  tracking only activates for a real `types` section that appears
+  *before* the file's own first real `include` statement
+  (`_safe_prefix_line_count`) -- true for both of IHP's own real
+  technologies, confirmed directly, but not assumed true in general;
+  a real `types` section past that boundary would refuse to write
+  back rather than risk patching the wrong real position in the wrong
+  real file. **A real bug found and fixed while building this, the
+  same shape as the LEF/DRC writers' own formatting bugs**: an early
+  version always reconstructed a type's line with a single fixed
+  space between plane and names, which silently collapsed real,
+  confirmed column-aligned multi-space formatting (102 real lines in
+  `ihp-sg13g2-GDS.tech` use more than one space there) even when
+  nothing was edited -- caught immediately by the no-edit-is-
+  byte-identical check failing against real data; fixed by preserving
+  the real original separator whitespace exactly (and the real
+  original indentation) for every existing type, substituting only
+  the fields that can actually change. Verified for real against the
+  actual downloaded data: **both real technologies' `.tech` files
+  export byte-identical to their real originals with no edits**
+  (247 real types combined); real, driven round-trips for an edited
+  type (name/aliases/obsolete, with every other type confirmed
+  unchanged against a fresh parse), a brand-new type, and a deleted
+  type; and a real edit made via the GUI's own Types form, exported,
+  and confirmed correct in the real `.tech` file.
+- **`main.py export-magic-types`** / **File > Export Edited Magic
+  Types** (`app.py`) -- CLI and GUI actions, matching `export-lef`/
+  `export-drc`'s own shape: exports every real technology currently
+  loaded (both `ihp-sg13g2` and `ihp-sg13g2-GDS`) with any in-memory
+  Types edits patched in.
+
+Native write-back serialization is now complete for all three
+currently structured-editable domains -- LEF pins, DRC Rules, and
+Magic Types. Everything still read-only (Layers, Magic Tech's other
+five domains, CDL/SPICE/Verilog/Liberty content, GDS) has no
+write-back for the same reason it has no editor yet -- see Future
+Work.
 - **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
   sub-tab (`ToolsView`): real, live status of every tool in
   `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
@@ -584,27 +636,22 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Native write-back serialization: **LEF pins and DRC Rules are done**
-  -- real, surgical, position-targeted write-back into real `.lef` text
-  (`ihp/lef_writer.py`, verified against all 32 real files) and real
-  `.drc`/JSON text (`ihp/drc_writer.py`, verified against all 27 real
-  files with an extracted rule) -- both byte-identical with no edits,
-  plus real, driven edit round-trips (`export.py`, `File > Export
-  Edited LEF Files`/`Export Edited DRC Rules`, `main.py
-  export-lef`/`export-drc`). **Magic Types are not** -- genuinely
-  *structured*-editable (add/edit/delete through a real form, not raw
-  text) and persist across a relaunch (`project_io.py`, `saves/<pdk
-  name>.yaml`), but that's still a separate program format, not a
-  write into the real, on-disk `.tech` file itself. Needs the same
-  surgical, line-range approach LEF/DRC both now use, extended to
-  `magic_tech.py` (which doesn't track real source lines yet, unlike
-  `ihp/lef.py`'s `LefPin`/`LefMacro` or DRC's own
-  `source_provenance`-based positions). Layers/Magic Tech's other
-  domains/CDL/SPICE/Verilog/Liberty port and cell-boundary data (real
-  boundaries only, no per-port model to edit yet) stay read-only in
-  their own structured views for the same reason Magic Types aren't
-  write-back-capable yet (no write-back path -> no reason to build a
-  form there first).
+- Native write-back serialization: **done for all three currently
+  structured-editable domains** -- LEF pins (`ihp/lef_writer.py`,
+  verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
+  verified against all 27 real files with an extracted rule), and
+  Magic Types (`ihp/magic_tech_writer.py`, verified against both real
+  technologies' `.tech` files) -- every one byte-identical with no
+  edits, plus real, driven edit round-trips (`export.py`, `File >
+  Export Edited LEF Files`/`DRC Rules`/`Magic Types`, `main.py
+  export-lef`/`export-drc`/`export-magic-types`). What's left is
+  everything that's still read-only in its own structured view --
+  Layers, Magic Tech's other five domains, and CDL/SPICE/Verilog/
+  Liberty port/cell-boundary data (real boundaries only, no per-port
+  model exists to edit yet) -- for the same reason: no editor -> no
+  write-back path to build. GDS stays read-only by design (real
+  structural info only, no geometry-editing feature exists or is
+  planned this pass).
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.

@@ -5,14 +5,15 @@ valid, patched files to a new ``export/`` tree, mirroring each file's
 own real relative path under its ``pdk_root`` -- never touching the
 real, downloaded ``data/`` copy.
 
-Covers LEF pins (``ihp/lef_writer.py``'s own docstring explains
-exactly how the patching preserves everything this project's LEF model
-doesn't capture) and DRC Rules (``ihp/drc_writer.py``'s own docstring
-explains the real ``.drc``-script-vs-JSON-config split). Magic Types
-are still genuinely structured-editable and persist via
-``project_io.py``, but don't yet write back into the real, native
-``.tech`` format -- real, separate future work, tracked in README's
-Future Work, not attempted here.
+Covers all three currently-editable domains: LEF pins
+(``ihp/lef_writer.py``'s own docstring explains exactly how the
+patching preserves everything this project's LEF model doesn't
+capture), DRC Rules (``ihp/drc_writer.py``'s own docstring explains the
+real ``.drc``-script-vs-JSON-config split), and Magic Types
+(``ihp/magic_tech_writer.py``). Every other real, non-editable domain
+(CDL/SPICE/Verilog/Liberty content, GDS, Layers, ...) has no write-back
+because there's no editor for it either -- see README's own Future
+Work.
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from .ihp import drc as drc_mod
 from .ihp import drc_writer
 from .ihp import lef as lef_mod
 from .ihp import lef_writer
+from .ihp import magic_tech as magic_tech_mod
+from .ihp import magic_tech_writer
 from .models import DesignRule
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -88,3 +91,19 @@ def export_drc_rules(
         written.append(export_json_path)
 
     return written, skipped
+
+
+def export_magic_types(
+    pdk_root: Path, technologies: dict[str, magic_tech_mod.MagicTechnology],
+) -> list[Path]:
+    """Every real technology currently loaded (both real IHP
+    technologies, ``ihp-sg13g2`` and ``ihp-sg13g2-GDS``) -- with any
+    in-memory Types edits patched in. Returns the real export paths
+    written."""
+
+    written = []
+    for tech in technologies.values():
+        export_path = export_path_for(pdk_root, tech.source_path)
+        magic_tech_writer.export_tech_file(tech, export_path)
+        written.append(export_path)
+    return written

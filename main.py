@@ -30,18 +30,19 @@ fully parsed, and one real pattern each is pulled out of its harder
 see ``ihp/magic_tech.py``'s own docstring for exact real coverage and
 what's still not attempted (``cifinput``, ``device``, the rest of
 ``drc``/``extract``). No attempt at LEF via-stack geometry. Real,
-open_pdks-format write-back now exists for LEF pins
-(``export-lef``/``export.py``/``ihp/lef_writer.py``) and DRC Rules
+open_pdks-format write-back now exists for all three currently
+structured-editable domains -- LEF pins
+(``export-lef``/``export.py``/``ihp/lef_writer.py``), DRC Rules
 (``export-drc``/``ihp/drc_writer.py`` -- a rule's ``rule_id``/
 ``description`` patched into its real ``.drc`` script, its ``value``
-into the one real JSON config file it actually lives in) -- both
+into the one real JSON config file it actually lives in), and Magic
+Types (``export-magic-types``/``ihp/magic_tech_writer.py`` -- a
+type's own real one-line entry in its real ``.tech`` file) -- all
 surgical, position-targeted patching into a new ``export/`` tree,
-never touching ``data/``. Magic Types stay program-format-only
-(``project_io.py``'s own ``saves/``), not yet written back into the
-real ``.tech`` format. The much larger end goal -- editing/creating/
-generating arbitrary PDK file types, not just reading/displaying
-them -- is explicit, tracked future work, still only partially
-attempted here.
+never touching ``data/``. The much larger end goal -- editing/
+creating/generating arbitrary PDK file types, not just reading/
+displaying them -- is explicit, tracked future work, still only
+partially attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
@@ -345,6 +346,42 @@ def cmd_export_drc(pdk_root: Path) -> int:
     return 0
 
 
+def cmd_export_magic_types(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    technologies = {}
+    for path in magic_tech_mod.find_tech_files(pdk_root):
+        tech = magic_tech_mod.parse_tech_file(path)
+        if tech.name:
+            technologies[tech.name] = tech
+    if not technologies:
+        print(f"No real Magic technologies found under {pdk_root}/libs.tech/magic/", file=sys.stderr)
+        return 2
+
+    written = export_mod.export_magic_types(pdk_root, technologies)
+
+    mismatches = []
+    for export_path in written:
+        relpath = export_path.relative_to(export_mod.EXPORT_ROOT / pdk_root.name)
+        original_path = pdk_root / relpath
+        if export_path.read_text(encoding="utf-8", errors="replace") != original_path.read_text(encoding="utf-8", errors="replace"):
+            mismatches.append(original_path)
+
+    print(f"Exported {len(written)} real .tech file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(written) - len(mismatches)}/{len(written)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -378,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     gds_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
     sub.add_parser("export-lef", help="Export real, patched .lef files to export/ (byte-identical with no edits).")
     sub.add_parser("export-drc", help="Export real, patched DRC scripts + JSON config to export/ (byte-identical with no edits).")
+    sub.add_parser("export-magic-types", help="Export real, patched .tech files to export/ (byte-identical with no edits).")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -402,6 +440,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_export_lef(args.pdk_root.resolve())
     if args.command == "export-drc":
         return cmd_export_drc(args.pdk_root.resolve())
+    if args.command == "export-magic-types":
+        return cmd_export_magic_types(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

@@ -72,17 +72,20 @@ injectable ``get_lef`` hook so ``CellHubView`` can route through this
 same cache too).
 
 **Native write-back** (``export.py``, **File > Export Edited LEF
-Files** / **Export Edited DRC Rules**): unlike ``project_io.py``'s own
-program-format ``saves/``, this writes real, valid text back into the
-real file formats -- ``.lef`` (pin edits, ``ihp/lef_writer.py``) and
-now DRC Rules too (a rule's ``rule_id``/``description`` patched into
-its real ``.drc`` script's own ``.output()`` call; its ``value``
-patched into the one real JSON config file that value actually lives
-in -- ``ihp/drc_writer.py``) -- via surgical, position-targeted text
-splicing, everything else preserved byte-for-byte, to a new
+Files** / **Export Edited DRC Rules** / **Export Edited Magic Types**):
+unlike ``project_io.py``'s own program-format ``saves/``, this writes
+real, valid text back into the real file formats -- ``.lef`` (pin
+edits, ``ihp/lef_writer.py``), DRC Rules (a rule's ``rule_id``/
+``description`` patched into its real ``.drc`` script's own
+``.output()`` call, its ``value`` into the one real JSON config file
+it actually lives in -- ``ihp/drc_writer.py``), and Magic Types (a
+type's own real one-line entry in its real ``.tech`` file --
+``ihp/magic_tech_writer.py``) -- all via surgical, position-targeted
+text splicing, everything else preserved byte-for-byte, to a new
 ``export/`` tree mirroring each file's own real relative path under
-``pdk_root``. Never touches ``data/``. Magic Types still stay
-``saves/``-only, real, separate future work (see README).
+``pdk_root``. Never touches ``data/``. This covers every currently
+structured-editable domain -- see README's Future Work for what's
+still read-only (and so has no write-back either).
 """
 
 from __future__ import annotations
@@ -211,6 +214,7 @@ class App(ttk.Frame):
         file_menu.add_separator()
         file_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
         file_menu.add_command(label="Export Edited DRC Rules (open_pdks format)", command=self._export_drc_rules)
+        file_menu.add_command(label="Export Edited Magic Types (open_pdks format)", command=self._export_magic_types)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
@@ -251,6 +255,19 @@ class App(ttk.Frame):
         if skipped:
             status += f"; {len(skipped)} hand-authored rule(s) skipped (no real source to write back to): {', '.join(skipped)}"
         self.status.set(status)
+
+    def _export_magic_types(self):
+        """Writes real, patched .tech text for every real technology
+        currently loaded, with any in-memory Types edits patched in --
+        see ``export.py``'s/``ihp/magic_tech_writer.py``'s own
+        docstrings."""
+
+        self.magic_tech_view.commit_pending_edits()
+        written = export_mod.export_magic_types(self.pdk_root, self.magic_tech_view.technologies)
+        if not written:
+            self.status.set("No Magic technologies loaded -- nothing to export.")
+            return
+        self.status.set(f"Exported {len(written)} real .tech file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
 
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
