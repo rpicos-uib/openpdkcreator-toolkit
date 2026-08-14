@@ -48,15 +48,21 @@ def save_state(
     design_rules: list[DesignRule],
     magic_types: dict[str, list[TypeEntry]],
     lef_pins: dict[str, dict[str, list[LefPin]]],
+    project_name: str = "",
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
     matching ``LefView.lef_files``'s own keys) -> macro name -> its
-    current Pins list."""
+    current Pins list. *project_name*: the user's own editable label
+    for this project (Settings tab) -- deliberately separate from
+    ``pdk_root.name``, the real, immutable source PDK's own name (see
+    ``gui/settings_view.py``'s own docstring for why the two are kept
+    visibly distinct)."""
 
     path = save_path_for(pdk_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
+        "project_name": project_name,
         "drc_rules": [dataclasses.asdict(rule) for rule in design_rules],
         "magic_types": {
             tech_name: [dataclasses.asdict(t) for t in types]
@@ -79,6 +85,7 @@ class LoadedState:
     design_rules: list[DesignRule]
     magic_types: dict[str, list[TypeEntry]]
     lef_pins: dict[str, dict[str, list[LefPin]]]
+    project_name: str = ""
 
 
 def _load_lef_pin(raw: dict) -> LefPin:
@@ -104,7 +111,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         }
         for lef_path, macros in data.get("lef_pins", {}).items()
     }
-    return LoadedState(design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins)
+    return LoadedState(
+        design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
+        project_name=data.get("project_name", ""),
+    )
 
 
 def has_saved_state(pdk_root: Path) -> bool:

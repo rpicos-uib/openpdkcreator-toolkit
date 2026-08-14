@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from . import lef as lef_mod
 from . import liberty as liberty_mod
@@ -55,7 +56,17 @@ def discover_families(pdk_root: Path) -> list[str]:
     return sorted(p.name for p in libs_ref.iterdir() if p.is_dir())
 
 
-def build_cell_index(pdk_root: Path, family: str) -> dict[str, CellViews]:
+def build_cell_index(
+    pdk_root: Path, family: str,
+    get_lef: Callable[[Path], lef_mod.LefFile] | None = None,
+) -> dict[str, CellViews]:
+    """*get_lef*: an optional parse-with-caching hook (the GUI passes
+    ``App.get_parsed_lef``, so the very same ``LefMacro`` objects --
+    and any in-memory pin edits on them -- are shared with the LEF tab
+    rather than re-parsed fresh here; the CLI and tests leave this
+    ``None`` and get a plain, uncached parse each call)."""
+
+    parse_lef = get_lef or lef_mod.parse_lef_file
     family_dir = pdk_root / "libs.ref" / family
     index: dict[str, CellViews] = {}
 
@@ -67,7 +78,7 @@ def build_cell_index(pdk_root: Path, family: str) -> dict[str, CellViews]:
     lef_dir = family_dir / "lef"
     if lef_dir.is_dir():
         for lef_path in sorted(lef_dir.glob("*.lef")):
-            for macro in lef_mod.parse_lef_file(lef_path).macros:
+            for macro in parse_lef(lef_path).macros:
                 cv = get_or_create(macro.name)
                 cv.lef_macro = macro
                 cv.lef_source = lef_path

@@ -21,24 +21,39 @@ internal sub-elements with no LEF of their own (confirmed: IHP's own
 which are the real, top-level hard macros) -- a **Show internal
 sub-cells too** checkbox reveals the rest, off by default so the list
 stays genuinely browsable.
+
+**Editing**: of a selected cell's views, only its real LEF macro's pins
+are genuinely structured-editable data today (CDL/SPICE/Verilog only
+have a name + a flat port-name list -- no per-port model exists to
+edit; Liberty only has cell boundaries, no real content parsed at all
+-- see README's Future Work). The **Pins** pane reuses
+``pin_editor.PinEditor``, the same widget the **LEF** tab's own "LEF
+Macros" sub-tab uses -- and, critically, the exact same in-memory
+``LefMacro`` object: both tabs parse through ``App.get_parsed_lef``,
+a single shared, App-owned cache (``ihp/cells.py``'s own
+``build_cell_index`` takes an injectable ``get_lef`` hook for exactly
+this), so a pin edited here is immediately visible on the LEF tab too,
+and vice versa -- not two independently-drifting copies of the same
+real pin list.
 """
 
 from __future__ import annotations
 
 import tkinter as tk
-from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import cells as cells_mod
 from .file_view_dialog import view_file_dialog
+from .pin_editor import PinEditor
 
 _CHECK = "✓"
 
 
 class CellHubView(ttk.Frame):
-    def __init__(self, parent, pdk_root: Path):
+    def __init__(self, parent, app):
         super().__init__(parent)
-        self.pdk_root = pdk_root
+        self.app = app
+        self.pdk_root = app.pdk_root
         self.families: list[str] = []
         self.cell_index: dict[str, cells_mod.CellViews] = {}
         self.current_cell: cells_mod.CellViews | None = None
@@ -70,6 +85,7 @@ class CellHubView(ttk.Frame):
         body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         body.columnconfigure(0, weight=2)
         body.columnconfigure(1, weight=1)
+        body.columnconfigure(2, weight=2)
         body.rowconfigure(0, weight=1)
 
         left = ttk.Frame(body)
@@ -78,7 +94,7 @@ class CellHubView(ttk.Frame):
         left.columnconfigure(0, weight=1)
         columns = ("name", "lef", "cdl", "spice", "verilog", "liberty", "gds")
         self.cells_tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
-        widths = {"name": 260, "lef": 40, "cdl": 40, "spice": 50, "verilog": 60, "liberty": 55, "gds": 40}
+        widths = {"name": 220, "lef": 40, "cdl": 40, "spice": 50, "verilog": 60, "liberty": 55, "gds": 40}
         for col in columns:
             self.cells_tree.heading(col, text=col.title() if col != "gds" else "GDS")
             self.cells_tree.column(col, width=widths[col], anchor="w" if col == "name" else "center")
@@ -88,27 +104,54 @@ class CellHubView(ttk.Frame):
         self.cells_tree.configure(yscrollcommand=scroll.set)
         scroll.grid(row=0, column=1, sticky="ns")
 
-        right = ttk.Frame(body)
-        right.grid(row=0, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
+        middle = ttk.Frame(body)
+        middle.grid(row=0, column=1, sticky="nsew", padx=(0, 8))
+        middle.columnconfigure(0, weight=1)
 
         self.detail_var = tk.StringVar(value="Select a cell.")
-        ttk.Label(right, textvariable=self.detail_var, font=("TkDefaultFont", 10, "bold"), wraplength=280).grid(
+        ttk.Label(middle, textvariable=self.detail_var, font=("TkDefaultFont", 10, "bold"), wraplength=220).grid(
             row=0, column=0, sticky="w", pady=(0, 8)
         )
 
         self.view_buttons: dict[str, ttk.Button] = {}
         for i, key in enumerate(("lef", "cdl", "spice", "verilog"), start=1):
-            btn = ttk.Button(right, text=f"View {key.upper()}", command=lambda k=key: self._view(k), state="disabled")
+            btn = ttk.Button(middle, text=f"View {key.upper()}", command=lambda k=key: self._view(k), state="disabled")
             btn.grid(row=i, column=0, sticky="ew", pady=2)
             self.view_buttons[key] = btn
 
-        ttk.Label(right, text="Liberty (one per real corner file):").grid(
+        ttk.Label(middle, text="Liberty (one per real corner file):").grid(
             row=5, column=0, sticky="w", pady=(10, 2)
         )
-        self.liberty_list = tk.Listbox(right, height=6)
+        self.liberty_list = tk.Listbox(middle, height=6)
         self.liberty_list.grid(row=6, column=0, sticky="ew")
         self.liberty_list.bind("<Double-Button-1>", self._view_selected_liberty)
+
+        right = ttk.Frame(body)
+        right.grid(row=0, column=2, sticky="nsew")
+        right.rowconfigure(1, weight=1)
+        right.columnconfigure(0, weight=1)
+
+        self.pins_header_var = tk.StringVar(value="Pins")
+        ttk.Label(right, textvariable=self.pins_header_var, font=("TkDefaultFont", 10, "bold")).grid(
+            row=0, column=0, sticky="w", pady=(0, 4)
+        )
+        self.pin_editor = PinEditor(right)
+        self.pin_editor.grid(row=1, column=0, sticky="nsew")
+        self.no_lef_label = ttk.Label(
+            right, text="This cell has no real LEF macro -- nothing to edit here.\n"
+            "(A macro-less internal sub-cell, or this family/view has no LEF entry.)",
+            foreground="#666", wraplength=260, justify="left",
+        )
+
+    # -- persistence hooks (project_io.py) -----------------------------------
+
+    def commit_pending_edits(self):
+        """Flushes whatever's mid-edit in the Pins form into its
+        ``LefPin`` before the caller reads/saves state -- the same
+        underlying ``LefMacro``/``LefPin`` objects the LEF tab saves,
+        since both share ``App.lef_cache``."""
+
+        self.pin_editor.commit_pending_edits()
 
     # -- data ---------------------------------------------------------------
 
@@ -129,7 +172,7 @@ class CellHubView(ttk.Frame):
             self._show_cell(None)
             return
 
-        self.cell_index = cells_mod.build_cell_index(self.pdk_root, family)
+        self.cell_index = cells_mod.build_cell_index(self.pdk_root, family, get_lef=self.app.get_parsed_lef)
         show_all = self.show_all_var.get()
         shown = 0
         for name in sorted(self.cell_index):
@@ -176,6 +219,8 @@ class CellHubView(ttk.Frame):
             self.detail_var.set("Select a cell.")
             for btn in self.view_buttons.values():
                 btn.configure(state="disabled")
+            self.pin_editor.set_macro(None)
+            self._show_pin_editor(False)
             return
 
         self.detail_var.set(f"{cv.name}  ({cv.family})")
@@ -185,6 +230,18 @@ class CellHubView(ttk.Frame):
         self.view_buttons["verilog"].configure(state="normal" if cv.verilog_module else "disabled")
         for cell_entry, path in cv.liberty_entries:
             self.liberty_list.insert("end", path.name)
+
+        self.pins_header_var.set(f"Pins -- {cv.name}" if cv.lef_macro else "Pins")
+        self.pin_editor.set_macro(cv.lef_macro)
+        self._show_pin_editor(cv.lef_macro is not None)
+
+    def _show_pin_editor(self, show: bool):
+        if show:
+            self.no_lef_label.grid_forget()
+            self.pin_editor.grid(row=1, column=0, sticky="nsew")
+        else:
+            self.pin_editor.grid_forget()
+            self.no_lef_label.grid(row=1, column=0, sticky="new")
 
     def _view(self, key: str):
         cv = self.current_cell

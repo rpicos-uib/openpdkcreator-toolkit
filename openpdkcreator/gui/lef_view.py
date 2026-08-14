@@ -10,26 +10,22 @@ fixed set of "the real ones" to enumerate; every real ``.lef`` under
 Two sub-tabs per file: **LEF Layers** (tech-LEF routing/cut layers --
 empty for a macro-only LEF, real and correct, not a bug) and
 **LEF Macros** (a macro list; selecting one shows its real pins on the
-right, editable via New/Delete Pin and a form -- name/direction/use,
-the same commit-on-switch pattern ``LayersView``/``RulesView`` already
-use. Port geometry (real drawn rectangles) stays display-only -- editing
-raw geometry is a real, separate, much bigger feature, out of scope
-here). "View File" opens the real, selected ``.lef`` file directly
+right via the shared ``pin_editor.PinEditor`` widget -- the same one
+``cell_hub_view.py``'s **By Cell** tab embeds, so a pin edited from
+either tab is the exact same in-memory object, visible and consistent
+in both). "View File" opens the real, selected ``.lef`` file directly
 (``file_view_dialog.view_file_dialog``), which *can* also be edited,
 as raw text.
 
-Each real ``.lef`` file, once parsed, is cached (``_parsed_cache``) --
-a real bug, found and fixed while adding cross-tab persistence, would
-otherwise silently discard any in-memory pin edits the moment the file
-combo was switched away and back (it re-parsed fresh every time,
-confirmed by a real, driven test before the cache existed).
-
-Saved pin edits (``project_io.py``) apply lazily, per file, the moment
-that file is first parsed this session (``saved_pin_overrides`` +
-``_apply_saved_overrides``) -- since only the currently-selected file
-is ever actually parsed, a saved override for a file the user hasn't
-visited yet needs to wait for that first parse rather than being
-applied all at once at startup.
+Real parsing + persistence live one level up, on ``App`` itself
+(``app.get_parsed_lef``/``app.lef_cache``/``app.lef_pin_overrides``),
+not here -- ``cell_hub_view.py``'s own cell aggregation
+(``ihp/cells.py``) parses the very same ``.lef`` files independently,
+so caching and saved-pin-override application had to move somewhere
+both tabs share, rather than living inside this one tab as before (a
+real bug, found and fixed here originally, would otherwise re-parse a
+file fresh on every combo switch, discarding in-memory pin edits --
+the shared cache is what prevents that, now for both tabs at once).
 """
 
 from __future__ import annotations
@@ -40,32 +36,17 @@ from tkinter import ttk
 
 from ..ihp import lef as lef_mod
 from .file_view_dialog import view_file_dialog
-
-DIRECTIONS = ("INPUT", "OUTPUT", "INOUT")
-USES = ("SIGNAL", "POWER", "GROUND")
+from .pin_editor import PinEditor
 
 
 class LefView(ttk.Frame):
-    def __init__(self, parent, pdk_root: Path):
+    def __init__(self, parent, app):
         super().__init__(parent)
-        self.pdk_root = pdk_root
+        self.app = app
+        self.pdk_root = app.pdk_root
         self.lef_files: dict[str, Path] = {}
-        # Real bug found and fixed: without this cache, switching the
-        # file combo away and back silently re-parsed the file fresh,
-        # discarding any in-memory pin edits made to it -- confirmed
-        # by a real, driven test before this cache existed.
-        self._parsed_cache: dict[Path, lef_mod.LefFile] = {}
         self.current: lef_mod.LefFile | None = None
         self.current_macro: lef_mod.LefMacro | None = None
-        self.current_pin: lef_mod.LefPin | None = None
-        self._suspend_trace = False
-        # relpath (matching self.lef_files' own keys) -> macro name ->
-        # saved pins, applied the moment a file is first parsed (see
-        # apply_saved_pin_overrides/project_io.py) -- lets a saved
-        # override reach a file that hasn't been visited yet this
-        # session, since only the current file combo selection is
-        # actually parsed at any given time.
-        self.saved_pin_overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
 
         self._build()
         self.load()
@@ -110,8 +91,7 @@ class LefView(ttk.Frame):
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="LEF Macros")
         frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(1, weight=1)
-        frame.columnconfigure(2, weight=1)
+        frame.columnconfigure(1, weight=2)
         frame.rowconfigure(0, weight=1)
 
         left = ttk.Frame(frame)
@@ -126,69 +106,8 @@ class LefView(ttk.Frame):
         self.macros_tree.grid(row=0, column=0, sticky="nsew")
         self.macros_tree.bind("<<TreeviewSelect>>", self._on_macro_select)
 
-        middle = ttk.Frame(frame)
-        middle.grid(row=0, column=1, sticky="nsew", padx=4)
-        middle.rowconfigure(1, weight=1)
-        middle.columnconfigure(0, weight=1)
-
-        pin_button_row = ttk.Frame(middle)
-        pin_button_row.grid(row=0, column=0, sticky="ew", pady=(0, 4))
-        ttk.Button(pin_button_row, text="New Pin", command=self._new_pin).pack(side="left")
-        ttk.Button(pin_button_row, text="Delete Pin", command=self._delete_pin).pack(side="left", padx=(6, 0))
-
-        pin_columns = ("name", "direction", "use", "ports")
-        self.pins_tree = ttk.Treeview(middle, columns=pin_columns, show="headings", selectmode="browse")
-        for col, width in zip(pin_columns, (140, 80, 80, 220)):
-            self.pins_tree.heading(col, text=col.replace("_", " ").title())
-            self.pins_tree.column(col, width=width, anchor="w")
-        self.pins_tree.grid(row=1, column=0, sticky="nsew")
-        self.pins_tree.bind("<<TreeviewSelect>>", self._on_pin_select)
-
-        right = ttk.Frame(frame)
-        right.grid(row=0, column=2, sticky="nsew", padx=(4, 0))
-        right.columnconfigure(1, weight=1)
-
-        self.pin_vars: dict[str, tk.StringVar] = {}
-        pin_form_row = 0
-
-        def add_entry(field, label):
-            nonlocal pin_form_row
-            ttk.Label(right, text=label).grid(row=pin_form_row, column=0, sticky="w", pady=2)
-            var = tk.StringVar()
-            var.trace_add("write", self._on_pin_field_changed)
-            ttk.Entry(right, textvariable=var).grid(row=pin_form_row, column=1, sticky="ew", pady=2)
-            self.pin_vars[field] = var
-            pin_form_row += 1
-
-        def add_combo(field, label, values):
-            nonlocal pin_form_row
-            ttk.Label(right, text=label).grid(row=pin_form_row, column=0, sticky="w", pady=2)
-            var = tk.StringVar()
-            # Deliberately NOT state="readonly" (unlike LayersView's/
-            # RulesView's own combos): a pin's real DIRECTION/USE could
-            # be a value beyond the 3 confirmed in IHP's own data
-            # (e.g. CLOCK, a real standard LEF USE keyword). Free typing
-            # needs its own commit path -- a var trace, not just
-            # <<ComboboxSelected>> (which only fires on a dropdown pick,
-            # confirmed by a real test: typed/programmatic changes
-            # silently never committed without this).
-            var.trace_add("write", self._on_pin_field_changed)
-            combo = ttk.Combobox(right, textvariable=var, values=values)
-            combo.grid(row=pin_form_row, column=1, sticky="ew", pady=2)
-            self.pin_vars[field] = var
-            pin_form_row += 1
-
-        add_entry("name", "Name")
-        add_combo("direction", "Direction", DIRECTIONS)
-        add_combo("use", "Use", USES)
-
-        ttk.Label(right, text="Ports (real drawn geometry -- read-only)").grid(
-            row=pin_form_row, column=0, columnspan=2, sticky="w", pady=(10, 2)
-        )
-        pin_form_row += 1
-        self.ports_text = tk.Text(right, height=6, width=30, state="disabled", font=("Courier", 9))
-        self.ports_text.grid(row=pin_form_row, column=0, columnspan=2, sticky="nsew", pady=2)
-        right.rowconfigure(pin_form_row, weight=1)
+        self.pin_editor = PinEditor(frame, on_change=self._on_pin_editor_change)
+        self.pin_editor.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
 
     def _view_file(self):
         path = self.lef_files.get(self.file_var.get())
@@ -201,39 +120,7 @@ class LefView(ttk.Frame):
         """Flushes whatever's mid-edit in the pin form into its
         ``LefPin`` before the caller reads/saves state."""
 
-        self._commit_form_to_pin()
-
-    def collect_pin_overrides(self) -> dict[str, dict[str, list[lef_mod.LefPin]]]:
-        """Every macro's current pin list, for every ``.lef`` file
-        parsed so far this session (files never visited via the file
-        combo are still exactly their real, on-disk starting state, so
-        there's nothing to save for them)."""
-
-        relpath_by_path = {path: relpath for relpath, path in self.lef_files.items()}
-        overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
-        for path, parsed in self._parsed_cache.items():
-            relpath = relpath_by_path.get(path)
-            if relpath is None:
-                continue
-            overrides[relpath] = {macro.name: macro.pins for macro in parsed.macros}
-        return overrides
-
-    def _apply_saved_overrides(self, relpath: str, parsed: lef_mod.LefFile):
-        macro_overrides = self.saved_pin_overrides.get(relpath)
-        if not macro_overrides:
-            return
-        macros_by_name = {macro.name: macro for macro in parsed.macros}
-        for macro_name, pins in macro_overrides.items():
-            macro = macros_by_name.get(macro_name)
-            if macro is not None:
-                macro.pins = pins
-
-    def apply_saved_pin_overrides(self, overrides: dict[str, dict[str, list[lef_mod.LefPin]]]):
-        self.saved_pin_overrides = overrides
-        for relpath, path in self.lef_files.items():
-            if path in self._parsed_cache:
-                self._apply_saved_overrides(relpath, self._parsed_cache[path])
-        self._refresh_all()
+        self.pin_editor.commit_pending_edits()
 
     # -- data ---------------------------------------------------------------
 
@@ -258,14 +145,10 @@ class LefView(ttk.Frame):
         if path is None:
             self.summary_var.set("No LEF data loaded -- has ihp/fetch.py been run?")
             self.current = None
-            self._show_pins(None)
+            self._show_macro(None)
             return
 
-        if path not in self._parsed_cache:
-            parsed = lef_mod.parse_lef_file(path)
-            self._apply_saved_overrides(self.file_var.get(), parsed)
-            self._parsed_cache[path] = parsed
-        self.current = self._parsed_cache[path]
+        self.current = self.app.get_parsed_lef(path)
         tech = self.current
 
         for layer in tech.layers:
@@ -296,121 +179,24 @@ class LefView(ttk.Frame):
 
         if tech.macros:
             self.macros_tree.selection_set(tech.macros[0].name)
-            self._show_pins(tech.macros[0])
+            self._show_macro(tech.macros[0])
         else:
-            self._show_pins(None)
+            self._show_macro(None)
 
     def _on_macro_select(self, _event=None):
         if self.current is None:
             return
         selection = self.macros_tree.selection()
         if not selection:
-            self._show_pins(None)
+            self._show_macro(None)
             return
         macro = next((m for m in self.current.macros if m.name == selection[0]), None)
-        self._show_pins(macro)
+        self._show_macro(macro)
 
-    # -- pins ---------------------------------------------------------------
-
-    @staticmethod
-    def _pin_iid(pin: lef_mod.LefPin) -> str:
-        # Identity-based, not name-based: name is an editable field.
-        return str(id(pin))
-
-    def _pin_row_values(self, pin: lef_mod.LefPin) -> tuple:
-        ports = ", ".join(f"{p.layer}:{p.rect_count}rect" for p in pin.ports)
-        return (pin.name, pin.direction, pin.use, ports)
-
-    def _show_pins(self, macro: lef_mod.LefMacro | None):
-        self._commit_form_to_pin()
+    def _show_macro(self, macro: lef_mod.LefMacro | None):
         self.current_macro = macro
-        for row in self.pins_tree.get_children():
-            self.pins_tree.delete(row)
-        self._pin_by_iid = {}
-        if macro is None:
-            self._load_pin_into_form(None)
-            return
-        for pin in macro.pins:
-            iid = self._pin_iid(pin)
-            self._pin_by_iid[iid] = pin
-            self.pins_tree.insert("", "end", iid=iid, values=self._pin_row_values(pin))
-        if macro.pins:
-            self.pins_tree.selection_set(self._pin_iid(macro.pins[0]))
-            self._load_pin_into_form(macro.pins[0])
-        else:
-            self._load_pin_into_form(None)
+        self.pin_editor.set_macro(macro)
 
-    def _on_pin_select(self, _event=None):
-        self._commit_form_to_pin()
-        selection = self.pins_tree.selection()
-        pin = self._pin_by_iid.get(selection[0]) if selection else None
-        self._load_pin_into_form(pin)
-
-    def _load_pin_into_form(self, pin: lef_mod.LefPin | None):
-        self._suspend_trace = True
-        self.current_pin = pin
-        if pin is None:
-            for var in self.pin_vars.values():
-                var.set("")
-            ports_text = ""
-        else:
-            self.pin_vars["name"].set(pin.name)
-            self.pin_vars["direction"].set(pin.direction)
-            self.pin_vars["use"].set(pin.use)
-            ports_text = "\n".join(f"{p.layer}: {p.rect_count} rect(s)" for p in pin.ports) or "(none)"
-        self.ports_text.configure(state="normal")
-        self.ports_text.delete("1.0", "end")
-        self.ports_text.insert("1.0", ports_text)
-        self.ports_text.configure(state="disabled")
-        self._suspend_trace = False
-
-    def _commit_form_to_pin(self):
-        pin = self.current_pin
-        if pin is None:
-            return
-        pin.name = self.pin_vars["name"].get().strip() or pin.name
-        pin.direction = self.pin_vars["direction"].get()
-        pin.use = self.pin_vars["use"].get()
-
-    def _on_pin_field_changed(self, *_args):
-        if self._suspend_trace:
-            return
-        self._commit_form_to_pin()
-        if self.current_pin is not None:
-            iid = self._pin_iid(self.current_pin)
-            if self.pins_tree.exists(iid):
-                self.pins_tree.item(iid, values=self._pin_row_values(self.current_pin))
-
-    def _new_pin(self):
-        if self.current_macro is None:
-            return
-        self._commit_form_to_pin()
-        pin = lef_mod.LefPin(name=f"NEW_PIN_{len(self.current_macro.pins) + 1}", direction="INPUT", use="SIGNAL")
-        self.current_macro.pins.append(pin)
-        iid = self._pin_iid(pin)
-        self._pin_by_iid[iid] = pin
-        self.pins_tree.insert("", "end", iid=iid, values=self._pin_row_values(pin))
-        self.pins_tree.selection_set(iid)
-        self.pins_tree.see(iid)
-        self.macros_tree.set(self.current_macro.name, "pins", len(self.current_macro.pins))
-
-    def _delete_pin(self):
-        if self.current_macro is None:
-            return
-        selection = self.pins_tree.selection()
-        if not selection:
-            return
-        pin = self._pin_by_iid.get(selection[0])
-        if pin is None:
-            return
-        self.current_macro.pins.remove(pin)
-        self.current_pin = None
-        self.pins_tree.delete(selection[0])
-        del self._pin_by_iid[selection[0]]
-        remaining = self.pins_tree.get_children()
-        if remaining:
-            self.pins_tree.selection_set(remaining[0])
-            self._load_pin_into_form(self._pin_by_iid[remaining[0]])
-        else:
-            self._load_pin_into_form(None)
-        self.macros_tree.set(self.current_macro.name, "pins", len(self.current_macro.pins))
+    def _on_pin_editor_change(self, macro: lef_mod.LefMacro | None):
+        if macro is not None and self.macros_tree.exists(macro.name):
+            self.macros_tree.set(macro.name, "pins", len(macro.pins))

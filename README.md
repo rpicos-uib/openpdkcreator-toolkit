@@ -51,18 +51,36 @@ Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
-sub-tabs, one per tool that defines it), and **Cells** (real cell/macro
-data -- **LEF** and **By Cell** as sub-tabs). No empty **Simulation**
-top-level group exists yet -- there's no real parser behind ngspice/
-xschem/Qucs-S model/schematic data yet (see Future Work); adding one
-now would show fake completeness. **Technology**/**Cells** are the
-pattern a future group would repeat once a real parser exists for it.
+sub-tabs, one per tool that defines it), **Cells** (real cell/macro
+data -- **LEF** and **By Cell** as sub-tabs), and **Settings**
+(project-level settings -- not any one tool's PDK content, so it's a
+flat top-level tab of its own). No empty **Simulation** top-level group
+exists yet -- there's no real parser behind ngspice/xschem/Qucs-S
+model/schematic data yet (see Future Work); adding one now would show
+fake completeness. **Technology**/**Cells** are the pattern a future
+group would repeat once a real parser exists for it.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
-Verilog/Liberty/GDS) actually exist, and jump straight to that cell's
-own real block inside each -- rather than hunting across separate,
-per-tool tabs to answer "does this cell even have a Verilog view."
+Verilog/Liberty/GDS) actually exist, jump straight to that cell's own
+real block inside each, and **edit its real LEF pins directly** in a
+**Pins** pane -- the exact same in-memory macro/pins the LEF tab's own
+"LEF Macros" sub-tab edits (both tabs parse through one shared,
+``App``-owned cache, ``App.get_parsed_lef``, so a pin edited from
+either tab is immediately visible, and saves the same way, from the
+other). A cell with no real LEF macro (an internal netlist sub-element
+with no macro of its own -- common in `sg13g2_sram`) shows a plain
+"nothing to edit here" note instead, not a broken/empty editor.
+
+**Settings** holds two deliberately distinct, separately-labeled
+pairs, so they never get confused now that this tool generalizes
+beyond IHP: **This Project** (an editable **Project name**, saved and
+restored the same way as DRC Rules/Magic Types/LEF pins, plus a
+read-only **Project directory** -- where this tool and its `saves/`
+actually live) and **Source PDK** (read-only **Original PDK name** and
+**Original PDK location** -- the real, downloaded `pdk_root`'s own
+name/path, plus the real upstream URL it was fetched from). More
+project-level settings belong here as they're added.
 
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly
@@ -160,31 +178,38 @@ highlighted straight to that cell's real line range within its
   `sg13g2_a21o_1`'s 6 real pins (name/direction/use/rect-count each),
   a real SRAM macro's 113 real pins, `sg13g2_tech.lef`'s 19 real
   layers/70 real vias/6 real via-rules.
+- **`openpdkcreator/gui/pin_editor.py`** -- `PinEditor`, a real macro
+  pin list + New/Delete Pin + a Name/Direction/Use form, the same
+  commit-on-switch pattern `LayersView`/`RulesView` already use.
+  Extracted out of `lef_view.py` (where it was originally built) so
+  both the **LEF** tab's own "LEF Macros" sub-tab and the **By Cell**
+  tab's Pins pane share one real, already-bug-fixed implementation --
+  not two independent copies. Direction/Use are free-typable
+  comboboxes, not `readonly` -- IHP's real data only has 3 real `USE`
+  values (`SIGNAL`/`POWER`/`GROUND`) and 3 real pin `DIRECTION`s
+  (`INPUT`/`OUTPUT`/`INOUT`, confirmed by grepping the real files), but
+  other real, standard LEF PDKs can have more (e.g. `CLOCK`). **A real
+  bug found and fixed while first building this**: a combobox's own
+  `<<ComboboxSelected>>` event only fires on a dropdown *pick* -- a
+  typed or programmatic value change silently never committed without
+  also tracing the variable's own `write` event (confirmed by a real,
+  driven test: `.set("POWER")` didn't take effect until a later,
+  unrelated commit-on-switch happened to also read the same,
+  by-then-updated variable). Port geometry (real drawn rectangles)
+  stays display-only -- editing raw geometry is a real, separate, much
+  bigger feature.
 - **`openpdkcreator/gui/lef_view.py`** -- a Cells tab (`LefView`): a
   file picker over all 32 real `.lef` files, with LEF Layers and LEF
-  Macros sub-tabs (the latter: a macro list; selecting one shows its
-  real pins, **editable** -- Name/Direction/Use via a form, New/Delete
-  Pin, the same commit-on-switch pattern `LayersView`/`RulesView`
-  already use), plus a **View File** button. Port geometry (real drawn
-  rectangles) stays display-only -- editing raw geometry is a real,
-  separate, much bigger feature. Direction/Use are free-typable
-  comboboxes, not `readonly` like `LayersView`'s/`RulesView`'s own --
-  IHP's real data only has 3 real `USE` values (`SIGNAL`/`POWER`/
-  `GROUND`) and 3 real pin `DIRECTION`s (`INPUT`/`OUTPUT`/`INOUT`,
-  confirmed by grepping the real files), but other real, standard LEF
-  PDKs can have more (e.g. `CLOCK`), so the field isn't artificially
-  closed. **A real bug found and fixed while building this**: a
-  combobox's own `<<ComboboxSelected>>` event only fires on a dropdown
-  *pick* -- a typed or programmatic value change silently never
-  committed without also tracing the variable's own `write` event
-  (confirmed by a real, driven test: `.set("POWER")` didn't take effect
-  until a later, unrelated commit-on-switch happened to also read the
-  same, by-then-updated variable). Verified for real, driven against
-  the actual data: correct counts across `sg13g2_io.lef` (22 macros)/
-  `sg13g2_stdcell.lef` (84 macros)/a real SRAM macro; editing a real
-  pin's name/use commits immediately and survives a macro switch; New/
-  Delete Pin both work, including the empty-macro edge case (delete
-  every pin, then add one back).
+  Macros sub-tabs (the latter: a macro list; selecting one embeds
+  `PinEditor` above on its real pins), plus a **View File** button.
+  Real parsing/caching moved up to `App.get_parsed_lef` (see `app.py`'s
+  own docstring) so this tab and **By Cell** share one real parse per
+  file, not two. Verified for real, driven against the actual data:
+  correct counts across `sg13g2_io.lef` (22 macros)/`sg13g2_stdcell.lef`
+  (84 macros)/a real SRAM macro; editing a real pin's name/use commits
+  immediately and survives a macro switch; New/Delete Pin both work,
+  including the empty-macro edge case (delete every pin, then add one
+  back).
 - **`openpdkcreator/gui/file_view_dialog.py`** -- the shared **View
   File** dialog wired into all three file-backed tabs above: opens the
   real, selected source file read-only; its own **Edit** button
@@ -266,43 +291,74 @@ highlighted straight to that cell's real line range within its
 - **`openpdkcreator/gui/cell_hub_view.py`** -- the **By Cell** tab
   (`CellHubView`): a family picker, a cell list (LEF/CDL/SPICE/
   Verilog/Liberty/GDS presence at a glance, a "Show internal sub-cells
-  too" checkbox off by default), and per-view **View** buttons that
-  open the real source file scrolled and highlighted straight to that
-  cell's real line range (`file_view_dialog.view_file_dialog`'s new
-  `focus_start_line`/`focus_end_line` parameters). Verified for real,
-  driven against the actual data: correct counts and view flags across
-  all four real families, `sg13g2_sram`'s full 2338-row "show all"
-  render in 0.18s (no real performance concern), and the CDL/Verilog
-  **View** buttons both land on and highlight the exact real
-  `sg13g2_and2_1` block inside their much larger combined files.
+  too" checkbox off by default), per-view **View** buttons that open
+  the real source file scrolled and highlighted straight to that
+  cell's real line range (`file_view_dialog.view_file_dialog`'s
+  `focus_start_line`/`focus_end_line` parameters), and, for a selected
+  cell with a real LEF macro, a **Pins** pane (`PinEditor`, shared with
+  the LEF tab) editing that macro's real pins directly. `ihp/cells.py`'s
+  `build_cell_index` takes an injectable `get_lef` hook so this tab
+  parses through `App.get_parsed_lef` -- the exact same cache/objects
+  the LEF tab uses, not an independent parse -- confirmed for real: a
+  pin edited here is immediately visible (same `LefPin` object
+  identity, not just equal values) on the LEF tab without switching
+  away and back, and both save the same way. A macro-less internal
+  sub-cell (no real LEF macro of its own -- common browsing
+  `sg13g2_sram` with "show all" on) shows a plain "nothing to edit
+  here" note in the Pins pane's place, confirmed not to crash. Verified
+  for real, driven against the actual data: correct counts and view
+  flags across all four real families, `sg13g2_sram`'s full 2338-row
+  "show all" render in 0.18s (no real performance concern), the
+  CDL/Verilog **View** buttons both land on and highlight the exact
+  real `sg13g2_and2_1` block inside their much larger combined files,
+  and a real pin edit made here survives a save + simulated relaunch.
 - **`openpdkcreator/project_io.py`** -- program-format persistence for
-  the three editable domains above (DRC Rules/Magic Types/LEF pins),
-  modeled on `OpenPDKCreator`'s own `rules_db/` (ADR 0002): a
-  save/load layer completely separate from the real, downloaded `.tech`/
-  `.lef`/`.drc` files, not a write-back into them. `File > Save Edits`
-  (`Ctrl+S`) writes `saves/<pdk name>.yaml` (gitignored, alongside but
-  independent from `data/` -- `ihp/fetch.py` can delete/re-create
-  `data/` wholesale, and these are the user's own authored edits, kept
-  safe from that). A save, once it exists, takes precedence over the
-  real just-extracted starting values for these three domains on the
-  next launch; `File > Reload from Real Files` explicitly discards both
-  the in-memory edits and the save file, re-extracting fresh -- not
-  automatic, since silently reverting a user's saved edits on every
-  restart would defeat the point. `LefPin.ports`'s nested `LefPort`
-  dataclasses need explicit reconstruction on load (`dataclasses.asdict`
-  round-trips them to plain dicts; `TypeEntry`/`DesignRule` have no
-  nested dataclasses and reconstruct via plain `**kwargs`). Verified
-  for real, driven end-to-end against the actual downloaded data: edit
-  a DRC rule's description, a Magic Type's name, and a LEF pin's
-  direction (each through its own real form, not by mutating the
-  dataclass directly -- doing that instead hit a real, instructive
-  false-negative: the form's own commit-on-switch silently reverted
-  the direct edit right back, since the still-loaded, unchanged form
-  is authoritative for whichever row is currently selected), save,
-  construct a **fresh** `App` against the same `pdk_root` (simulating a
-  real relaunch), and confirm all three edits survived; separately
-  confirmed `Reload from Real Files` discards both the edit and the
-  save file for real.
+  the editable domains above (DRC Rules/Magic Types/LEF pins/the
+  Settings tab's project name), modeled on `OpenPDKCreator`'s own
+  `rules_db/` (ADR 0002): a save/load layer completely separate from
+  the real, downloaded `.tech`/`.lef`/`.drc` files, not a write-back
+  into them. `File > Save Edits` (`Ctrl+S`) writes `saves/<pdk
+  name>.yaml` (gitignored, alongside but independent from `data/` --
+  `ihp/fetch.py` can delete/re-create `data/` wholesale, and these are
+  the user's own authored edits, kept safe from that). A save, once it
+  exists, takes precedence over the real just-extracted starting
+  values for these domains on the next launch; `File > Reload from
+  Real Files` explicitly discards both the in-memory edits and the
+  save file, re-extracting fresh -- not automatic, since silently
+  reverting a user's saved edits on every restart would defeat the
+  point. `LefPin.ports`'s nested `LefPort` dataclasses need explicit
+  reconstruction on load (`dataclasses.asdict` round-trips them to
+  plain dicts; `TypeEntry`/`DesignRule` have no nested dataclasses and
+  reconstruct via plain `**kwargs`). Verified for real, driven
+  end-to-end against the actual downloaded data: edit a DRC rule's
+  description, a Magic Type's name, a LEF pin's direction/use (once via
+  the LEF tab's own form, once via the **By Cell** tab's `PinEditor`
+  instance, confirming both write through to the same shared, App-owned
+  object -- see the `cell_hub_view.py`/`app.py` entries above), and the
+  Settings tab's project name (each through its own real form, not by
+  mutating the dataclass directly -- doing that instead hit a real,
+  instructive false-negative: the form's own commit-on-switch silently
+  reverted the direct edit right back, since the still-loaded,
+  unchanged form is authoritative for whichever row is currently
+  selected), save, construct a **fresh** `App` against the same
+  `pdk_root` (simulating a real relaunch), and confirm every edit
+  survived, including the window title reflecting the restored project
+  name; separately confirmed `Reload from Real Files` discards all of
+  it (including resetting the project name to its placeholder) and
+  deletes the save file for real.
+- **`openpdkcreator/gui/settings_view.py`** -- the **Settings** tab
+  (`SettingsView`): two visibly separate sections, **This Project**
+  (an editable **Project name**, defaulting to a deliberately generic
+  placeholder rather than the real PDK's own name so the two can never
+  look identical before renaming; a read-only **Project directory** --
+  this tool's own repo root, where `saves/` lives) and **Source PDK**
+  (read-only **Original PDK name**/**Original PDK location** -- the
+  real `pdk_root.name`/path, plus the real upstream URL it was fetched
+  from, `ihp/fetch.py`'s own `REPO_URL`). Renaming the project updates
+  the window title live and persists through `project_io.py`. Verified
+  for real: the four values are confirmed genuinely distinct strings on
+  a real, downloaded PDK (not accidentally the same path/name reused
+  twice), and a rename survives a save + simulated relaunch.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -347,8 +403,12 @@ models, ...), not just read/display layers. Concretely, still open:
   A real PDK-authoring tool eventually needs that too, so a saved
   project can be exported as an actual, loadable `.lef`/`.tech`/DRC
   deck, not just re-read by this tool. Layers/Magic Tech's other five
-  domains/By Cell stay read-only in their own structured views for the
-  same underlying reason (no editor -> no state to persist yet either).
+  domains/CDL/SPICE/Verilog/Liberty port and cell-boundary data (real
+  boundaries only, no per-port model to edit yet) stay read-only in
+  their own structured views for the same underlying reason (no editor
+  -> no state to persist yet either) -- LEF pins are the one exception,
+  now editable from *both* the LEF tab and the By Cell tab via one
+  shared `PinEditor`/`App.get_parsed_lef` cache.
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
@@ -356,10 +416,12 @@ models, ...), not just read/display layers. Concretely, still open:
   and schematics), matching the **Technology**/**Cells** groups'
   pattern -- still inventory-only today (see the Overview tab), no real
   per-format parser exists yet.
-- **By Cell** editing: it's currently read-only (View only, no Edit) --
-  the natural next step, now that `project_io.py` has an established,
-  working pattern (in-memory structured edit + separate program-format
-  save) to extend to at least one of its real views.
+- Extending By Cell's editing beyond pins: CDL/SPICE/Verilog currently
+  only expose a cell name + flat port-name list (no per-port direction/
+  type model exists to edit -- see `ihp/netlist.py`/`verilog.py`'s own
+  docstrings), and Liberty only real cell *boundaries*, no timing data
+  -- each would need its own real, structured model first, the same way
+  `ihp/lef.py`'s `LefPin` already exists for pins.
 - Revisit copying vs. sharing code with `OpenPDKCreator` if the two
   projects' core models (`Layer`, the tool registry) diverge enough to
   need reconciling.
