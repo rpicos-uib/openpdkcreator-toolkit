@@ -29,10 +29,16 @@ fully parsed, and one real pattern each is pulled out of its harder
 (``resist``/``planeorder``, 44 real entries) mini-rule-languages --
 see ``ihp/magic_tech.py``'s own docstring for exact real coverage and
 what's still not attempted (``cifinput``, ``device``, the rest of
-``drc``/``extract``). No attempt at LEF via-stack geometry. The much
+``drc``/``extract``). No attempt at LEF via-stack geometry. Real,
+open_pdks-format write-back now exists for LEF pins specifically
+(``export-lef``/``export.py``/``ihp/lef_writer.py``) -- surgical,
+line-range-targeted patching of the real ``.lef`` text into a new
+``export/`` tree, never touching ``data/``; DRC Rules/Magic Types stay
+program-format-only (``project_io.py``'s own ``saves/``), not yet
+written back into their real ``.drc``/``.tech`` formats. The much
 larger end goal -- editing/creating/generating arbitrary PDK file
 types, not just reading/displaying them -- is explicit, tracked future
-work, not attempted here.
+work, still only partially attempted here.
 
     python3 main.py fetch                 # download the real IHP PDK (once)
     python3 main.py inventory             # per-tool file census, printed
@@ -41,6 +47,7 @@ work, not attempted here.
     python3 main.py drc                   # real KLayout DRC-deck rule extraction summary
     python3 main.py cells                 # real per-cell view aggregation, one family at a time
     python3 main.py gds                   # real GDS structural summary (needs klayout.db)
+    python3 main.py export-lef            # real LEF write-back verification (no-edit == byte-identical)
     python3 main.py gui                   # Overview, Technology, Cells, Settings tabs
 """
 
@@ -50,6 +57,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from openpdkcreator import export as export_mod
 from openpdkcreator.ihp import cells as cells_mod
 from openpdkcreator.ihp import drc as drc_mod
 from openpdkcreator.ihp import fetch as fetch_mod
@@ -263,6 +271,41 @@ def cmd_gds(pdk_root: Path, family: str | None) -> int:
     return 0
 
 
+def cmd_export_lef(pdk_root: Path) -> int:
+    if not pdk_root.is_dir():
+        print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
+        return 2
+
+    lef_files = lef_mod.find_lef_files(pdk_root)
+    if not lef_files:
+        print(f"No .lef files found under {pdk_root}/libs.ref/*/lef/", file=sys.stderr)
+        return 2
+
+    lef_cache = {path: lef_mod.parse_lef_file(path) for path in lef_files}
+    written = export_mod.export_lef_files(pdk_root, lef_cache)
+
+    mismatches = []
+    for path in lef_files:
+        export_path = export_mod.export_path_for(pdk_root, path)
+        original = path.read_text(encoding="utf-8", errors="replace")
+        if not original.endswith("\n"):
+            original += "\n"
+        if export_path.read_text(encoding="utf-8", errors="replace") != original:
+            mismatches.append(path)
+
+    print(f"Exported {len(written)} real .lef file(s) to {export_mod.EXPORT_ROOT / pdk_root.name}")
+    print(
+        f"No real edits were made this run, so every export should be byte-identical "
+        f"to its real original -- {len(lef_files) - len(mismatches)}/{len(lef_files)} are."
+    )
+    if mismatches:
+        print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
+        for path in mismatches:
+            print(f"  {path.relative_to(pdk_root)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -294,6 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
     cells_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
     gds_parser = sub.add_parser("gds", help="Real GDS structural summary (bbox/shape counts) via klayout.db.")
     gds_parser.add_argument("--family", default=None, help="Real family to scope to (default: all).")
+    sub.add_parser("export-lef", help="Export real, patched .lef files to export/ (byte-identical with no edits).")
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -314,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_cells(args.pdk_root.resolve(), args.family)
     if args.command == "gds":
         return cmd_gds(args.pdk_root.resolve(), args.family)
+    if args.command == "export-lef":
+        return cmd_export_lef(args.pdk_root.resolve())
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1

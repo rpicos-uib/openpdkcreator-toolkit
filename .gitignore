@@ -8,6 +8,12 @@ data/
 # starting values, not this project's own original code).
 saves/
 
+# Real, open_pdks-format write-back output (export.py) -- patched
+# real .lef files, mirroring pdk_root's own real relative paths.
+# Derived from the real, third-party PDK data, not committed, same
+# reasoning as data/ and saves/.
+export/
+
 __pycache__/
 *.pyc
 .venv/

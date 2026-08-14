@@ -64,6 +64,15 @@ class LefPin:
     direction: str = ""
     use: str = ""
     ports: list[LefPort] = field(default_factory=list)
+    start_line: int = 0
+    end_line: int = 0
+    """Real, 1-indexed, inclusive source line range of this pin's own
+    'PIN name ... END name' block in *its macro's* source file --
+    ``0`` for a pin created this session (New Pin), which has no real
+    source position. Used by ``ihp/lef_writer.py`` to patch just this
+    pin's own real text back in place on export, without needing to
+    fully regenerate content this parser doesn't model (e.g. real
+    PORT rect coordinates -- only a count is tracked)."""
 
 
 @dataclass
@@ -75,6 +84,16 @@ class LefMacro:
     symmetry: list[str] = field(default_factory=list)
     pins: list[LefPin] = field(default_factory=list)
     obs_layers: list[str] = field(default_factory=list)
+    start_line: int = 0
+    end_line: int = 0
+    """Real, 1-indexed, inclusive source line range of this macro's own
+    'MACRO name ... END name' block."""
+    all_parsed_pin_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real pin's (start_line, end_line) as originally parsed,
+    in real file order -- unlike ``pins``, never mutated by editing
+    (New/Delete Pin) -- ``ihp/lef_writer.py`` uses this to tell a real
+    deleted pin (omit its original text) apart from a gap between real
+    pins that's just a comment/blank line (keep it verbatim)."""
 
 
 @dataclass
@@ -163,7 +182,7 @@ def parse_lef_file(path: Path) -> LefFile:
     lef = LefFile(source_path=path)
     stack: list[dict] = []
 
-    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
         content = raw_line.split("#", 1)[0].strip()
         if not content:
             continue
@@ -190,9 +209,13 @@ def parse_lef_file(path: Path) -> LefFile:
             elif kind == "site":
                 lef.sites.append(frame["obj"])
             elif kind == "macro":
+                frame["obj"].end_line = line_no
                 lef.macros.append(frame["obj"])
             elif kind == "pin":
-                stack[-1]["obj"].pins.append(frame["obj"])
+                frame["obj"].end_line = line_no
+                pin_obj = frame["obj"]
+                stack[-1]["obj"].pins.append(pin_obj)
+                stack[-1]["obj"].all_parsed_pin_ranges.append((pin_obj.start_line, pin_obj.end_line))
             continue
 
         if keyword == "UNITS" and not has_semicolon and kind == "root":
@@ -208,7 +231,7 @@ def parse_lef_file(path: Path) -> LefFile:
             stack.append({"kind": "site", "obj": LefSite(name=tokens[1])})
             continue
         if keyword == "MACRO" and kind == "root":
-            stack.append({"kind": "macro", "obj": LefMacro(name=tokens[1])})
+            stack.append({"kind": "macro", "obj": LefMacro(name=tokens[1], start_line=line_no)})
             continue
         if keyword in ("VIA", "VIARULE") and kind == "root":
             name = tokens[1] if len(tokens) > 1 else ""
@@ -216,7 +239,7 @@ def parse_lef_file(path: Path) -> LefFile:
             stack.append({"kind": "skip", "obj": None})
             continue
         if keyword == "PIN" and kind == "macro":
-            stack.append({"kind": "pin", "obj": LefPin(name=tokens[1])})
+            stack.append({"kind": "pin", "obj": LefPin(name=tokens[1], start_line=line_no)})
             continue
         if keyword == "PORT" and kind == "pin":
             stack.append({"kind": "port", "obj": None})

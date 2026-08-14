@@ -22,10 +22,15 @@ grouped by what they actually represent rather than left flat:
   same in-memory macro the LEF tab itself edits (see
   ``App.get_parsed_lef`` below).
 - **Settings** -- project-level settings, not any one tool's PDK
-  content (``gui/settings_view.py``): this project's own editable name
-  and where it lives on disk, versus the real source PDK's own
-  (read-only) name and location -- see that module's own docstring for
-  why those two pairs are kept deliberately distinct.
+  content, two sub-tabs: **General** (``gui/settings_view.py``): this
+  project's own editable name and where it lives on disk, versus the
+  real source PDK's own (read-only) name and location -- see that
+  module's own docstring for why those two pairs are kept deliberately
+  distinct; and **Tools** (``gui/tools_view.py``): real, live status of
+  the FOSS EDA toolchain (``eda_tools.py``) -- found/missing, version,
+  path, and a **Launch** button, a thin GUI wrapper around
+  ``eda_tools.py``'s own existing check/launch logic, no new detection
+  code of its own.
 
 Deliberately no "Simulation" top-level group yet -- there's no real
 parser behind ngspice/xschem/Qucs-S model/schematic data yet (still
@@ -65,6 +70,16 @@ here, at the ``App`` level, rather than inside either tab, for exactly
 that reason (``ihp/cells.py``'s own ``build_cell_index`` takes an
 injectable ``get_lef`` hook so ``CellHubView`` can route through this
 same cache too).
+
+**Native write-back** (``export.py``, **File > Export Edited LEF
+Files**): unlike ``project_io.py``'s own program-format ``saves/``,
+this writes real, valid ``.lef`` text -- every file parsed this
+session, pin edits patched in via surgical, line-range-targeted text
+splicing (``ihp/lef_writer.py``), everything else preserved
+byte-for-byte -- to a new ``export/`` tree, mirroring each file's own
+real relative path under ``pdk_root``. Never touches ``data/``. Scoped
+to LEF pins only so far; DRC Rules/Magic Types stay ``saves/``-only,
+real, separate future work (see README).
 """
 
 from __future__ import annotations
@@ -74,6 +89,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from .. import export as export_mod
 from .. import project_io
 from ..ihp import drc as drc_mod
 from ..ihp import inventory as inventory_mod
@@ -87,6 +103,7 @@ from .lef_view import LefView
 from .magic_tech_view import MagicTechView
 from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
+from .tools_view import ToolsView
 
 _PROVENANCE_PATH_RE = re.compile(r"^([^:]+):\d+")
 
@@ -187,9 +204,26 @@ class App(ttk.Frame):
         file_menu = tk.Menu(menubar, tearoff=False)
         file_menu.add_command(label="Save Edits", command=self._save_project, accelerator="Ctrl+S")
         file_menu.add_command(label="Reload from Real Files", command=self._reload_from_real_files)
+        file_menu.add_separator()
+        file_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
+
+    def _export_lef_files(self):
+        """Writes real, patched .lef text for every real file parsed
+        this session (LEF tab or By Cell tab) to ``export/<pdk
+        name>/...`` -- see ``export.py``'s/``ihp/lef_writer.py``'s own
+        docstrings for exactly what's patched and what's preserved
+        verbatim. Never touches the real, downloaded ``data/`` copy."""
+
+        self.lef_view.commit_pending_edits()
+        self.cell_hub_view.commit_pending_edits()
+        written = export_mod.export_lef_files(self.pdk_root, self.lef_cache)
+        if not written:
+            self.status.set("No LEF files parsed this session -- nothing to export (visit the LEF or By Cell tab first).")
+            return
+        self.status.set(f"Exported {len(written)} real .lef file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
 
     def _save_project(self):
         """Commits whatever's mid-edit in each editable tab's form,
@@ -318,8 +352,19 @@ class App(ttk.Frame):
     def _build_settings_tab(self):
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Settings")
-        self.settings_view = SettingsView(frame, self)
+
+        self.settings_notebook = ttk.Notebook(frame)
+        self.settings_notebook.pack(fill="both", expand=True)
+
+        general_frame = ttk.Frame(self.settings_notebook)
+        self.settings_notebook.add(general_frame, text="General")
+        self.settings_view = SettingsView(general_frame, self)
         self.settings_view.pack(fill="both", expand=True)
+
+        tools_frame = ttk.Frame(self.settings_notebook)
+        self.settings_notebook.add(tools_frame, text="Tools")
+        self.tools_view = ToolsView(tools_frame)
+        self.tools_view.pack(fill="both", expand=True)
 
     # -- data loading ---------------------------------------------------------
 

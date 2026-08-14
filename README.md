@@ -30,6 +30,7 @@ python3 main.py lef          # real LEF parse summary: tech layers + macro/cell 
 python3 main.py drc          # real KLayout DRC-deck rule extraction summary
 python3 main.py cells        # real per-cell view aggregation, one real family at a time
 python3 main.py gds          # real GDS structural summary (bbox/shape counts) -- needs klayout.db
+python3 main.py export-lef   # real, patched .lef write-back to export/ (byte-identical with no edits)
 python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
 ```
 
@@ -54,8 +55,8 @@ ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
 data -- **LEF** and **By Cell** as sub-tabs), and **Settings**
-(project-level settings -- not any one tool's PDK content, so it's a
-flat top-level tab of its own). No empty **Simulation** top-level group
+(project-level settings -- not any one tool's PDK content -- **General**
+and **Tools** as sub-tabs). No empty **Simulation** top-level group
 exists yet -- there's no real parser behind ngspice/xschem/Qucs-S
 model/schematic data yet (see Future Work); adding one now would show
 fake completeness. **Technology**/**Cells** are the pattern a future
@@ -73,15 +74,23 @@ other). A cell with no real LEF macro (an internal netlist sub-element
 with no macro of its own -- common in `sg13g2_sram`) shows a plain
 "nothing to edit here" note instead, not a broken/empty editor.
 
-**Settings** holds two deliberately distinct, separately-labeled
-pairs, so they never get confused now that this tool generalizes
-beyond IHP: **This Project** (an editable **Project name**, saved and
-restored the same way as DRC Rules/Magic Types/LEF pins, plus a
-read-only **Project directory** -- where this tool and its `saves/`
-actually live) and **Source PDK** (read-only **Original PDK name** and
-**Original PDK location** -- the real, downloaded `pdk_root`'s own
-name/path, plus the real upstream URL it was fetched from). More
-project-level settings belong here as they're added.
+**Settings > General** holds two deliberately distinct,
+separately-labeled pairs, so they never get confused now that this
+tool generalizes beyond IHP: **This Project** (an editable **Project
+name**, saved and restored the same way as DRC Rules/Magic Types/LEF
+pins, plus a read-only **Project directory** -- where this tool and
+its `saves/` actually live) and **Source PDK** (read-only **Original
+PDK name** and **Original PDK location** -- the real, downloaded
+`pdk_root`'s own name/path, plus the real upstream URL it was fetched
+from). More project-level settings belong here as they're added.
+
+**Settings > Tools** is a real, live status view of the FOSS EDA
+toolchain (`eda_tools.py`) this project's various real PDK views are
+authored/verified with: found/missing, real detected version and path,
+install guidance (shown, never auto-run), and a **Launch** button for
+whatever's already on PATH -- a thin GUI wrapper around
+`eda_tools.py`'s own existing check/launch logic (no new detection
+code of its own, so the CLI and GUI stay in lock-step).
 
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly
@@ -208,7 +217,11 @@ highlighted straight to that cell's real line range within its
   honestly skipped. Every value hand-checked against the real source:
   `sg13g2_a21o_1`'s 6 real pins (name/direction/use/rect-count each),
   a real SRAM macro's 113 real pins, `sg13g2_tech.lef`'s 19 real
-  layers/70 real vias/6 real via-rules.
+  layers/70 real vias/6 real via-rules. Also tracks each real
+  `MACRO`/`PIN` block's own real, 1-indexed source line range
+  (`start_line`/`end_line`) -- added specifically for
+  `ihp/lef_writer.py`'s own write-back, which needs to locate exactly
+  where a real pin's text lives to patch it in place.
 - **`openpdkcreator/gui/pin_editor.py`** -- `PinEditor`, a real macro
   pin list + New/Delete Pin + a Name/Direction/Use form, the same
   commit-on-switch pattern `LayersView`/`RulesView` already use.
@@ -419,6 +432,64 @@ highlighted straight to that cell's real line range within its
   for real: the four values are confirmed genuinely distinct strings on
   a real, downloaded PDK (not accidentally the same path/name reused
   twice), and a rename survives a save + simulated relaunch.
+- **`openpdkcreator/ihp/lef_writer.py`** / **`openpdkcreator/export.py`**
+  -- real, open_pdks-format write-back for LEF pins, the first concrete
+  piece of native write-back serialization (see Future Work). Never
+  overwrites the real, downloaded source file -- `export.py` always
+  writes to a new `export/<pdk name>/...` tree, mirroring each file's
+  own real relative path under `pdk_root`. **Surgical patching, not
+  full regeneration**: this project's LEF model doesn't capture every
+  real LEF construct (port `RECT` *coordinates* -- only a count is
+  tracked -- `PROPERTY`, `FOREIGN`, ...), so `lef_writer.py` re-reads
+  the real *original* file fresh from disk and, using each pin's real
+  source line range (`ihp/lef.py`'s new `start_line`/`end_line`), keeps
+  every real interior line of an existing pin verbatim, substituting
+  only its `DIRECTION`/`USE` lines and its own name in the
+  `PIN`/`END` header/trailer -- **a real bug found and fixed while
+  building this**: an earlier version regenerated a pin's block from
+  only the fields this project models, which silently dropped real,
+  unmodeled attributes (`ANTENNAMODEL`, confirmed present on real IHP
+  pins) -- caught immediately by the very first correctness check
+  (no-edit export must be byte-identical to the real original) failing
+  against real data, not by inspection. A deleted pin's original text
+  is omitted entirely; a brand-new pin (no real source line range) gets
+  a freshly-generated block inserted before the macro's own real `END`
+  line. Verified for real against the actual downloaded data: **all 32
+  real `.lef` files export byte-identical to their real originals with
+  no edits** (the strongest real correctness check available -- if the
+  splicing logic touched anything it shouldn't, this would catch it),
+  plus real, driven round-trips for an edited pin (value change +
+  real `PORT` geometry preserved exactly), a brand-new pin, and a
+  deleted pin, each re-parsed from the real export and checked against
+  a fresh parse of the untouched original.
+- **`main.py export-lef`** -- CLI export + verification: exports every
+  real `.lef` file and reports how many came back byte-identical
+  (always all of them with no edits made) -- a real, standalone
+  correctness self-check runnable anytime, matching `main.py cells`/
+  `gds`'s own style.
+- **File > Export Edited LEF Files** (`app.py`) -- the GUI action:
+  exports every real `.lef` file parsed this session (LEF tab or By
+  Cell tab -- both route through the same `App.get_parsed_lef` cache)
+  with any in-memory pin edits patched in. Verified for real, driven:
+  edited a pin via the LEF tab's form, exported, re-parsed the real
+  exported file, and confirmed the edit is there -- and confirmed a
+  real `.lef` file never parsed this session is correctly *not*
+  exported (nothing to write for a file with no possible edits).
+- **`openpdkcreator/gui/tools_view.py`** -- the **Settings > Tools**
+  sub-tab (`ToolsView`): real, live status of every tool in
+  `eda_tools.TOOL_REGISTRY` (found/missing, real detected version and
+  path), install guidance shown as read-only text (docs URL + the
+  real, exact package-manager/user-local command -- never auto-run,
+  matching `eda_tools.py`'s own "opt-in, never silently privileged"
+  install philosophy), and a **Launch** button
+  (`eda_tools.resolve_launch`, the same real, non-privileged
+  `subprocess.Popen` the CLI's own `launch` command uses). No new
+  detection/install/launch logic -- a thin GUI wrapper around
+  `eda_tools.py`'s own existing, already-real functions, so the CLI and
+  GUI can never drift apart. Verified for real, driven: the real tool
+  list renders with real found/missing status for this environment,
+  and the detail pane renders real install guidance text for a
+  selected tool without error.
 - **`start_eda_container.sh`** -- adapted from `OpenPDKCreator`'s own
   script of the same name, not copied verbatim: its own container name
   and ports (`iic-osic-tools_openpdkcreator_uid_*`, webserver 8081, VNC
@@ -462,23 +533,27 @@ models, ...), not just read/display layers. Concretely, still open:
   rules); the other 94 real, honestly-skipped constructs are composite
   checks (`.enc()`, multi-step derived regions, ...) with no reliable,
   generic pattern to extract yet.
-- Native write-back serialization: DRC Rules, LEF pins, and Magic Types
-  are now genuinely *structured*-editable (add/edit/delete through a
-  real form, not raw text) **and** persist across a relaunch
-  (`project_io.py`, `saves/<pdk name>.yaml`) -- but that's still a
-  separate program format, not a write of the edited rule/pin/type back
-  into the real, on-disk `.drc`/`.lef`/`.tech` file itself
-  (`file_view_dialog.py`'s own Save only ever writes a whole file's raw
-  text, never a single parsed item back into its native source format).
-  A real PDK-authoring tool eventually needs that too, so a saved
-  project can be exported as an actual, loadable `.lef`/`.tech`/DRC
-  deck, not just re-read by this tool. Layers/Magic Tech's other five
-  domains/CDL/SPICE/Verilog/Liberty port and cell-boundary data (real
-  boundaries only, no per-port model to edit yet) stay read-only in
-  their own structured views for the same underlying reason (no editor
-  -> no state to persist yet either) -- LEF pins are the one exception,
-  now editable from *both* the LEF tab and the By Cell tab via one
-  shared `PinEditor`/`App.get_parsed_lef` cache.
+- Native write-back serialization: **LEF pins are done** -- real,
+  surgical, line-range-targeted write-back into real `.lef` text
+  (`ihp/lef_writer.py`/`export.py`, `File > Export Edited LEF Files`/
+  `main.py export-lef`), verified against all 32 real files
+  (byte-identical with no edits; real edit/new-pin/deleted-pin
+  round-trips). **DRC Rules and Magic Types are not** -- both are
+  genuinely *structured*-editable (add/edit/delete through a real
+  form, not raw text) and persist across a relaunch (`project_io.py`,
+  `saves/<pdk name>.yaml`), but that's still a separate program
+  format, not a write into the real, on-disk `.drc`/`.tech` file
+  itself. Each needs its own real design pass, harder than LEF's:
+  Magic Types would need the same surgical, line-range approach
+  extended to `magic_tech.py` (which doesn't track source lines yet);
+  DRC Rules would need to patch a real KLayout Ruby DSL script (a
+  `.output()` call's own real JSON-config-referenced value), a
+  materially different real file format from LEF's block-structured
+  text. Layers/Magic Tech's other domains/CDL/SPICE/Verilog/Liberty
+  port and cell-boundary data (real boundaries only, no per-port model
+  to edit yet) stay read-only in their own structured views for the
+  same reason DRC Rules/Magic Types aren't write-back-capable yet (no
+  write-back path -> no reason to build a form there first).
 - Re-add "pre-pointed" Magic/KLayout launch guidance in
   `eda_tools.py` once a real mapping to IHP's actual multi-file tech
   setup (6 real `.tech` files, not 1) is designed, not guessed.
