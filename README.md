@@ -63,6 +63,24 @@ from `OpenPDKCreator`'s own `scripts/start_eda_container.sh`), so both
 projects' containers can run at once without colliding -- confirmed by
 running both side by side for real.
 
+## Testing
+
+`tests/` holds every real, driven integration test accumulated across
+this project's own development -- each builds a real `App` (Tk),
+drives real GUI actions, and asserts against real, parsed data or real
+exported file text; no mocks of this project's own code. They only run
+*inside* the IIC-OSIC-TOOLS container (`tkinter`/the real EDA
+toolchain/the real, downloaded IHP data all live there, not on the
+bare host):
+
+```bash
+podman exec -e DISPLAY=:1 <container-name> bash tests/run_all.sh
+```
+
+See `tests/README.md` for what each test needs, which ones exercise a
+throwaway `/tmp/` PDK versus the real, downloaded one, and the shape
+to follow when adding a new one.
+
 ## GUI structure
 
 **PDK Wizard** is the first tab shown -- a guided flowchart (`gui/
