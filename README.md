@@ -47,7 +47,7 @@ python3 main.py export-layers    # real, patched .lyp write-back to export/ (byt
 python3 main.py export-xschem-sym  # real, patched xschem .sym pin write-back to export/ (byte-identical with no edits)
 python3 main.py export-xschem-sch  # real, patched xschem .sch instance/wire write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
-python3 main.py gui          # Overview / Technology / Cells / Settings tabs (needs a real X11/Xvnc display)
+python3 main.py gui          # PDK / Settings tabs (needs a real X11/Xvnc display)
 ```
 
 `main.py gui` needs a real X11/Xvnc display -- this host has none locally (no
@@ -119,12 +119,14 @@ empty-library `.lef` -- genuinely usable immediately afterward, not
 just a stub: **New Layer**/**New Type**/**New Plane**/**New
 Contact**/**New Alias**/**New Rule** and a real export all work
 against a skeleton the same as against a real, downloaded file.
-**LEF's own version is deliberately partial**, still flagged as a real
-gap: it unblocks a valid, empty *library*, not a whole new **MACRO** --
-`ihp/lef_writer.py` explicitly refuses to write back a macro with no
-real source position, and there's no **New Macro** action, only pins
-within an already-existing macro. **DRC Rules' New Rule is also
-deliberately partial**: a hand-authored rule is genuinely exportable
+**LEF** now also supports a whole new **MACRO**, not just a valid empty
+*library*: the LEF Macros sub-tab's own **New Macro...** action adds a
+real, brand-new, empty macro (pins added afterward through the same
+**New Pin** flow an existing macro already uses); `ihp/lef_writer.py`'s
+`render_lef_file` renders it as a whole, freshly-generated block,
+appended after every real, existing macro on export (`ORIGIN`/`SITE`
+still aren't modeled -- real, separate future work). **DRC Rules' New
+Rule is deliberately partial**: a hand-authored rule is genuinely exportable
 -- real, *generated* KLayout DRC Ruby into a separate, tool-owned
 `custom_rules.drc`, not just metadata -- but only for the three
 `check_type`s with a real, single-method shape this project knows how
@@ -146,7 +148,12 @@ xschem/Qucs-S symbol editors (draw a device symbol from nothing), then
 grows outward through the newly-creatable Layers/Magic Tech/DRC
 Rules/LEF skeletons above.
 
-Tabs are grouped by what they represent, not left flat: **Overview**
+Tabs are grouped by what they represent, not left flat -- and, one
+level up, **everything actually about the PDK's own content lives
+under a single top-level PDK tab**, deliberately separate from
+**Settings** (project naming/tool config, not PDK content itself, kept
+outside so it doesn't compete for space with the actual PDK-authoring
+tabs). Inside **PDK**: **PDK Wizard** (see above), **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
@@ -167,11 +174,14 @@ default_value/equation) and a **Symbols** sub-tab (**editable** real
 drawn-geometry ports -- no real port names, just position/type/angle,
 a genuinely different tag syntax from xschem's own `.sym` -- plus its
 own real **Graphical** canvas); **User Models** -- user-authored Verilog/Verilog-A
-modules under `user_models/`, editable link to a real cell), and
-**Settings** (project-level settings -- not any one tool's PDK content
--- **General** and **Tools** as sub-tabs). **Technology**/**Cells**/
-**Simulation** are the pattern a future sub-tab would repeat once a
-real parser exists for a still-unparsed domain.
+modules under `user_models/`, editable link to a real cell). That's
+everything inside **PDK**. **Settings** itself sits alongside it, its
+own separate top-level tab -- **General** (project name/directory,
+source-PDK provenance), **Tools** (real per-tool install/PATH status),
+and **Environment** (the generated shell-env script) as its own
+sub-tabs. **Technology**/**Cells**/**Simulation** are the pattern a
+future sub-tab would repeat once a real parser exists for a
+still-unparsed domain.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
@@ -1030,7 +1040,7 @@ highlighted straight to that cell's real line range within its
   complete ~744 MB IHP deck (orig-vs-A, A-vs-B, and orig-vs-B all
   perfectly identical, structurally and byte-for-byte).
 - **`openpdkcreator/project_io.py`** -- program-format persistence for
-  the editable domains above (DRC Rules/Magic Types/LEF pins/the
+  the editable domains above (DRC Rules/Magic Types/LEF pins/Layers/the
   Settings tab's project name), modeled on `OpenPDKCreator`'s own
   `rules_db/` (ADR 0002): a save/load layer completely separate from
   the real, downloaded `.tech`/`.lef`/`.drc` files, not a write-back
@@ -1547,6 +1557,54 @@ editor yet -- see Future Work.
     against a real, known IHP stdcell (`sg13g2_inv_1`) pulls its real
     LEF pins (`A` input, `Y` output, `VDD`/`VSS` inout) with correctly
     normalized directions.
+- **A real "PDK" top-level tab**, plus three real gaps closed, all
+  found while building `openMemristorPDK` -- a genuinely independent,
+  from-scratch memristor PDK, authored entirely through this tool's own
+  GUI/CLI (a separate project, its own repo; the walkthrough is
+  documented there, `docs/presentation/walkthrough.tex`).
+  - **Everything actually about the PDK's own content now lives under
+    one top-level `PDK` tab** (`gui/app.py`'s new `_build_pdk_tab`/
+    `self.pdk_notebook`) -- PDK Wizard, Overview, Technology, Cells,
+    Library Manager, Simulation all nested one level deeper than
+    before; `Settings` stays its own, separate top-level tab, since
+    project naming/tool config isn't PDK content. `App.goto(*path)`
+    inserts the new intermediate hop itself (a real path like
+    `("Technology", "Layers")` still works unchanged) so the PDK
+    Wizard's own stage table never needed to know about the wrapping
+    tab.
+  - **A real "New Macro" action for LEF** (`gui/lef_view.py`'s LEF
+    Macros sub-tab), closing the one remaining "no in-GUI create"
+    domain among Layers/Magic Tech/DRC Rules/LEF -- pins are added to
+    it afterward through the same **New Pin** flow an existing macro
+    already uses. `ihp/lef_writer.py`'s `render_lef_file` renders a
+    brand-new macro (`start_line == 0`) as a whole, freshly-generated
+    `MACRO ... END` block, appended after every real, existing macro on
+    export -- verified round-tripping correctly through a real,
+    downloaded 84-macro file (`tests/test_lef_writer.py`) and through
+    the actual GUI action, mocked-dialog-and-all
+    (`tests/test_lef_new_macro_gui.py`).
+  - **Layers now persist through `saves/` like DRC Rules/Magic Types/
+    LEF pins already did** (`project_io.py`'s `save_state`/`load_state`
+    gained a `layers` dict, keyed by real `.lyp` path the same way
+    `lef_pins` is keyed by `.lef` path) -- a real, found inconsistency:
+    Layers was the one domain among the four where a GUI restart
+    silently lost anything not already exported, since edits lived only
+    in `app.project.layers` (in-memory). Verified for real: create a
+    `.lyp` from scratch, add a layer, Save Edits, destroy and rebuild
+    the whole `App` (simulating a real relaunch), confirm the layer
+    survives (`tests/test_layers_persistence.py`) -- it no longer
+    silently reverts to the real, on-disk (still-empty) `.lyp`.
+  - **A real, live-session dead end investigated and corrected, not
+    silently left as a false claim**: the DRC Rule form's own Layer
+    picker combobox appeared to never populate a selectable list during
+    that session's own noVNC walkthrough. Reproduced with a direct,
+    scripted test against both the real IHP deck (377 real layers) and
+    a from-scratch 4-layer project -- in both cases `combo.cget
+    ("values")` came back correctly populated every time. No code
+    defect exists here; the live symptom was a real interaction/
+    rendering issue specific to that noVNC session, not a bug in
+    `rules_view.py`. Documented here so the record stays honest, not
+    because a fix was needed.
 
 ## Future work
 
@@ -2040,15 +2098,9 @@ models, ...), not just read/display layers. Concretely, still open:
   Verilog-A now all have a real "New..."/**Create File**/**Create**
   action; these three still need a real starting file already on disk
   (copied from a template/reference PDK, or hand-written) before this
-  tool can load and edit it.
-- **A real "New Macro" action for LEF**, plus extending
-  `ihp/lef_writer.py`'s own `render_lef_file` to write one back (today
-  it explicitly refuses -- `if macro.start_line == 0: continue`,
-  matching a real macro's own richer required fields: `CLASS`/
-  `ORIGIN`/`SIZE`/`SYMMETRY`/`SITE`, not a small, uniform block like a
-  KLayout layer or a Magic Tech entry). Until then, `create_new_lef_file`
-  only unblocks a valid, empty library to load pins into once a real
-  macro is hand-authored into it.
+  tool can load and edit it. LEF is no longer among them for its own
+  macro-level content -- see **New Macro...** above; `ORIGIN`/`SITE`
+  still aren't modeled on a macro, real, separate future work.
 - **Real Ruby generation for DRC Rules' remaining six `check_type`s**
   (`min_area`/`min_overlap`/`max_length`/`max_current_density`/
   `max_dimension`/`density_window`) -- `ihp/drc_writer.py`'s own

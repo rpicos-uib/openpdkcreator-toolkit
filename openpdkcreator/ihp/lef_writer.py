@@ -38,6 +38,15 @@ not in ``LefMacro.pins``) has its original text span omitted entirely;
 a pin added this session (``start_line == 0``) gets a freshly-generated
 block (no real interior to preserve -- there was never a real pin
 there) inserted just before the macro's own real ``END`` line.
+
+**A whole new macro** (``LefMacro.start_line == 0``, from the LEF
+tab's own **New Macro** action) works the same way, one level up: no
+real source position to interleave into, so ``_render_new_macro_block``
+generates the whole ``MACRO name ... END name`` block fresh (``CLASS``/
+``SIZE``/``SYMMETRY`` when set, each real pin via the same
+``_render_pin_block`` an existing macro's own new pins already use),
+appended after every real, existing macro -- never interleaved among
+them, since there is no real position to put it at.
 """
 
 from __future__ import annotations
@@ -108,6 +117,28 @@ def _render_pin_block(pin: lef_mod.LefPin, indent: str, original_pin_lines: list
     )
 
 
+def _render_new_macro_block(macro: lef_mod.LefMacro) -> list[str]:
+    """A whole, freshly-generated ``MACRO name ... END name`` block for
+    a macro added this session (``start_line == 0`` -- no real source
+    position, so there is no real interior to preserve, unlike an
+    existing macro's own pins). Only the fields this project's own
+    ``LefMacro`` actually models are emitted -- ``CLASS``/``SIZE``/
+    ``SYMMETRY`` when set, plus each real pin via the same
+    ``_render_pin_block`` an existing macro's own new pins already use."""
+
+    lines = [f"MACRO {macro.name}"]
+    if macro.macro_class:
+        lines.append(f"  CLASS {macro.macro_class} ;")
+    if macro.size:
+        lines.append(f"  SIZE {macro.size[0]} BY {macro.size[1]} ;")
+    if macro.symmetry:
+        lines.append(f"  SYMMETRY {' '.join(macro.symmetry)} ;")
+    for pin in macro.pins:
+        lines.extend(_render_pin_block(pin, "  ", []))
+    lines.append(f"END {macro.name}")
+    return lines
+
+
 def render_lef_file(original_path: Path, parsed: lef_mod.LefFile) -> str:
     """Real, patched LEF text for *parsed* (the current, possibly
     pin-edited in-memory structure originally parsed from
@@ -123,9 +154,8 @@ def render_lef_file(original_path: Path, parsed: lef_mod.LefFile) -> str:
     for macro in parsed.macros:
         if macro.start_line == 0:
             # A macro added this session (no real source position) --
-            # whole-macro editing isn't attempted this pass, only pins
-            # within an existing macro; skip defensively rather than
-            # guess where a new macro's real text should go.
+            # handled in a separate pass below, appended after every
+            # real, existing macro; nothing to interleave here.
             continue
 
         macro_start_idx = macro.start_line - 1
@@ -157,6 +187,18 @@ def render_lef_file(original_path: Path, parsed: lef_mod.LefFile) -> str:
         cursor = macro_end_idx + 1
 
     output.extend(original_lines[cursor:])  # everything after the last macro, verbatim
+
+    new_macro_blocks: list[str] = []
+    for macro in parsed.macros:
+        if macro.start_line == 0:
+            if new_macro_blocks:
+                new_macro_blocks.append("")
+            new_macro_blocks.extend(_render_new_macro_block(macro))
+    if new_macro_blocks:
+        if output and output[-1].strip():
+            output.append("")
+        output.extend(new_macro_blocks)
+
     return text_utils.join_preserving_trailing_newline(original_text, output)
 
 

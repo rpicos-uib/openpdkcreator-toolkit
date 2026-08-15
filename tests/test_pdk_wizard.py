@@ -12,10 +12,12 @@ app = App(root, PDK_ROOT)
 root.update()
 
 wv = app.wizard_view
-print("Wizard is tab 0:", app.notebook.tab(app.notebook.tabs()[0], "text"))
-assert app.notebook.tab(app.notebook.tabs()[0], "text") == "PDK Wizard"
-print("Currently selected tab:", app.notebook.tab(app.notebook.select(), "text"))
-assert app.notebook.tab(app.notebook.select(), "text") == "PDK Wizard"
+print("Root tab 0:", app.notebook.tab(app.notebook.tabs()[0], "text"))
+assert app.notebook.tab(app.notebook.tabs()[0], "text") == "PDK"
+print("PDK Wizard is tab 0 of the PDK tab:", app.pdk_notebook.tab(app.pdk_notebook.tabs()[0], "text"))
+assert app.pdk_notebook.tab(app.pdk_notebook.tabs()[0], "text") == "PDK Wizard"
+print("Currently selected tab:", app.pdk_notebook.tab(app.pdk_notebook.select(), "text"))
+assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "PDK Wizard"
 
 # --- Every stage's status_fn runs cleanly against the real, loaded IHP data ---
 from openpdkcreator.gui.pdk_wizard_view import _STAGES, _EDGES
@@ -57,18 +59,22 @@ assert str(wv.goto_button.cget("state")) == "normal"
 # --- Go to Tab actually navigates ---
 wv._on_goto()
 root.update()
-print("After Go to Tab, top tab:", app.notebook.tab(app.notebook.select(), "text"))
+print("After Go to Tab, root tab:", app.notebook.tab(app.notebook.select(), "text"))
+print("After Go to Tab, PDK sub-tab:", app.pdk_notebook.tab(app.pdk_notebook.select(), "text"))
 print("After Go to Tab, tech sub-tab:", app.technology_notebook.tab(app.technology_notebook.select(), "text"))
-assert app.notebook.tab(app.notebook.select(), "text") == "Technology"
+assert app.notebook.tab(app.notebook.select(), "text") == "PDK"
+assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "Technology"
 assert app.technology_notebook.tab(app.technology_notebook.select(), "text") == "Layers"
-print("PASS: clicking a node then Go to Tab navigates to the real Technology > Layers tab.")
+print("PASS: clicking a node then Go to Tab navigates to the real PDK > Technology > Layers tab.")
 
 # --- 3-level goto: Simulation > xschem > Schematics ---
 app.goto("Simulation", "xschem", "Schematics")
 root.update()
-print("sim tab:", app.notebook.tab(app.notebook.select(), "text"))
+print("root tab:", app.notebook.tab(app.notebook.select(), "text"))
+print("sim tab:", app.pdk_notebook.tab(app.pdk_notebook.select(), "text"))
 print("xschem sub:", app.xschem_view.outer.tab(app.xschem_view.outer.select(), "text"))
-assert app.notebook.tab(app.notebook.select(), "text") == "Simulation"
+assert app.notebook.tab(app.notebook.select(), "text") == "PDK"
+assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "Simulation"
 assert app.simulation_notebook.tab(app.simulation_notebook.select(), "text") == "xschem"
 assert app.xschem_view.outer.tab(app.xschem_view.outer.select(), "text") == "Schematics"
 print("PASS: 3-level goto reaches Simulation > xschem > Schematics.")

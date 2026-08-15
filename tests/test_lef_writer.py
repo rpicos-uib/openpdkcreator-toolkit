@@ -109,4 +109,32 @@ assert reparsed5.macros[0].pins[0].direction == sram_pin.direction
 assert len(reparsed5.macros[0].pins) == len(sram_macro.pins)
 print(f"PASS: SRAM hard-macro file ({len(sram_macro.pins)} real pins) no-edit byte-identical, and a real pin edit round-trips.")
 
+# --- Test 6: new macro (New Macro...) ---
+parsed6 = lef_mod.parse_lef_file(STDCELL)
+original_macro_count = len(parsed6.macros)
+new_macro = lef_mod.LefMacro(name="ZZ_NEW_MACRO", macro_class="CORE", size=(2.0, 3.0), symmetry=["X", "Y"])
+new_macro.pins.append(lef_mod.LefPin(name="A", direction="INPUT", use="SIGNAL"))
+new_macro.pins.append(lef_mod.LefPin(name="Y", direction="OUTPUT", use="SIGNAL"))
+parsed6.macros.append(new_macro)
+export_path6 = Path("/tmp/test_export_newmacro.lef")
+lef_writer.export_lef_file(parsed6, export_path6)
+reparsed6 = lef_mod.parse_lef_file(export_path6)
+assert len(reparsed6.macros) == original_macro_count + 1
+re_new_macro = reparsed6.macros[-1]
+assert re_new_macro.name == "ZZ_NEW_MACRO"
+assert re_new_macro.macro_class == "CORE"
+assert re_new_macro.size == (2.0, 3.0)
+assert re_new_macro.symmetry == ["X", "Y"]
+assert [p.name for p in re_new_macro.pins] == ["A", "Y"]
+assert [p.direction for p in re_new_macro.pins] == ["INPUT", "OUTPUT"]
+# Every real, existing macro stays byte-for-byte the same as a fresh parse.
+fresh6 = lef_mod.parse_lef_file(STDCELL)
+for fm, rm in zip(fresh6.macros, reparsed6.macros[:-1]):
+    assert fm.name == rm.name
+    assert [(p.name, p.direction, p.use) for p in fm.pins] == [(p.name, p.direction, p.use) for p in rm.pins]
+print(
+    f"PASS: New Macro (ZZ_NEW_MACRO, 2 real pins) exports as a whole, freshly-generated block "
+    f"after all {original_macro_count} real, existing macros, none of which changed."
+)
+
 print("ALL PASS")

@@ -1,15 +1,21 @@
 """Program-format persistence for this session's edits (DRC rules,
-Magic Types, LEF pins) -- a save/load layer completely separate from
-the real, downloaded PDK files under ``data/``, the same "program
+Magic Types, LEF pins, Layers) -- a save/load layer completely separate
+from the real, downloaded PDK files under ``data/``, the same "program
 format is the single source of truth, real tool files are a separate
 concern" philosophy `OpenPDKCreator`'s own `rules_db/` has used from
 the start (ADR 0002 in that project).
 
 **Why this exists**: without it, every edit made through DRC Rules/
-LEF pins/Magic Types vanishes the moment the GUI is closed -- an
+LEF pins/Magic Types/Layers vanishes the moment the GUI is closed -- an
 editor whose edits don't survive a relaunch isn't really an editor
 yet, and the whole point of this project is eventually authoring a
 real PDK, not just browsing one. See README's own Future Work note.
+Layers was a real, found gap here for a while: the other three domains
+persisted through this module from early on, but Layers edits lived
+only in ``app.project.layers`` (in-memory) plus whatever a real
+**Export Edited Layers** happened to write to ``export/`` -- a GUI
+restart silently lost anything not yet exported. Fixed by adding it
+here too, the same shape as the rest.
 
 Once a save exists for a given ``pdk_root``, it becomes authoritative
 for these three domains on the next launch -- real re-extraction from
@@ -34,7 +40,7 @@ import yaml
 
 from .ihp.lef import LefPin, LefPort
 from .ihp.magic_tech import AliasEntry, ContactEntry, PlaneEntry, TypeEntry
-from .models import DesignRule
+from .models import DesignRule, Layer
 
 SAVE_DIR = Path(__file__).resolve().parents[1] / "saves"
 
@@ -52,6 +58,7 @@ def save_state(
     magic_planes: dict[str, list[PlaneEntry]] | None = None,
     magic_contacts: dict[str, list[ContactEntry]] | None = None,
     magic_aliases: dict[str, list[AliasEntry]] | None = None,
+    layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
     *magic_planes*/*magic_contacts*/*magic_aliases*: the same real
@@ -60,9 +67,16 @@ def save_state(
     default to empty so existing callers/save files stay valid.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
     matching ``LefView.lef_files``'s own keys) -> macro name -> its
-    current Pins list. *project_name*: the user's own editable label
-    for this project (Settings tab) -- deliberately separate from
-    ``pdk_root.name``, the real, immutable source PDK's own name (see
+    current Pins list. *layers*: real ``.lyp`` path (relative to
+    pdk_root, as a string -- there can be more than one, same real
+    "New .lyp File..." precedent multiple Magic technologies already
+    have) -> its current Layer list. Without this, a Layers edit was
+    the one domain among DRC Rules/Magic Types/LEF pins/Layers that
+    silently vanished on relaunch -- a real, found inconsistency (see
+    ``gui/layers_view.py``'s own docstring for how it was found).
+    *project_name*: the user's own editable label for this project
+    (Settings tab) -- deliberately separate from ``pdk_root.name``,
+    the real, immutable source PDK's own name (see
     ``gui/settings_view.py``'s own docstring for why the two are kept
     visibly distinct)."""
 
@@ -94,6 +108,10 @@ def save_state(
             }
             for lef_path, macros in lef_pins.items()
         },
+        "layers": {
+            lyp_path: [dataclasses.asdict(layer) for layer in layer_list]
+            for lyp_path, layer_list in (layers or {}).items()
+        },
     }
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return path
@@ -108,6 +126,7 @@ class LoadedState:
     magic_planes: dict[str, list[PlaneEntry]] = dataclasses.field(default_factory=dict)
     magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
     magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
+    layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
 def _load_lef_pin(raw: dict) -> LefPin:
@@ -145,10 +164,15 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         }
         for lef_path, macros in data.get("lef_pins", {}).items()
     }
+    layers = {
+        lyp_path: [Layer(**layer) for layer in layer_list]
+        for lyp_path, layer_list in data.get("layers", {}).items()
+    }
     return LoadedState(
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
         magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
+        layers=layers,
     )
 
 

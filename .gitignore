@@ -27,3 +27,4 @@ __pycache__/
 # in an absolute, machine-specific PDK_ROOT, so it's derived/local, not
 # shareable content, same reasoning as data/saves/export/ above.
 shell_env/
+openMemristorPDK/

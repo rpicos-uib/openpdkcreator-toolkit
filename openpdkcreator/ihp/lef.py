@@ -187,16 +187,12 @@ def create_new_lef_file(path: Path) -> None:
     ``libs.ref/<family>/lef/`` to be found again by ``find_lef_files``
     above.
 
-    **A real, honest gap, not glossed over**: unlike Layers/Magic
-    Tech's own ``create_new_*``, this alone doesn't unblock authoring
-    a whole new macro from inside this GUI -- ``lef_writer.py``'s own
-    ``render_lef_file`` explicitly refuses to write back a macro with
-    no real source position (``if macro.start_line == 0: continue`` --
-    a real ``MACRO`` block's ``CLASS``/``ORIGIN``/``SIZE``/``SYMMETRY``/
-    ``SITE`` fields are real, separate future work), and there's no
-    **New Macro** action in the LEF tab either. A real macro still has
-    to be hand-authored (or copied from a template) into a file created
-    this way before this tool's own pin editor has anything to edit."""
+    Pair with the LEF Macros sub-tab's own **New Macro...** action to
+    add a real, brand-new macro to a file created this way --
+    ``lef_writer.py``'s own ``render_lef_file`` renders it as a whole,
+    freshly-generated block on export (``ORIGIN``/``SITE`` still
+    aren't modeled -- real, separate future work -- but ``CLASS``/
+    ``SIZE``/``SYMMETRY``/pins all round-trip)."""
 
     if path.exists():
         raise FileExistsError(f"{path} already exists")

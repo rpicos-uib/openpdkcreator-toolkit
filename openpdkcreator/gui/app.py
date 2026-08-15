@@ -204,19 +204,21 @@ class App(ttk.Frame):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
 
+        self._build_pdk_tab()
         self._build_overview_tab()
         self._build_technology_group()
         self._build_cells_group()
         self._build_library_manager_tab()
         self._build_simulation_group()
-        self._build_settings_tab()
         self._build_wizard_tab()
+        self._build_settings_tab()
 
         self.status = tk.StringVar(value="Ready.")
         ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", side="bottom")
 
         self.load()
         self.wizard_view.refresh()
+        self.pdk_notebook.select(0)
         self.notebook.select(0)
 
     def _update_title(self):
@@ -298,6 +300,15 @@ class App(ttk.Frame):
             str(path.relative_to(self.pdk_root)): {macro.name: macro.pins for macro in parsed.macros}
             for path, parsed in self.lef_cache.items()
         }
+
+    def _layers_by_lyp_path(self) -> dict[str, list[Layer]]:
+        """The current layer list, keyed by the real ``.lyp`` path it
+        belongs to -- only ``self.lyp_path`` (whichever one is
+        actually loaded) has anything to save; empty if none is."""
+
+        if self.lyp_path is None:
+            return {}
+        return {str(self.lyp_path.relative_to(self.pdk_root)): self.project.layers}
 
     # -- menu / persistence -------------------------------------------------
 
@@ -538,6 +549,7 @@ class App(ttk.Frame):
             magic_planes=self.magic_tech_view.collect_planes_by_tech(),
             magic_contacts=self.magic_tech_view.collect_contacts_by_tech(),
             magic_aliases=self.magic_tech_view.collect_aliases_by_tech(),
+            layers=self._layers_by_lyp_path(),
         )
         self.status.set(f"Saved edits to {path}")
 
@@ -568,19 +580,29 @@ class App(ttk.Frame):
         self.qucs_view.load()
         self.load()
 
+    # -- PDK tab (wraps everything actually about the PDK's own content;
+    # Settings -- project naming/tool config -- stays a separate,
+    # top-level tab, deliberately outside this one) --------------------
+
+    def _build_pdk_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="PDK")
+        self.pdk_notebook = ttk.Notebook(frame)
+        self.pdk_notebook.pack(fill="both", expand=True)
+
     # -- PDK Wizard tab -----------------------------------------------------
 
     def _build_wizard_tab(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.insert(0, frame, text="PDK Wizard")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.insert(0, frame, text="PDK Wizard")
         self.wizard_view = PdkWizardView(frame, self)
         self.wizard_view.pack(fill="both", expand=True)
 
     # -- Overview tab -----------------------------------------------------
 
     def _build_overview_tab(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Overview")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.add(frame, text="Overview")
 
         columns = ("domain", "files", "size_mb", "top_extensions")
         self.inventory_tree = ttk.Treeview(frame, columns=columns, show="headings")
@@ -603,8 +625,8 @@ class App(ttk.Frame):
     # -- Technology group (Layers, Magic Tech, DRC Rules) --------------------
 
     def _build_technology_group(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Technology")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.add(frame, text="Technology")
 
         self.technology_notebook = ttk.Notebook(frame)
         self.technology_notebook.pack(fill="both", expand=True)
@@ -681,8 +703,8 @@ class App(ttk.Frame):
     # -- Cells group (LEF, By Cell) ------------------------------------------
 
     def _build_cells_group(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Cells")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.add(frame, text="Cells")
 
         self.cells_notebook = ttk.Notebook(frame)
         self.cells_notebook.pack(fill="both", expand=True)
@@ -700,16 +722,16 @@ class App(ttk.Frame):
     # -- Library Manager tab -----------------------------------------------
 
     def _build_library_manager_tab(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Library Manager")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.add(frame, text="Library Manager")
         self.library_manager_view = LibraryManagerView(frame, self)
         self.library_manager_view.pack(fill="both", expand=True)
 
     # -- Simulation group (ngspice) -------------------------------------------
 
     def _build_simulation_group(self):
-        frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="Simulation")
+        frame = ttk.Frame(self.pdk_notebook)
+        self.pdk_notebook.add(frame, text="Simulation")
 
         self.simulation_notebook = ttk.Notebook(frame)
         self.simulation_notebook.pack(fill="both", expand=True)
@@ -765,11 +787,23 @@ class App(ttk.Frame):
         ``goto("Simulation", "xschem", "Symbols")`` -- walks down as
         many nested ``ttk.Notebook`` levels as *path* has segments,
         stopping early (silently) if a segment isn't found, so a
-        caller can pass a short path (just the top-level tab) too."""
+        caller can pass a short path (just the top-level tab) too.
+
+        Every real path except ``("Settings", ...)`` now lives one
+        level deeper than *path* itself says, nested under the
+        top-level "PDK" tab (``self.pdk_notebook``) -- this method
+        inserts that real hop itself, so callers (the PDK Wizard's own
+        stage table) never needed to change when that wrapping tab was
+        added."""
 
         if not path:
             return
-        self._select_tab_by_text(self.notebook, path[0])
+        if path[0] == "Settings":
+            top_notebook = self.notebook
+        else:
+            self._select_tab_by_text(self.notebook, "PDK")
+            top_notebook = self.pdk_notebook
+        self._select_tab_by_text(top_notebook, path[0])
         notebook = self._sub_notebook_for(path[:1])
         for depth in range(1, len(path)):
             if notebook is None:
@@ -838,6 +872,10 @@ class App(ttk.Frame):
 
         saved = project_io.load_state(self.pdk_root)
         if saved is not None:
+            saved_layers = saved.layers.get(str(lyp_path.relative_to(self.pdk_root)))
+            if saved_layers is not None:
+                self.project.layers = saved_layers
+                self.layers_view.refresh()
             self.project.design_rules = saved.design_rules
             self.rules_view.refresh()
             for tech_name, types in saved.magic_types.items():

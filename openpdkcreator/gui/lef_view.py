@@ -27,11 +27,12 @@ existing relative path (``libs.ref/<family>/lef/<name>.lef``) reads
 **Edit File** (opens ``file_view_dialog.view_file_dialog``); typing one
 that doesn't exist yet reads **Create File** (writes a real, minimal,
 valid empty-library ``.lef`` skeleton via ``ihp/lef.py``'s own
-``create_new_lef_file``, then reloads and selects it) -- see that
-function's own docstring for a real, honestly-surfaced limit: it
-unblocks *loading* a brand-new family's LEF, not authoring a whole new
-**MACRO** from inside this GUI (only pins within an already-existing
-macro are write-back-editable; there's no **New Macro** action).
+``create_new_lef_file``, then reloads and selects it). **New Macro...**
+(LEF Macros sub-tab) then adds a real, brand-new, empty macro to
+whichever LEF file is loaded -- pins are added to it afterward through
+the same **New Pin** flow an existing macro already uses;
+``ihp/lef_writer.py``'s own ``render_lef_file`` renders it as a whole,
+freshly-generated block on export (see that module's own docstring).
 
 Real parsing + persistence live one level up, on ``App`` itself
 (``app.get_parsed_lef``/``app.lef_cache``/``app.lef_pin_overrides``),
@@ -48,7 +49,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from ..ihp import lef as lef_mod
 from .file_picker_utils import handle_action, update_action_button
@@ -151,8 +152,9 @@ class LefView(ttk.Frame):
         left.rowconfigure(1, weight=1)
         left.columnconfigure(0, weight=1)
         filter_row = ttk.Frame(left)
-        filter_row.grid(row=0, column=0, sticky="w", pady=(0, 4))
+        filter_row.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         build_filter_row(filter_row, self._on_macro_filter_changed, label="Filter macros:")
+        ttk.Button(filter_row, text="New Macro...", command=self._new_macro).pack(side="right")
         macro_columns = ("name", "class", "size", "site", "pins", "obs_layers")
         self.macros_tree = ttk.Treeview(left, columns=macro_columns, show="headings")
         for col, width in zip(macro_columns, (220, 110, 100, 90, 50, 120)):
@@ -269,6 +271,30 @@ class LefView(ttk.Frame):
     def _on_macro_filter_changed(self, query: str):
         self._macro_filter_query = query
         self._refresh_all()
+
+    def _new_macro(self):
+        """Adds a real, brand-new, empty ``LefMacro`` (``start_line ==
+        0``, same real "added this session" convention every other
+        writer here uses) to the currently-loaded LEF file -- CLASS/
+        SIZE/SYMMETRY start blank; real pins are added afterward via
+        the existing PinEditor, the same **New Pin** flow an existing
+        macro already uses. ``ihp/lef_writer.py``'s own
+        ``render_lef_file`` renders it as a whole, freshly-generated
+        ``MACRO ... END`` block, appended after every real, existing
+        macro on export."""
+
+        if self.current is None:
+            messagebox.showinfo("New Macro", "Load (or create) a LEF file first.", parent=self)
+            return
+        name = simpledialog.askstring("New Macro", "Macro name:", parent=self)
+        if not name:
+            return
+        if any(m.name == name for m in self.current.macros):
+            messagebox.showerror("New Macro", f"A macro named {name!r} already exists.", parent=self)
+            return
+        self.current.macros.append(lef_mod.LefMacro(name=name))
+        self._refresh_all()
+        self.macros_tree.selection_set(name)
 
     def _on_macro_select(self, _event=None):
         if self.current is None:
