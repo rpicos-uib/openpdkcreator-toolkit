@@ -17,3 +17,8 @@ export/
 __pycache__/
 *.pyc
 .venv/
+
+# nix-portable's own runtime cache -- lands here (not a real home dir)
+# because this container's own passwd entry sets HOME to this project's
+# own bind-mounted directory. Unrelated to this project's own code.
+.cache/

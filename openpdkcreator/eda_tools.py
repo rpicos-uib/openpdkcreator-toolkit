@@ -356,10 +356,40 @@ TOOL_REGISTRY: tuple[Tool, ...] = (
         check_commands=("openlane",), version_flags=("--version",),
         install=InstallGuidance(
             user_local="pip install --user openlane",
-            notes="The pip package installs the orchestrator only; it drives Nix or Docker "
-                  "under the hood for the actual tool binaries on first run. See its docs "
-                  "for backend setup.",
+            notes="Real, confirmed issue (not just a theoretical one): openlane 2.3.10's own "
+                  "'click (>=8,<9)' constraint is too loose -- click >=8.2 breaks its "
+                  "IntEnumChoice.get_metavar() at runtime (a real TypeError, crashes even "
+                  "--help). Fixed here by installing into an isolated venv with click pinned "
+                  "to 8.1.7 and PYTHONPATH cleared at launch (this project's own container "
+                  "sets a global PYTHONPATH that leaks conflicting site-packages into any "
+                  "venv otherwise). Prefer 'librelane' below -- the actively maintained "
+                  "successor, already pinned correctly, with real, confirmed IHP SG13G2 "
+                  "support and no Nix/Docker needed in this project's own container.",
             docs_url="https://openlane2.readthedocs.io/",
+        ),
+    ),
+    Tool(
+        id="librelane", name="LibreLane", category="orchestration",
+        purpose="RTL-to-GDSII orchestration wrapping Yosys+OpenROAD+Magic+Netgen+KLayout -- "
+                "the actively maintained successor to OpenLane2 (forked/renamed 2024).",
+        view="orchestrates the whole digital flow at once, with real, confirmed IHP SG13G2 "
+             "support", required=False,
+        check_commands=("librelane",), version_flags=("--version",),
+        install=InstallGuidance(
+            user_local="pip install --user librelane",
+            notes="Already ships pre-installed in this project's own IIC-OSIC-TOOLS "
+                  "container (system-wide, not --user). Its own 'click (>=8,<8.3)' "
+                  "constraint is tighter than openlane's own -- avoids the real click "
+                  "conflict noted above. Confirmed real, working, no Nix/Docker needed: "
+                  "'librelane --smoke-test --manual-pdk --pdk-root "
+                  "<repo>/data/ihp-sg13g2 --pdk ihp-sg13g2' runs a full real flow "
+                  "(Yosys -> OpenROAD -> Magic/KLayout DRC -> Netgen LVS) against this "
+                  "project's own real, downloaded IHP PDK end to end -- DRC/LVS/Antenna "
+                  "all pass -- using tool binaries already on PATH, none of them from "
+                  "/nix/store. IHP's own real, downloaded deck already ships a "
+                  "libs.tech/librelane/sg13g2_stdcell/ directory pre-configured for "
+                  "exactly this, confirmed by directly running it, not assumed.",
+            docs_url="https://librelane.readthedocs.io",
         ),
     ),
     Tool(
