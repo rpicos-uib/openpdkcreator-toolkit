@@ -244,10 +244,15 @@ end-to-end checks: `klayout_pdk -v` and a full `librelane_pdk
 --smoke-test` flow). A wrapper for a real file that doesn't exist yet
 (e.g. no `.lyp` in a from-scratch project) is emitted commented-out
 with a plain note, never a function that would fail confusingly the
-first time it's called. **Save Script** writes it to `shell_env/`
-(gitignored -- an absolute, machine-specific `PDK_ROOT` baked in isn't
-shareable content) and makes it executable; **Copy to Clipboard**
-skips the file entirely.
+first time it's called. The real defined/not-yet-available function
+names are echoed twice, from the one same list, never two
+independently-derived copies: once by the sub-tab itself (a plain
+label, so you don't have to scroll the script preview to see what's
+actually usable), and once by the generated script's own final `echo`
+line when you actually `source` it. **Save Script** writes it to
+`shell_env/` (gitignored -- an absolute, machine-specific `PDK_ROOT`
+baked in isn't shareable content) and makes it executable; **Copy to
+Clipboard** skips the file entirely.
 
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly

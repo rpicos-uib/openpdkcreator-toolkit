@@ -12,6 +12,13 @@ derived, local, and (via an absolute ``PDK_ROOT``) machine-specific,
 not shareable content), made executable. **Copy to Clipboard** is a
 cheap, real convenience for pasting straight into a terminal without
 touching disk at all.
+
+The defined/not-yet-available function names (``GeneratedShellEnv``'s
+own ``defined_functions``/``missing_functions``) are shown directly in
+this sub-tab, not just buried in the script preview -- and are the
+exact same list the sourced script's own final ``echo`` line reports,
+since both come from the one real list ``shell_env.py`` builds while
+generating the script, never two independently-derived copies.
 """
 
 from __future__ import annotations
@@ -49,6 +56,11 @@ class EnvironmentView(ttk.Frame):
             side="left", padx=(6, 0)
         )
 
+        self.functions_var = tk.StringVar()
+        ttk.Label(
+            self, textvariable=self.functions_var, anchor="w", wraplength=760, justify="left",
+        ).pack(fill="x", padx=8, pady=(0, 4))
+
         self.status_var = tk.StringVar()
         ttk.Label(self, textvariable=self.status_var, anchor="w", foreground="#2e7d32").pack(
             fill="x", padx=8, pady=(0, 4)
@@ -61,19 +73,25 @@ class EnvironmentView(ttk.Frame):
         self.current_script = shell_env_mod.generate_shell_env_script(self.app.pdk_root, SCRIPT_NAME)
         self.script_text.configure(state="normal")
         self.script_text.delete("1.0", "end")
-        self.script_text.insert("1.0", self.current_script)
+        self.script_text.insert("1.0", self.current_script.text)
         self.script_text.configure(state="disabled")
+
+        functions_msg = f"Defined: {', '.join(self.current_script.defined_functions)}"
+        if self.current_script.missing_functions:
+            reasons = "; ".join(f"{name} ({reason})" for name, reason in self.current_script.missing_functions)
+            functions_msg += f". Not yet available: {reasons}"
+        self.functions_var.set(functions_msg)
         self.status_var.set("")
 
     def _save_script(self):
         dest_dir = export_mod.PROJECT_ROOT / SHELL_ENV_DIRNAME
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest_path = dest_dir / SCRIPT_NAME
-        dest_path.write_text(self.current_script, encoding="utf-8")
+        dest_path.write_text(self.current_script.text, encoding="utf-8")
         dest_path.chmod(0o755)
         self.status_var.set(f"Saved to {dest_path} -- run: source {dest_path}")
 
     def _copy_to_clipboard(self):
         self.clipboard_clear()
-        self.clipboard_append(self.current_script)
+        self.clipboard_append(self.current_script.text)
         self.status_var.set("Copied to clipboard.")
