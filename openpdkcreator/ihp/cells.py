@@ -26,6 +26,22 @@ Verilog/Verilog-A model connected to it (by name match or explicit
 link) -- see ``ihp/user_models.py``'s own docstring. Unlike every real
 view above, a user model can introduce a wholly new cell name this
 family's own real files never had.
+
+**xschem/Qucs-S views** (``xschem_symbol``/``xschem_schematic``/
+``qucs_symbol``/``qucs_component``): matched by real cell **name**
+(file stem), not by family/directory name -- confirmed real, not
+assumed: ``libs.tech/xschem/`` uses different real subdirectory names
+than ``libs.ref/`` does for the very same family (``sg13g2_stdcells``,
+plural, vs. ``sg13g2_stdcell``; no ``_io``/``_sram`` xschem directory
+at all), and ``libs.tech/qucs-s/symbols/`` has no per-family split
+whatsoever, just one real, flat directory. So every real xschem/Qucs-S
+file across the *entire* real PDK is name-matched against cells this
+*family*'s own real LEF/CDL/SPICE/Verilog/Liberty/GDS views already
+established -- unlike those views (and unlike ``user_models``), a
+xschem/Qucs-S file with no matching real cell name here never
+introduces a brand-new entry; a wholly new, project-authored cell
+(symbol/schematic only, no real libs.ref view at all) is
+``ihp/library_index.py``'s own job, not this function's.
 """
 
 from __future__ import annotations
@@ -38,8 +54,11 @@ from . import gds as gds_mod
 from . import lef as lef_mod
 from . import liberty as liberty_mod
 from . import netlist as netlist_mod
+from . import qucs_sym as qucs_sym_mod
 from . import user_models as user_models_mod
 from . import verilog as verilog_mod
+from . import xschem as xschem_mod
+from . import xschem_sch as xschem_sch_mod
 
 
 @dataclass
@@ -63,6 +82,10 @@ class CellViews:
     (module, real source path, "verilog"/"veriloga") -- via a name
     match or an explicit ``UserModelLink``, see ``ihp/user_models.py``
     own docstring."""
+    xschem_symbol_source: Path | None = None
+    xschem_schematic_source: Path | None = None
+    qucs_symbol_source: Path | None = None
+    qucs_component_source: Path | None = None
 
 
 def discover_families(pdk_root: Path) -> list[str]:
@@ -178,6 +201,26 @@ def build_cell_index(
                 if real_cells is not None and cv.name in real_cells:
                     cv.gds_cell = real_cells[cv.name]
                     cv.gds_source = gds_path
+
+    # xschem/Qucs-S: enrich only cells already known from real
+    # libs.ref/ views above -- see this module's own docstring for why
+    # a real xschem/Qucs-S file with no matching real cell name here
+    # never introduces a brand-new entry (that's library_index.py's
+    # own job, not this function's).
+    if index:
+        xschem_syms = {p.stem: p for p in xschem_mod.find_sym_files(pdk_root)}
+        xschem_schs = {p.stem: p for p in xschem_sch_mod.find_sch_files(pdk_root)}
+        qucs_syms = {p.stem: p for p in qucs_sym_mod.find_symbol_geometry_files(pdk_root)}
+        qucs_comps = {p.stem: p for p in qucs_sym_mod.find_component_files(pdk_root)}
+        for name, cv in index.items():
+            if name in xschem_syms:
+                cv.xschem_symbol_source = xschem_syms[name]
+            if name in xschem_schs:
+                cv.xschem_schematic_source = xschem_schs[name]
+            if name in qucs_syms:
+                cv.qucs_symbol_source = qucs_syms[name]
+            if name in qucs_comps:
+                cv.qucs_component_source = qucs_comps[name]
 
     if user_models_by_cell:
         for cell_name, models in user_models_by_cell.items():

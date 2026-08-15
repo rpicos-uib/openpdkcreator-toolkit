@@ -136,6 +136,7 @@ from .environment_view import EnvironmentView
 from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
+from .library_manager_view import LibraryManagerView
 from .magic_tech_view import MagicTechView
 from .pdk_wizard_view import PdkWizardView
 from .rules_view import RulesView
@@ -206,6 +207,7 @@ class App(ttk.Frame):
         self._build_overview_tab()
         self._build_technology_group()
         self._build_cells_group()
+        self._build_library_manager_tab()
         self._build_simulation_group()
         self._build_settings_tab()
         self._build_wizard_tab()
@@ -694,6 +696,14 @@ class App(ttk.Frame):
         self.cells_notebook.add(cell_hub_frame, text="By Cell")
         self.cell_hub_view = CellHubView(cell_hub_frame, self)
         self.cell_hub_view.pack(fill="both", expand=True)
+
+    # -- Library Manager tab -----------------------------------------------
+
+    def _build_library_manager_tab(self):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Library Manager")
+        self.library_manager_view = LibraryManagerView(frame, self)
+        self.library_manager_view.pack(fill="both", expand=True)
 
     # -- Simulation group (ngspice) -------------------------------------------
 

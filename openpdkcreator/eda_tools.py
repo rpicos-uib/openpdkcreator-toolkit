@@ -187,6 +187,22 @@ TOOL_REGISTRY: tuple[Tool, ...] = (
         ),
     ),
     Tool(
+        id="qucs-s", name="Qucs-S", category="schematic",
+        purpose="Alternative schematic capture + circuit simulation (Qucs-S own .sym/.xml formats).",
+        view="Qucs-S symbol/component views (libs.tech/qucs-s/symbols/)", required=False,
+        check_commands=("qucs-s",), version_flags=("--version",),
+        install=InstallGuidance(
+            package_manager={"debian": "sudo apt install qucs-s"},
+            docs_url="https://github.com/ra3xdh/qucs_s",
+            notes="Real, confirmed limit (not fixed here) -- checked directly against its "
+                  "own real, fetched qucs/main.cpp: there is no CLI way to open a specific "
+                  "file in the interactive GUI. -i FILENAME is only read when --netlist/"
+                  "--print (batch conversion) is also given; with neither set, main() goes "
+                  "straight to QucsMain->show() and never consults -i. A plain 'qucs-s' "
+                  "launch always opens blank -- File > Open is the only real way in.",
+        ),
+    ),
+    Tool(
         id="ngspice", name="ngspice", category="analog_sim",
         purpose="Analog/SPICE circuit simulation; primary simulator for spice/veriloga views.",
         view="spice, veriloga views", required=True,
@@ -480,7 +496,7 @@ def install_command_for(tool: Tool, package_manager: str | None = None) -> str |
 
 
 def resolve_launch(
-    tool: Tool, binary_path: str, repo_root: Path = REPO_ROOT
+    tool: Tool, binary_path: str, repo_root: Path = REPO_ROOT, extra_argv: tuple[str, ...] = (),
 ) -> tuple[list[str], Path]:
     """The real argv and working directory to ``subprocess.Popen`` to open
     *tool* (found at the already-detected *binary_path* -- never
@@ -488,13 +504,24 @@ def resolve_launch(
     for it, or as a bare binary in the project root otherwise. Writes
     ``launch.startup_script`` to a fresh temp file when present (caller
     doesn't need to clean it up -- it's a small, ordinary temp file, not
-    a resource requiring guaranteed deletion)."""
+    a resource requiring guaranteed deletion).
+
+    *extra_argv*: real, already-resolved paths/args appended at the
+    very end (after any ``startup_script`` temp file), for launching a
+    tool pointed at one specific, per-call file -- e.g.
+    ``gui/library_manager_view.py``'s own **Open** action, which needs
+    a real cell's own schematic/GDS path, not just whatever's
+    statically pre-baked in a tool's own ``LaunchGuidance`` (only
+    Magic/KLayout have one at all; most tools -- including xschem and
+    the new ``qucs-s`` entry -- have none, and now still launch
+    correctly pointed at *extra_argv* via the ``guidance is None``
+    path below, not just as a bare, unpointed binary)."""
 
     guidance = tool.launch
     if guidance is None:
-        return [binary_path], repo_root
+        return [binary_path, *extra_argv], repo_root
     if guidance.requires_path and not Path(guidance.requires_path.format(repo_root=repo_root)).is_file():
-        return [binary_path], repo_root
+        return [binary_path, *extra_argv], repo_root
 
     argv = [binary_path] + [arg.format(repo_root=repo_root) for arg in guidance.argv]
     if guidance.startup_script:
@@ -505,6 +532,7 @@ def resolve_launch(
         with handle:
             handle.write(guidance.startup_script.format(repo_root=repo_root))
         argv.append(handle.name)
+    argv.extend(extra_argv)
     return argv, (repo_root / guidance.cwd).resolve()
 
 

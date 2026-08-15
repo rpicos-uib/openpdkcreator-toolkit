@@ -74,8 +74,13 @@ toolchain/the real, downloaded IHP data all live there, not on the
 bare host):
 
 ```bash
-podman exec -e DISPLAY=:1 <container-name> bash tests/run_all.sh
+podman exec -e DISPLAY=:1 <container-name> bash -lc 'bash tests/run_all.sh'
 ```
+
+(the outer `bash -lc` matters -- see `tests/README.md` for a real,
+confirmed case where skipping it silently hides an installed tool from
+`eda_tools.py`'s own detection, hanging a test on an unmockable modal
+dialog rather than failing cleanly.)
 
 See `tests/README.md` for what each test needs, which ones exercise a
 throwaway `/tmp/` PDK versus the real, downloaded one, and the shape
@@ -146,7 +151,9 @@ Tabs are grouped by what they represent, not left flat: **Overview**
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
-data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
+data -- **LEF** and **By Cell** as sub-tabs), **Library Manager** (a
+Cadence-style Libraries/Cells/Views browser spanning every domain at
+once -- see its own section below), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem** -- a
 **Symbols** sub-tab (a real symbol's own device-attribute block,
 read-only; an **editable** real pin list; and a real, interactive
@@ -201,6 +208,74 @@ from **Simulation > User Models** -- and a wholly new, user-defined
 cell name (not present in the real PDK at all) still gets its own row
 here, so authoring a brand-new cell's model doesn't require first
 faking a real view for it.
+
+**Library Manager** is a Cadence-style Libraries | Cells | Views
+browser (`ihp/library_index.py`/`gui/library_manager_view.py`),
+spanning every real domain at once, not just `libs.ref/`'s own six
+(unlike **By Cell**, it also shows xschem Symbols/Schematics and
+Qucs-S Symbols/Components). **A real design decision, not a default**:
+new, project-authored libraries are tracked in a small, real,
+committed index (`library_index.yaml` at the project root) rather than
+forced into a directory convention mirroring `libs.ref/<family>/` --
+because real family naming is *already* inconsistent across this
+PDK's own real tool domains (`libs.ref/sg13g2_stdcell`, singular, vs.
+`libs.tech/xschem/sg13g2_stdcells`, plural, with no `_io`/`_sram`
+xschem directory at all; `libs.tech/qucs-s/symbols/` has no per-family
+split whatsoever), so mirroring it would have bought nothing real.
+Cross-domain cell matching goes by cell **name** (file stem)
+instead, the same real pattern the existing GDS matching already used.
+**New Library...**/**New Cell...** register a name; **Create** writes
+a real, minimal, valid new file for the four view kinds with genuine
+create-from-scratch support (xschem Symbol/Schematic, Qucs-S
+Symbol/Component -- the same real limit as everywhere else in this
+project: LEF/CDL/SPICE/Verilog/Liberty writers all explicitly refuse a
+brand-new entry) to a real, tracked `libraries/<library>/` directory;
+**Add...** registers a real, *existing* file for *any* view kind,
+anywhere on disk -- the actual point of tracking file locations
+instead of enforcing structure. **Automatic tracking**: every refresh
+also scans a library's own `libraries/<library>/` directory for real
+files this app didn't itself register (e.g. a real "Save As" from
+xschem directly into that directory) and registers them immediately,
+content-sniffed to tell a real xschem `.sym` from a real Qucs-S one
+(both share the same real extension) -- confirmed real, not assumed: a
+real xschem `.sym` always starts with `v {xschem`, a real Qucs-S one
+starts with a bare drawing tag, no XML declaration at all.
+
+**Open** launches the real, corresponding tool pointed at a view's own
+real file, via a small, additive extension to `eda_tools.resolve_launch`
+(a new `extra_argv` parameter, reused, not a separate launch
+mechanism) -- each real invocation confirmed this session, from the
+real, fetched FOSS source of each tool, not assumed:
+- **Schematic/Symbol** -> `xschem <file>` -- a bare positional
+  filename **is** real and supported (confirmed by fetching xschem's
+  own real `src/options.c`; its `--help` prints nothing in this
+  container, so this had to be verified from source).
+- **GDS/Layout** -> two real, verified options: **Open in KLayout**
+  (`klayout -l <real .lyp> <real .gds>`, its own already-existing
+  static launch guidance plus the new `extra_argv`) and **Open in
+  Magic** (a real, freshly-written 2-line Tcl script -- `gds read
+  <path>` then `load <cell>` -- verified live in this project's own
+  container: reading a real IHP GDS this way printed every real cell
+  name inside it). No CLI flag exists on either tool to jump straight
+  to one cell inside a multi-cell GDS -- a real, accepted limit.
+- **Qucs-S Symbol/Component** -> launches `qucs-s`, but **does not**
+  claim to open the file: confirmed real, from Qucs-S's own fetched
+  `qucs/main.cpp`, there is no CLI way to open a specific file in its
+  interactive GUI (`-i` only applies in batch `--netlist`/`--print`
+  mode) -- said plainly to the user before launching, not glossed
+  over. A new `qucs-s` entry in `eda_tools.py`'s own tool registry
+  records this real limit too (previously absent from the registry
+  entirely, even though the real binary was already installed).
+- **LEF/CDL/SPICE/Verilog/Liberty** -> the existing in-app
+  `file_view_dialog`, matching **By Cell**'s own precedent -- no real
+  external-tool identity exists for viewing a text snippet.
+
+**Prior art, checked, not assumed to be novel**: IHP-GmbH's own
+[LibMan](https://github.com/IHP-GmbH/LibMan) (a separate, standalone
+Qt/C++ desktop app, actively maintained) does something similar --
+its own real "project file" also maps library names to real
+directory *locations* rather than enforcing a fixed structure,
+independently arriving at the same real design choice made here.
 
 Every real list this size warrants it (Layers, DRC Rules, LEF Macros,
 By Cell, Magic Types) has a live **Filter** box (`gui/list_filter.py`
@@ -1356,6 +1431,51 @@ editor yet -- see Future Work.
     now sets `self.drc_root`/re-extracts directly rather than assuming
     `load()` reached that point, avoiding a real `AttributeError` on
     the status-line message.
+- **Library Manager** (`ihp/library_index.py`/`gui/
+  library_manager_view.py`) -- see its own GUI-structure section above
+  for the full design (index-based, not directory-convention-based;
+  the real, per-tool "open a specific file" research). Additional
+  detail worth recording here:
+  - `ihp/cells.py`'s `CellViews`/`build_cell_index` gained four new
+    fields (xschem Symbol/Schematic, Qucs-S Symbol/Component), matched
+    by cell **name** across every real subdirectory under
+    `libs.tech/xschem/` and the flat `libs.tech/qucs-s/symbols/` --
+    real, additive, so **By Cell** could show these too in the future
+    (not done this pass, tracked below) without any new plumbing.
+  - **Found and fixed a real Tk timing bug** while testing **Create**
+    twice in a row on the same cell: rebuilding the Libraries/Cells
+    trees and re-selecting the "same" library re-fires
+    `<<TreeviewSelect>>` (Tk treats a fresh insert + reselect of the
+    same iid as a real selection change, and only dispatches the
+    virtual event on the next real event-loop pass, not synchronously)
+    -- which was running `_on_library_select`'s own real "the user
+    picked a different library" reset of the current cell to `None`,
+    even though the library never actually changed. Fixed at the root:
+    that handler now only resets the current cell when the reported
+    library selection *actually* differs from before.
+  - Verified end-to-end, for real: created a new project library, a
+    new cell, a symbol and a schematic for it (confirming real files
+    land under `libraries/<library>/` and get registered), confirmed a
+    real view kind with no create-from-scratch support (LEF) stays
+    honestly absent with no fake button, resolved real, correct argv
+    for xschem/KLayout/Magic opens (including the real, generated
+    Magic GDS-loading Tcl script) without actually blocking on a
+    launched GUI window (`subprocess.Popen`/`eda_tools.check_tool`
+    both mocked at the right layer -- an earlier attempt that mocked
+    `subprocess.Popen` globally broke `check_tool`'s own, unrelated
+    internal use of `subprocess.run` with a confusing `TypeError`, a
+    real test-design lesson, not a real application bug), registered a
+    real, external, hand-authored file via **Add...** for LEF, and
+    confirmed a file written directly into a library's own directory
+    (simulating an external tool's "Save As") gets automatically
+    tracked on the next refresh with no explicit click.
+  - **Prior art check** (web search + `gh api`, not assumed novel):
+    IHP-GmbH's own [LibMan](https://github.com/IHP-GmbH/LibMan) -- a
+    separate, standalone Qt/C++ desktop app, actively maintained,
+    last updated this same month -- does something similar, and its
+    own real "project file" independently arrived at the same real
+    design choice (track library locations, don't enforce a directory
+    convention) this session was steered toward.
 
 ## Future work
 
@@ -1870,6 +1990,17 @@ models, ...), not just read/display layers. Concretely, still open:
   A **New Rule** of one of these six is still real, editable metadata
   -- it just can't be exported into a runnable check yet, reported
   honestly (rule ID + reason) rather than silently dropped.
+- **Surface `library_index.yaml`'s own registered entries inside By
+  Cell too** -- currently real-`pdk_root`-only there; a natural, small
+  extension once the Library Manager's own real usage patterns settle,
+  not required for its first pass.
+- **Real layout-view *creation*** (blocked on this codebase having no
+  Magic `.mag` file parser at all yet -- GDS is real, view-only).
+- **Real per-cell navigation inside a multi-cell GDS opened in
+  KLayout** -- no CLI flag exists for it; a real, accepted limit today
+  (Magic's own `gds read`/`load` combo, used for the Library Manager's
+  own **Open in Magic**, doesn't have this limit, but Magic has no
+  layout *editing* story for a real, unparsed `.mag` cell either).
 
 ## License
 

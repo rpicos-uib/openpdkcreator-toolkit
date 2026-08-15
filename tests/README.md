@@ -14,16 +14,24 @@ there -- see the main README's own Quickstart for
 `./start_eda_container.sh`). They don't run on the bare host. Each
 script hardcodes `sys.path.insert(0, "/foss/designs")` (the
 container's own bind-mounted project root), so run them from inside a
-shell in that container, e.g.:
+shell in that container -- **through a real login shell** (`bash -lc`),
+not a bare `podman exec ... python3 ...`: the container's own EDA
+toolchain PATH is set up by its profile scripts, only sourced for a
+login shell. A bare `podman exec` invocation without one is missing
+that PATH -- confirmed real, not theoretical: `eda_tools.check_tool`
+silently reports a real, installed tool (e.g. `qucs-s`) as not found
+this way, and any test exercising it then blocks forever on a real,
+unmockable `messagebox.showerror` modal waiting for a click that never
+comes in a headless run. e.g.:
 
 ```bash
-podman exec -e DISPLAY=:1 <container-name> python3 tests/test_pdk_wizard.py
+podman exec -e DISPLAY=:1 <container-name> bash -lc 'python3 tests/test_pdk_wizard.py'
 ```
 
 or, to run the whole suite in one go:
 
 ```bash
-podman exec -e DISPLAY=:1 <container-name> bash tests/run_all.sh
+podman exec -e DISPLAY=:1 <container-name> bash -lc 'bash tests/run_all.sh'
 ```
 
 ## What each test needs
