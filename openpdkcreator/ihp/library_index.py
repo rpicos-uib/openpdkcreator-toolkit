@@ -49,6 +49,9 @@ from pathlib import Path
 import yaml
 
 from . import cells as cells_mod
+from . import lef as lef_mod
+from . import verilog as verilog_mod
+from . import xschem as xschem_mod
 
 REGISTRY_FILENAME = "library_index.yaml"
 LIBRARIES_DIRNAME = "libraries"
@@ -70,15 +73,22 @@ VIEW_KIND_LABELS: dict[str, str] = {
     "cdl": "CDL",
     "spice": "SPICE",
     "verilog": "Verilog",
+    "veriloga": "Verilog-A",
     "liberty": "Liberty",
     "gds": "GDS/Layout",
 }
 VIEW_KIND_ORDER: tuple[str, ...] = tuple(VIEW_KIND_LABELS.keys())
 """Real create-from-scratch support exists (this session, verified)
-only for these four -- ``ihp/cells.py``'s own docstring/every writer's
-own real ``start_line == 0`` skip explains why the rest don't yet."""
+only for these six -- ``ihp/cells.py``'s own docstring/every other
+writer's own real ``start_line == 0`` skip explains why the rest
+don't yet. Verilog/Verilog-A were added later than the original four
+xschem/Qucs-S ones -- see ``create_new_verilog_file``/
+``create_new_veriloga_file`` in ``ihp/verilog.py`` and
+``infer_ports_for_cell`` below for how a newly-created one gets a
+real cell's own already-known pins pre-populated, not an empty
+template."""
 CREATABLE_VIEW_KINDS: frozenset[str] = frozenset(
-    {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component"}
+    {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga"}
 )
 
 
@@ -252,6 +262,77 @@ def merged_entries(pdk_root: Path, project_root: Path, library: str) -> dict[tup
 
 def cells_in_library(pdk_root: Path, project_root: Path, library: str) -> list[str]:
     return sorted({cell for cell, _view_kind in merged_entries(pdk_root, project_root, library)})
+
+
+_DIRECTION_TO_VERILOG: dict[str, str] = {
+    "input": "input", "in": "input",
+    "output": "output", "out": "output",
+    "inout": "inout",
+}
+"""Normalizes the two real, confirmed pin-direction vocabularies this
+project actually has -- LEF's own real ``DIRECTION`` values
+(``INPUT``/``OUTPUT``/``INOUT``, uppercase, confirmed via
+``grep -h DIRECTION .../sg13g2_stdcell/lef/*.lef`` -- note LEF also has
+an unrelated, same-keyworded ``DIRECTION HORIZONTAL``/``VERTICAL`` at
+the *layer* level, never reached here since this only ever reads
+``LefPin.direction``, not layer text) and xschem's own real ``dir=``
+values (``in``/``out``/``inout``, lowercase, confirmed via
+``grep -oh dir=... .../sg13g2_stdcells/*.sym``) -- down to Verilog's own
+real ``input``/``output``/``inout`` keywords. Matched case-insensitively
+so either vocabulary works through the same table. An unrecognized
+value normalizes to ``""`` (honestly undeclared), never guessed."""
+
+
+def _normalize_direction(raw: str) -> str:
+    return _DIRECTION_TO_VERILOG.get((raw or "").strip().lower(), "")
+
+
+def infer_ports_for_cell(pdk_root: Path, project_root: Path, library: str, cell: str) -> list[tuple[str, str]]:
+    """Best-effort real port list (``[(name, direction), ...]``,
+    direction one of ``"input"``/``"output"``/``"inout"``/``""``) for
+    *cell*, used to pre-populate a newly **Create**d Verilog/Verilog-A
+    view with that cell's own already-known real pins instead of an
+    empty template -- see ``ihp/verilog.py``'s own
+    ``create_new_verilog_file``/``create_new_veriloga_file``.
+
+    Tries each of this cell's own already-known real/registered views,
+    in priority order, stopping at the first one with a real, non-empty
+    port list -- never inventing a name that isn't in one of them:
+
+    1. **LEF** -- the most authoritative real *physical* pin list for
+       an actual, placeable cell.
+    2. **xschem symbol** -- the schematic-level pin list, for a cell
+       with no LEF yet (e.g. a still-schematic-only project cell).
+    3. **An existing Verilog module of the same name** -- covers the
+       real case of creating a Verilog-A view for a cell that already
+       has a plain digital Verilog one, or vice versa.
+
+    Returns ``[]`` (an honestly empty template) for a wholly new cell
+    with no other real view yet."""
+
+    entries = merged_entries(pdk_root, project_root, library)
+
+    lef_entry = entries.get((cell, "lef"))
+    if lef_entry is not None and lef_entry.path.is_file():
+        lef_file = lef_mod.parse_lef_file(lef_entry.path)
+        macro = next((m for m in lef_file.macros if m.name == cell), None)
+        if macro is not None and macro.pins:
+            return [(pin.name, _normalize_direction(pin.direction)) for pin in macro.pins]
+
+    xschem_entry = entries.get((cell, "xschem_symbol"))
+    if xschem_entry is not None and xschem_entry.path.is_file():
+        symbol = xschem_mod.parse_sym_file(xschem_entry.path)
+        if symbol.pins:
+            return [(pin.name, _normalize_direction(pin.direction)) for pin in symbol.pins]
+
+    for view_kind in ("verilog", "veriloga"):
+        verilog_entry = entries.get((cell, view_kind))
+        if verilog_entry is not None and verilog_entry.path.is_file():
+            module = next((m for m in verilog_mod.find_modules(verilog_entry.path) if m.name == cell), None)
+            if module is not None and module.ports:
+                return [(p.name, p.direction) for p in module.ports]
+
+    return []
 
 
 # -- auto-tracking: pick up a real file this app didn't itself create -------

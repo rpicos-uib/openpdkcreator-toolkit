@@ -225,11 +225,31 @@ split whatsoever), so mirroring it would have bought nothing real.
 Cross-domain cell matching goes by cell **name** (file stem)
 instead, the same real pattern the existing GDS matching already used.
 **New Library...**/**New Cell...** register a name; **Create** writes
-a real, minimal, valid new file for the four view kinds with genuine
+a real, minimal, valid new file for the six view kinds with genuine
 create-from-scratch support (xschem Symbol/Schematic, Qucs-S
-Symbol/Component -- the same real limit as everywhere else in this
-project: LEF/CDL/SPICE/Verilog/Liberty writers all explicitly refuse a
-brand-new entry) to a real, tracked `libraries/<library>/` directory;
+Symbol/Component, **Verilog**, **Verilog-A** -- the same real limit as
+everywhere else in this project for the rest: LEF/CDL/SPICE/Liberty
+writers all explicitly refuse a brand-new entry) to a real, tracked
+`libraries/<library>/` directory -- except Verilog/Verilog-A, which
+default instead into the already-established `user_models/{verilog,
+veriloga}/` convention (see **Simulation > User Models** below), giving
+a newly-created one free integration with its own "User Models"
+column and OSDI-snippet generation. **If the cell being created for
+already has another known view with real pins** -- LEF first (the most
+authoritative real physical source), then an xschem symbol, then an
+existing Verilog/Verilog-A module of the same name
+(`ihp/library_index.py`'s own `infer_ports_for_cell`) -- the new
+module's own port declaration is pre-populated with those real pins
+(direction normalized from either real vocabulary -- LEF's uppercase
+`INPUT`/`OUTPUT`/`INOUT`, xschem's lowercase `in`/`out`/`inout` -- down
+to Verilog's own keywords) instead of an empty template. A generated
+Verilog-A file declares every port `inout`+`electrical` (real Verilog-A
+has no directional port concept) and opens with a real
+`` `include "disciplines.vams" `` -- confirmed to compile via a live
+`openvaf` invocation in this project's own container, with no local
+`discipline.h` copy needed (OpenVAF ships that discipline set
+natively, unlike IHP's own real `.va` files, which each carry their
+own local copy under the older filename).
 **Add...** registers a real, *existing* file for *any* view kind,
 anywhere on disk -- the actual point of tracking file locations
 instead of enforcing structure. **Automatic tracking**: every refresh
@@ -1476,6 +1496,57 @@ editor yet -- see Future Work.
     own real "project file" independently arrived at the same real
     design choice (track library locations, don't enforce a directory
     convention) this session was steered toward.
+- **Verilog/Verilog-A editors for the Library Manager**
+  (`ihp/verilog.py`'s new `create_new_verilog_file`/
+  `create_new_veriloga_file`, `ihp/library_index.py`'s new
+  `infer_ports_for_cell`) -- **Create** for these two now writes a
+  real, minimal, valid skeleton pre-populated with a cell's own already
+  -known real pins (not an empty template) whenever one exists.
+  - **Real Verilog-A structure, empirically confirmed, not assumed**:
+    read IHP's own real `libs.tech/verilog-a/mosvar/mosvar.va` and
+    `r3_cmc/r3_cmc.va` -- every real port is declared both `inout` and
+    `electrical` (a real Verilog-A analog terminal has no directional
+    concept the way a digital Verilog port does). Then verified live,
+    with a real `openvaf` compile in this project's own container,
+    that a minimal file using the modern `` `include
+    "disciplines.vams" `` (rather than IHP's own real files' local
+    `discipline.h` copy) compiles cleanly with no external file
+    dependency -- confirmed both ways: the same file *without* any
+    include fails (`'electrical' was not found in the current scope`),
+    *with* it produces a real, working `.osdi`.
+  - **Pin-direction normalization across two real, confirmed
+    vocabularies**: LEF's own real `DIRECTION` (`INPUT`/`OUTPUT`/
+    `INOUT`, uppercase -- confirmed via a direct grep of real
+    `sg13g2_stdcell/lef/*.lef`, being careful to only read
+    `LefPin.direction`, never LEF's unrelated layer-level `DIRECTION
+    HORIZONTAL`/`VERTICAL`) and xschem's own real `dir=` (`in`/`out`/
+    `inout`, lowercase -- confirmed via a direct grep of real
+    `sg13g2_stdcells/*.sym`), both mapped down to Verilog's own real
+    `input`/`output`/`inout` keywords.
+  - `infer_ports_for_cell` tries a cell's own already-known views in
+    priority order -- LEF (most authoritative real physical source),
+    then xschem symbol, then an existing Verilog/Verilog-A module of
+    the same name -- stopping at the first real, non-empty port list;
+    returns `[]` (an honestly empty template) for a wholly new cell.
+  - A newly-**Create**d Verilog/Verilog-A view defaults into the
+    already-established `user_models/{verilog,veriloga}/` convention
+    (not `libraries/<library>/`, unlike every other creatable view kind
+    here) -- real, project-authored model content, so it's picked up
+    for free by **Simulation > User Models**'s own name-matching (its
+    "User Models" column, OSDI-snippet generation) with no new
+    plumbing. `library_index.yaml` still tags it with whichever library
+    was open when it was created -- registration is just a grouping
+    label, decoupled from physical file location, matching this whole
+    index's own real design.
+  - Verified end-to-end, for real: a project cell with only a
+    hand-authored xschem symbol (real `dir=in`/`dir=out` pins) got a
+    newly-**Create**d Verilog-A view with those same real pins
+    correctly declared `inout`/`electrical`, and a newly-**Create**d
+    Verilog view with the same real pins correctly declared
+    `input`/`output`; separately confirmed `infer_ports_for_cell`
+    against a real, known IHP stdcell (`sg13g2_inv_1`) pulls its real
+    LEF pins (`A` input, `Y` output, `VDD`/`VSS` inout) with correctly
+    normalized directions.
 
 ## Future work
 
@@ -1961,14 +2032,15 @@ models, ...), not just read/display layers. Concretely, still open:
   work for a benefit that's mostly just avoiding ~150 lines of
   duplication. Worth re-checking again if the *data models themselves*
   (not just the code around them) start to diverge.
-- **Create-from-scratch flows for Verilog/Liberty/CDL-SPICE/ngspice
-  Models**, surfaced honestly (not glossed over) by the **PDK Wizard**
-  tab's own legend/gap notes: Layers, Magic Tech, LEF (a valid empty
-  library only -- see its own gap note), xschem Symbols/Schematics,
-  and Qucs-S Symbols/Components now all have a real "New..."/**Create
-  File** action; these four still need a real starting file already on
-  disk (copied from a template/reference PDK, or hand-written) before
-  this tool can load and edit it.
+- **Create-from-scratch flows for Liberty/CDL-SPICE/ngspice Models**,
+  surfaced honestly (not glossed over) by the **PDK Wizard** tab's own
+  legend/gap notes: Layers, Magic Tech, LEF (a valid empty library only
+  -- see its own gap note), xschem Symbols/Schematics, Qucs-S
+  Symbols/Components, and (Library Manager only, see above) Verilog/
+  Verilog-A now all have a real "New..."/**Create File**/**Create**
+  action; these three still need a real starting file already on disk
+  (copied from a template/reference PDK, or hand-written) before this
+  tool can load and edit it.
 - **A real "New Macro" action for LEF**, plus extending
   `ihp/lef_writer.py`'s own `render_lef_file` to write one back (today
   it explicitly refuses -- `if macro.start_line == 0: continue`,

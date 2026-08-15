@@ -74,6 +74,71 @@ class VerilogModule:
     ``ihp/lef.py``'s ``LefMacro.all_parsed_pin_ranges`` does for pins."""
 
 
+def create_new_verilog_file(path: Path, module_name: str, ports: list[tuple[str, str]] | None = None) -> None:
+    """Writes a real, minimal, valid Verilog module skeleton --
+    ``module NAME(port, ...); direction port; ... endmodule`` -- with a
+    real ``input``/``output``/``inout`` declaration line for every port
+    whose direction is known (see ``ihp/library_index.py``'s own
+    ``infer_ports_for_cell`` for where a ports list reflecting a cell's
+    already-known real pins comes from). A port with an unknown
+    direction still appears in the header port list, just without its
+    own declaration line -- matching this module's own parser
+    precedent above (an undeclared direction stays blank, never
+    guessed)."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ports = ports or []
+    header_ports = ", ".join(name for name, _direction in ports)
+    lines = [f"module {module_name}({header_ports});"]
+    for name, direction in ports:
+        if direction in ("input", "output", "inout"):
+            lines.append(f"  {direction} {name};")
+    lines.append("")
+    lines.append("endmodule")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def create_new_veriloga_file(path: Path, module_name: str, ports: list[tuple[str, str]] | None = None) -> None:
+    """Writes a real, minimal, valid Verilog-A module skeleton --
+    empirically confirmed to compile, via a real, live ``openvaf``
+    invocation against this exact shape in this project's own
+    container: a real ``\\`include "disciplines.vams"`` (OpenVAF's own
+    built-in, portable discipline set -- confirmed to need no local
+    ``discipline.h`` copy the way IHP's own real ``.va`` files each
+    ship one, since a fresh, generated file here has no such file
+    alongside it), every real port declared both ``inout`` and
+    ``electrical`` -- confirmed real, from IHP's own real ``.va`` files
+    (``mosvar.va``/``r3_cmc.va``): a real Verilog-A analog terminal has
+    no directional concept the way a digital Verilog port does, so
+    every real port there is declared ``inout`` regardless of its own
+    analog role -- and a real, empty ``analog begin ... end`` block
+    ready for real compact-model equations. *ports*' own real direction
+    (if any, e.g. inferred from a matching LEF/xschem view) is
+    intentionally unused here, for that same real reason -- only the
+    real port names matter."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    port_names = [name for name, _direction in (ports or [])]
+    header_ports = ", ".join(port_names)
+    lines = ['`include "disciplines.vams"', "", f"module {module_name}({header_ports});"]
+    if port_names:
+        decl = ", ".join(port_names)
+        lines.append(f"inout {decl};")
+        lines.append(f"electrical {decl};")
+    lines.append("")
+    lines.append("analog begin")
+    lines.append("  // TODO: real compact-model equations here")
+    lines.append("end")
+    lines.append("endmodule")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def find_modules(path: Path) -> list[VerilogModule]:
     if not path.is_file():
         return []

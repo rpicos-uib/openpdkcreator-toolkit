@@ -33,13 +33,23 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   view) -- no real external-tool identity for these, matching
   ``cell_hub_view.py``'s own existing precedent.
 
-**Create** only appears for the four view kinds with real
+**Create** only appears for the six view kinds with real
 create-from-scratch support (``ihp/library_index.py``'s own
 ``CREATABLE_VIEW_KINDS`` -- xschem Symbol/Schematic, Qucs-S
-Symbol/Component); every other kind still gets a real **Add...**
-button. A created view's real file defaults to
-``<project_root>/libraries/<library>/<cell>.<ext>`` (a real, tracked,
-but entirely optional convention -- nothing elsewhere requires it).
+Symbol/Component, Verilog, Verilog-A); every other kind still gets a
+real **Add...** button. A created xschem/Qucs-S view's real file
+defaults to ``<project_root>/libraries/<library>/<cell>.<ext>`` (a
+real, tracked, but entirely optional convention -- nothing elsewhere
+requires it). A created **Verilog**/**Verilog-A** view instead defaults
+into the already-established ``user_models/{verilog,veriloga}/``
+convention (``ihp/user_models.py``) -- real, project-authored model
+content, giving it free integration with By Cell's own "User Models"
+column and OSDI-snippet generation. Either way, if the cell being
+created for already has another real/registered view with known real
+pins (LEF, then an xschem symbol, then an existing Verilog/Verilog-A
+module of the same name -- ``ihp/library_index.py``'s own
+``infer_ports_for_cell``), the new module/port declaration is
+pre-populated with those real pins instead of an empty template.
 
 **Add...** registers a real, *existing* file for any view kind at all
 -- including the six with no real create-from-scratch support -- and
@@ -72,6 +82,8 @@ from .. import eda_tools
 from .. import export as export_mod
 from ..ihp import library_index as li_mod
 from ..ihp import qucs_sym as qucs_sym_mod
+from ..ihp import user_models as user_models_mod
+from ..ihp import verilog as verilog_mod
 from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
 from .file_view_dialog import view_file_dialog
@@ -97,19 +109,25 @@ _EXT_FOR_VIEW_KIND: dict[str, str] = {
     "cdl": ".cdl",
     "spice": ".spice",
     "verilog": ".v",
+    "veriloga": ".va",
     "liberty": ".lib",
     "gds": ".gds",
 }
 """Every real view kind's own extension -- used by **Create** (the
-four ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
-file-dialog filter (all ten, so browsing for an existing LEF/GDS/...
+six ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
+file-dialog filter (all eleven, so browsing for an existing LEF/GDS/...
 file to register starts pre-filtered too)."""
 
 
-def _create_view_file(view_kind: str, path: Path, cell_name: str) -> None:
+def _create_view_file(
+    view_kind: str, path: Path, cell_name: str, ports: list[tuple[str, str]] | None = None,
+) -> None:
     """Dispatches to the one real ``create_new_*`` function for
     *view_kind* -- only ever called for a key in
-    ``li_mod.CREATABLE_VIEW_KINDS``."""
+    ``li_mod.CREATABLE_VIEW_KINDS``. *ports* (real ``(name,
+    direction)`` pairs, from ``li_mod.infer_ports_for_cell``) only
+    matters for Verilog/Verilog-A -- every other real create-from-
+    scratch view here has no real per-cell pin data to seed from."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     if view_kind == "xschem_symbol":
@@ -120,6 +138,10 @@ def _create_view_file(view_kind: str, path: Path, cell_name: str) -> None:
         qucs_sym_mod.create_new_symbol_geometry_file(path)
     elif view_kind == "qucs_component":
         qucs_sym_mod.create_new_component_file(path, cell_name)
+    elif view_kind == "verilog":
+        verilog_mod.create_new_verilog_file(path, cell_name, ports)
+    elif view_kind == "veriloga":
+        verilog_mod.create_new_veriloga_file(path, cell_name, ports)
     else:
         raise ValueError(f"{view_kind!r} has no real create-from-scratch support")
 
@@ -407,25 +429,55 @@ class LibraryManagerView(ttk.Frame):
         self.current_library, self.current_cell = library, cell
         self.refresh_views()
 
+    def _default_create_path(self, view_kind: str) -> Path:
+        ext = _EXT_FOR_VIEW_KIND[view_kind]
+        # Verilog/Verilog-A views created here default into the
+        # already-established ``user_models/`` convention
+        # (``ihp/user_models.py``), not ``libraries/<library>/`` --
+        # this is real, project-authored model content, and landing it
+        # there gives it free integration with By Cell's own "User
+        # Models" column and the OSDI-snippet generation, both of which
+        # already auto-match a user model to a cell by name.
+        # ``register_entry`` below still tags it with the current
+        # library regardless -- registration is just a grouping label,
+        # decoupled from physical file location, matching this whole
+        # index's own real design (see ``ihp/library_index.py``'s own
+        # docstring).
+        if view_kind == "verilog":
+            root = user_models_mod.user_models_root(self.project_root) / user_models_mod.VERILOG_DIRNAME
+        elif view_kind == "veriloga":
+            root = user_models_mod.user_models_root(self.project_root) / user_models_mod.VERILOGA_DIRNAME
+        else:
+            root = self.project_root / LIBRARIES_DIRNAME / self.current_library
+        return root / f"{self.current_cell}{ext}"
+
     def _create_view(self, view_kind: str):
         if self.current_library is None or self.current_cell is None:
             return
-        ext = _EXT_FOR_VIEW_KIND[view_kind]
-        default_path = (
-            self.project_root / LIBRARIES_DIRNAME / self.current_library / f"{self.current_cell}{ext}"
-        )
+        default_path = self._default_create_path(view_kind)
         if default_path.is_file():
             messagebox.showerror("Create", f"{default_path} already exists.", parent=self)
             return
+        ports: list[tuple[str, str]] | None = None
+        if view_kind in ("verilog", "veriloga"):
+            ports = li_mod.infer_ports_for_cell(
+                self.app.pdk_root, self.project_root, self.current_library, self.current_cell,
+            )
         try:
-            _create_view_file(view_kind, default_path, self.current_cell)
+            _create_view_file(view_kind, default_path, self.current_cell, ports)
         except (FileExistsError, OSError, ValueError) as exc:
             messagebox.showerror("Create", str(exc), parent=self)
             return
         library, cell = self.current_library, self.current_cell
         li_mod.register_entry(self.project_root, library, cell, view_kind, default_path)
         self._refresh_preserving_selection(library, cell)
-        self.status_var.set(f"Created {li_mod.VIEW_KIND_LABELS[view_kind]} at {default_path}.")
+        if ports:
+            self.status_var.set(
+                f"Created {li_mod.VIEW_KIND_LABELS[view_kind]} at {default_path} "
+                f"with {len(ports)} real pin(s) from an existing view."
+            )
+        else:
+            self.status_var.set(f"Created {li_mod.VIEW_KIND_LABELS[view_kind]} at {default_path}.")
 
     def _add_view(self, view_kind: str):
         """Registers a real, existing file for this view -- unlike
