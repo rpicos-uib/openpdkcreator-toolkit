@@ -105,6 +105,28 @@ def find_lib_files(pdk_root: Path) -> list[Path]:
     return sorted((pdk_root / "libs.tech" / "ngspice" / "models").glob("*.lib"))
 
 
+def create_new_lib_file(path: Path) -> None:
+    """Writes a minimal, valid, real empty ngspice ``.lib`` skeleton --
+    a real, bare comment line, no ``.model``/``.subckt``/``.LIB``
+    statements. Genuinely usable immediately afterward, not just a
+    stub: ngspice's own real ``.lib``/``.include`` grammar has no
+    mandatory header (unlike LEF's ``VERSION``/Magic's ``tech``
+    section) -- a real file with nothing but a comment parses cleanly
+    to zero real models/subckts/corners here, the same honest "empty,
+    not broken" result ``parse_lib_file`` already gives a real file
+    with genuinely nothing in it. *path* must sit under
+    ``libs.tech/ngspice/models/`` to be found again by
+    ``find_lib_files`` above. No editor exists for adding real
+    ``.model``/``.subckt`` content from inside this GUI yet -- a real,
+    separate future work, matching every other read-only-content
+    domain here (see README's own gap note)."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("* New, empty ngspice model library.\n", encoding="utf-8")
+
+
 def _join_plus_continuations(lines: list[str]) -> list[str]:
     """Real ngspice ``.lib`` statements wrap across lines with a
     *leading* ``+`` marker on the continuation line -- SPICE's own,

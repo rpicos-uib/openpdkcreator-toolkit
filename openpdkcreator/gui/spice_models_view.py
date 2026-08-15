@@ -13,10 +13,16 @@ show), **Subckts** (every real ``.subckt NAME port1 port2 ...``
 block's own real port list), and **Corners** (every real ``.LIB NAME
 ... .ENDL`` PVT-corner block's own real ``.param``/``.include``
 content -- confirmed real in all 6 real `corner*.lib` files). Read-only
--- no editor exists for ngspice model data, matching every other real,
-display-only domain here (Layers, Magic Tech's other five domains,
-GDS, LEF's own Vias tab). "View File" opens the real, selected ``.lib``
-file directly (``file_view_dialog.view_file_dialog``).
+-- no editor exists for real ``.model``/``.subckt`` content yet,
+matching every other real, display-only domain here (Layers, Magic
+Tech's other five domains, GDS, LEF's own Vias tab).
+
+The file picker mirrors ``lef_view.py``'s own **Edit File**/**Create
+File** toggle (``gui/file_picker_utils.py``): typing a real, existing
+relative path opens it (``file_view_dialog.view_file_dialog``); typing
+one that doesn't exist yet writes a real, minimal, valid empty ``.lib``
+skeleton (``ihp/spice_models.py``'s own ``create_new_lib_file``), then
+reloads and selects it.
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import spice_models as spice_models_mod
-from .file_view_dialog import view_file_dialog
+from .file_picker_utils import handle_action, update_action_button
 
 
 class SpiceModelsView(ttk.Frame):
@@ -44,14 +50,23 @@ class SpiceModelsView(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="ngspice .lib file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
+
+        hint = ttk.Frame(self)
+        hint.pack(fill="x", padx=8)
+        ttk.Label(
+            hint, foreground="#616161",
+            text="New file: type a path like libs.tech/ngspice/models/<name>.lib, then Create File.",
+        ).pack(side="left")
 
         sub = ttk.Notebook(self)
         sub.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -70,10 +85,14 @@ class SpiceModelsView(ttk.Frame):
         tree.pack(fill="both", expand=True)
         return tree
 
-    def _view_file(self):
-        path = self.lib_files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=spice_models_mod.create_new_lib_file, on_created=self.load,
+        )
 
     def load(self):
         self.lib_files = {
@@ -85,6 +104,7 @@ class SpiceModelsView(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def _refresh_all(self):
         for row in self.models_tree.get_children():

@@ -1635,6 +1635,26 @@ editor yet -- see Future Work.
   real IHP cell (`sg13g2_Corner`, which genuinely has no real per-cell
   SPICE) and confirming it shows up as `+` in the actual tree, with
   every real, unrelated column untouched.
+- **ngspice Models gets a real "New..."/Create File action too**,
+  closing one of the three domains the "Create-from-scratch flows for
+  Liberty/CDL-SPICE/ngspice Models" Future Work item named (Liberty/
+  CDL-SPICE remain -- see that item's own updated note for why they're
+  a bigger lift: neither has a dedicated tab at all yet). `ihp/
+  spice_models.py`'s new `create_new_lib_file` writes a real, minimal,
+  genuinely empty `.lib` skeleton -- just a bare comment line; real
+  ngspice `.lib` grammar has no mandatory header the way LEF/Magic Tech
+  do, so this parses cleanly to 0 models/subckts/corners, the same
+  honest "empty, not broken" result a real file with genuinely nothing
+  in it already gave. `gui/spice_models_view.py`'s file combobox
+  switched from `state="readonly"` to the same editable **Edit
+  File**/**Create File** toggle LEF/xschem/Qucs-S already share
+  (`gui/file_picker_utils.py`) -- no new picker UI needed here, since
+  this tab already had its own dedicated file picker, just a read-only
+  one. Verified for real, driven: a unit test confirming the written
+  file round-trips through `parse_lib_file` as honestly empty and
+  correctly refuses to overwrite an existing real file, plus a real GUI
+  test typing a new path, clicking **Create File**, and confirming the
+  file exists, is selected, and the button flips to **Edit File**.
 
 ## Future work
 
@@ -2120,17 +2140,22 @@ models, ...), not just read/display layers. Concretely, still open:
   work for a benefit that's mostly just avoiding ~150 lines of
   duplication. Worth re-checking again if the *data models themselves*
   (not just the code around them) start to diverge.
-- **Create-from-scratch flows for Liberty/CDL-SPICE/ngspice Models**,
-  surfaced honestly (not glossed over) by the **PDK Wizard** tab's own
+- **Create-from-scratch flows for Liberty/CDL-SPICE**, surfaced
+  honestly (not glossed over) by the **PDK Wizard** tab's own
   legend/gap notes: Layers, Magic Tech, LEF (a valid empty library only
   -- see its own gap note), xschem Symbols/Schematics, Qucs-S
-  Symbols/Components, and (Library Manager only, see above) Verilog/
-  Verilog-A now all have a real "New..."/**Create File**/**Create**
-  action; these three still need a real starting file already on disk
-  (copied from a template/reference PDK, or hand-written) before this
-  tool can load and edit it. LEF is no longer among them for its own
-  macro-level content -- see **New Macro...** above; `ORIGIN`/`SITE`
-  still aren't modeled on a macro, real, separate future work.
+  Symbols/Components, ngspice Models (see below), and (Library Manager
+  only, see above) Verilog/Verilog-A now all have a real
+  "New..."/**Create File**/**Create** action; these two still need a
+  real starting file already on disk (copied from a template/reference
+  PDK, or hand-written) before this tool can load and edit it -- and,
+  unlike every domain listed above, neither has a dedicated top-level
+  tab of its own yet at all (only surfaced per-cell, through **By
+  Cell**), so closing this gap needs real new picker UI first, not just
+  a `create_new_*` function plus the existing `file_picker_utils.py`
+  toggle. LEF is no longer among them for its own macro-level content
+  -- see **New Macro...** above; `ORIGIN`/`SITE` still aren't modeled
+  on a macro, real, separate future work.
 - **Real Ruby generation for DRC Rules' remaining six `check_type`s**
   (`min_area`/`min_overlap`/`max_length`/`max_current_density`/
   `max_dimension`/`density_window`) -- `ihp/drc_writer.py`'s own
