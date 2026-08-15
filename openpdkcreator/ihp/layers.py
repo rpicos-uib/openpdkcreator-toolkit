@@ -145,3 +145,26 @@ def import_layers(pdk_root: Path, lyp_path: Path) -> list[Layer]:
             )
         )
     return layers
+
+
+_LYP_SKELETON = """<?xml version="1.0" encoding="utf-8"?>
+<layer-properties>
+</layer-properties>
+"""
+
+
+def create_new_lyp_file(path: Path) -> None:
+    """Writes a minimal, valid, real KLayout ``.lyp`` skeleton -- an
+    empty ``<layer-properties>`` root with zero real ``<properties>``
+    (layer) blocks. Genuinely usable from here, not just a stub:
+    ``layers_writer.py``'s ``render_lyp_file`` anchors brand-new layer
+    blocks just before the real closing ``</layer-properties>`` tag
+    when there are no existing blocks to anchor after (see its own
+    docstring), so **New Layer** in the Layers tab -- and a real
+    export afterward -- works immediately against a file created this
+    way, the same as adding a layer to a real, downloaded one."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_LYP_SKELETON, encoding="utf-8")

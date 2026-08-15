@@ -124,6 +124,23 @@ def render_lyp_file(original_path: Path, layers: list[Layer]) -> str:
     original_text = original_path.read_text(encoding="utf-8", errors="replace")
     original_lines = original_text.splitlines()
     fresh_blocks = layers_mod.find_layer_blocks(original_path)
+
+    if not fresh_blocks:
+        # A brand-new skeleton .lyp (see layers.py's create_new_lyp_file)
+        # with no real <properties> blocks at all to anchor a new one
+        # after -- anchor instead just before the real closing
+        # </layer-properties> tag, so New Layer works the same as
+        # adding a layer to a real, downloaded file.
+        close_idx = next(
+            (i for i, line in enumerate(original_lines) if line.strip() == "</layer-properties>"),
+            len(original_lines),
+        )
+        output = list(original_lines[:close_idx])
+        for layer in layers:
+            output.extend(_render_new_layer_block(layer, "  "))
+        output.extend(original_lines[close_idx:])
+        return text_utils.join_preserving_trailing_newline(original_text, output)
+
     fresh_by_start = {start: (start, end) for start, end, _fields in fresh_blocks}
     fresh_layers_by_start = {layer.start_line: layer for layer in layers_mod.import_layers(original_path.parent, original_path)}
 

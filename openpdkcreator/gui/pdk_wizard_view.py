@@ -19,21 +19,32 @@ node's own "For a memristor PDK" note says plainly what that stage
 means for a 2-terminal device with no IHP precedent to copy from.
 
 **A real, honest gap, surfaced once as a legend callout and again per
-node**: only xschem Symbols/Schematics and Qucs-S Symbols/Components
-support creating a brand-new file from inside this GUI today (their
-own "New..." actions -- see ``ihp/xschem.py``'s ``create_new_sym_file``,
-``ihp/xschem_sch.py``'s ``create_new_sch_file``, ``ihp/qucs_sym.py``'s
+node**: Layers, Magic Tech, LEF, xschem Symbols/Schematics, and Qucs-S
+Symbols/Components all support creating a brand-new file from inside
+this GUI today (their own "New..."/**Create File** actions -- see
+``ihp/layers.py``'s ``create_new_lyp_file``, ``ihp/magic_tech.py``'s
+``create_new_tech_file``, ``ihp/lef.py``'s ``create_new_lef_file``,
+``ihp/xschem.py``'s ``create_new_sym_file``, ``ihp/xschem_sch.py``'s
+``create_new_sch_file``, ``ihp/qucs_sym.py``'s
 ``create_new_symbol_geometry_file``/``create_new_component_file``).
-Every other domain (Layers, Magic Tech, DRC Rules, LEF, Verilog,
-Liberty, CDL/SPICE, ngspice Models, and User Models' own ``.va``/``.v``
-files) requires a real file to already exist on disk -- hand-place one
-(copied from a template/reference PDK, or written in an external
-editor) under the matching real path, and this tool can load and edit
-it from there. This is not glossed over: a from-scratch memristor PDK
-genuinely starts smallest at User Models (just write a ``.va`` file and
-drop it under ``user_models/veriloga/`` -- no template needed at all)
-and the xschem/Qucs-S symbol editors (draw a device symbol from
-nothing), and grows outward from there.
+LEF's own version is deliberately partial, still flagged as a real
+gap (see ``_status_lef`` below): it unblocks a valid, empty library,
+not a whole new **MACRO** (``lef_writer.py`` refuses to write one
+back with no real source position, and there's no **New Macro**
+action). **DRC Rules** is the one domain with no real path at all --
+a real check needs actual KLayout Ruby DSL logic, and
+``drc_writer.py`` explicitly refuses to write back a hand-authored
+rule with no real source position to patch (see ``_status_drc_rules``
+below). Every remaining domain (Verilog, Liberty, CDL/SPICE, ngspice
+Models, and User Models' own ``.va``/``.v`` files) requires a real
+file to already exist on disk -- hand-place one (copied from a
+template/reference PDK, or written in an external editor) under the
+matching real path, and this tool can load and edit it from there.
+This is not glossed over: a from-scratch memristor PDK genuinely
+starts smallest at User Models (just write a ``.va`` file and drop it
+under ``user_models/veriloga/`` -- no template needed at all) and the
+xschem/Qucs-S symbol editors (draw a device symbol from nothing), and
+grows outward from there.
 
 Status per node is computed directly from *app.pdk_root* (and, for User
 Models, ``export.PROJECT_ROOT``) on every ``refresh()`` -- cheap
@@ -105,27 +116,14 @@ def _status_project_setup(app):
 def _status_layers(app):
     path = layers_mod.find_lyp(app.pdk_root)
     if path is None:
-        return (
-            False,
-            "No real .lyp file found under libs.tech/.",
-            "This tool can't create a brand-new .lyp from scratch yet -- "
-            "start from a template or an existing PDK's .lyp (e.g. copy "
-            "IHP's own sg13g2.lyp) and edit its layers in the Layers tab "
-            "to match your own stack.",
-        )
+        return False, "No real .lyp file found under libs.tech/.", None
     return True, f"{len(app.project.layers)} real layer(s) loaded from {path.name}.", None
 
 
 def _status_magic_tech(app):
     files = magic_tech_mod.find_tech_files(app.pdk_root)
     if not files:
-        return (
-            False,
-            "No real Magic .tech file found under libs.tech/.",
-            "No in-GUI way to create one from scratch -- start from a "
-            "template .tech file and edit its types/planes/DRC/extract "
-            "rules in the Magic Tech tab.",
-        )
+        return False, "No real Magic .tech file found under libs.tech/.", None
     return True, f"{len(files)} real .tech file(s) found.", None
 
 
@@ -148,8 +146,10 @@ def _status_lef(app):
         return (
             False,
             "No real .lef file found under libs.ref/.",
-            "No in-GUI way to create a .lef from scratch -- start from a "
-            "template macro and edit its pins in the LEF tab.",
+            "New .lef File creates a valid, empty library -- but adding a "
+            "real MACRO to it still needs hand-authoring (no in-GUI New "
+            "Macro action; only pins within an already-existing macro are "
+            "editable here).",
         )
     return True, f"{len(files)} real .lef file(s) found.", None
 
@@ -282,7 +282,9 @@ _STAGES: list[WizardStage] = [
         "layers", "Layers (.lyp)", 2, 2, ("Technology", "Layers"),
         "The real KLayout layer stack -- every other real file (LEF, GDS, "
         "DRC) ultimately refers back to these layer/purpose pairs. This "
-        "is the layout definition everything else branches from.",
+        "is the layout definition everything else branches from. No real "
+        ".lyp yet? New .lyp File... creates a valid, empty one to start "
+        "from.",
         "Define your own physical stack here: e.g. a bottom electrode "
         "layer, a resistive-switching layer, a top electrode layer, plus "
         "whatever via/cut layers connect a memristor cell to standard "
@@ -292,7 +294,9 @@ _STAGES: list[WizardStage] = [
     WizardStage(
         "magic_tech", "Magic Tech", 1, 3, ("Technology", "Magic Tech"),
         "Magic's own types/planes/contacts/aliases/styles/DRC/extract/CIF "
-        "rules -- Magic's native technology-file counterpart to the .lyp.",
+        "rules -- Magic's native technology-file counterpart to the .lyp. "
+        "New .tech File... creates a valid, empty skeleton (header plus "
+        "empty Types/Planes/Contacts/Aliases sections) to start from.",
         "Only needed if you plan to lay out or verify cells in Magic; "
         "otherwise this can stay empty for a KLayout-only flow.",
         _status_magic_tech,
@@ -309,7 +313,8 @@ _STAGES: list[WizardStage] = [
         "lef", "LEF", 2, 4, ("Cells", "LEF"),
         "Abstract place-and-route views: a cell's real footprint, "
         "pin shapes, and routing obstructions, independent of its full "
-        "layout.",
+        "layout. Type a new libs.ref/<family>/lef/<name>.lef path and hit "
+        "Create File for a valid, empty library to start from.",
         "A 2-terminal memristor cell needs just two real pins (e.g. "
         "TE/BE) -- draw its LEF footprint here once its layers exist.",
         _status_lef,

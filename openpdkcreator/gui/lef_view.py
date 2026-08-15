@@ -18,9 +18,20 @@ each real layer's own rect count for a fixed ``VIA``, or its own real
 enclosure/spacing/resistance for a ``ViaRULE GENERATE`` -- read-only,
 no editor exists for via geometry, matching every other real,
 display-only domain here; see ``ihp/lef.py``'s own docstring for the
-exact real body structure). "View File" opens the real, selected
-``.lef`` file directly (``file_view_dialog.view_file_dialog``), which
-*can* also be edited, as raw text.
+exact real body structure).
+
+The file picker's own combobox is editable, not a closed real-file
+list, the same **Edit File**/**Create File** toggle xschem/Qucs-S's own
+file pickers already use (``gui/file_picker_utils.py``): typing a real,
+existing relative path (``libs.ref/<family>/lef/<name>.lef``) reads
+**Edit File** (opens ``file_view_dialog.view_file_dialog``); typing one
+that doesn't exist yet reads **Create File** (writes a real, minimal,
+valid empty-library ``.lef`` skeleton via ``ihp/lef.py``'s own
+``create_new_lef_file``, then reloads and selects it) -- see that
+function's own docstring for a real, honestly-surfaced limit: it
+unblocks *loading* a brand-new family's LEF, not authoring a whole new
+**MACRO** from inside this GUI (only pins within an already-existing
+macro are write-back-editable; there's no **New Macro** action).
 
 Real parsing + persistence live one level up, on ``App`` itself
 (``app.get_parsed_lef``/``app.lef_cache``/``app.lef_pin_overrides``),
@@ -40,7 +51,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from ..ihp import lef as lef_mod
-from .file_view_dialog import view_file_dialog
+from .file_picker_utils import handle_action, update_action_button
 from .list_filter import build_filter_row, matches
 from .pin_editor import PinEditor
 
@@ -85,14 +96,23 @@ class LefView(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         ttk.Label(top, text="LEF file:").pack(side="left")
         self.file_var = tk.StringVar()
-        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, state="readonly", width=50)
+        self.file_combo = ttk.Combobox(top, textvariable=self.file_var, width=50)
         self.file_combo.pack(side="left", padx=(4, 12))
         self.file_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
+        self.file_combo.bind("<KeyRelease>", lambda _event: self._update_action_button())
 
-        ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        self.action_button = ttk.Button(top, text="Edit File", command=self._on_action)
+        self.action_button.pack(side="left")
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
+
+        hint = ttk.Frame(self)
+        hint.pack(fill="x", padx=8)
+        ttk.Label(
+            hint, foreground="#616161",
+            text="New file: type a path like libs.ref/<family>/lef/<name>.lef, then Create File.",
+        ).pack(side="left")
 
         sub = ttk.Notebook(self)
         sub.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -144,10 +164,14 @@ class LefView(ttk.Frame):
         self.pin_editor = PinEditor(frame, on_change=self._on_pin_editor_change)
         self.pin_editor.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
 
-    def _view_file(self):
-        path = self.lef_files.get(self.file_var.get())
-        if path is not None:
-            view_file_dialog(self, path)
+    def _update_action_button(self):
+        update_action_button(self.action_button, self.pdk_root, self.file_var)
+
+    def _on_action(self):
+        handle_action(
+            self, self.pdk_root, self.file_var,
+            create_fn=lef_mod.create_new_lef_file, on_created=self.load,
+        )
 
     # -- persistence hooks (project_io.py) -----------------------------------
 
@@ -169,6 +193,7 @@ class LefView(ttk.Frame):
         if names and not self.file_var.get():
             self.file_var.set(names[0])
         self._refresh_all()
+        self._update_action_button()
 
     def _refresh_all(self):
         for row in self.layers_tree.get_children():

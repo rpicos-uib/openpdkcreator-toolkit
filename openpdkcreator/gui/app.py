@@ -115,7 +115,7 @@ from __future__ import annotations
 import re
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .. import export as export_mod
 from .. import project_io
@@ -572,6 +572,7 @@ class App(ttk.Frame):
         layers_toolbar = ttk.Frame(layers_frame)
         layers_toolbar.pack(fill="x", padx=8, pady=(8, 0))
         ttk.Button(layers_toolbar, text="View File", command=self._view_lyp_file).pack(side="left")
+        ttk.Button(layers_toolbar, text="New .lyp File...", command=self._new_lyp_file).pack(side="left", padx=(6, 0))
         self.layers_view = LayersView(layers_frame, self)
         self.layers_view.pack(fill="both", expand=True)
 
@@ -588,6 +589,41 @@ class App(ttk.Frame):
     def _view_lyp_file(self):
         if self.lyp_path is not None:
             view_file_dialog(self, self.lyp_path)
+
+    def _new_lyp_file(self):
+        """A real, minimal, valid, empty KLayout ``.lyp`` skeleton
+        (``ihp/layers.py``'s own ``create_new_lyp_file``) --
+        genuinely usable immediately afterward: **New Layer** in the
+        Layers tab, and a real export, both work against it the same
+        as against a real, downloaded file (see that function's own
+        docstring). Reloads via ``self.load()`` (not just a layers-only
+        re-parse) since a from-scratch project has no ``.lyp`` at all
+        until now -- ``load()`` early-returns before DRC/saved-state
+        restoration when ``lyp_path`` is ``None`` (see its own body)."""
+
+        if self.lyp_path is not None:
+            if not messagebox.askyesno(
+                "New .lyp File",
+                f"A .lyp file is already loaded ({self.lyp_path.name}). "
+                "Create a different, new one and switch to it?",
+                parent=self,
+            ):
+                return
+        name = simpledialog.askstring(
+            "New .lyp File", "Layer-properties file name (without .lyp):", parent=self,
+        )
+        if not name:
+            return
+        path = self.pdk_root / "libs.tech" / "klayout" / "tech" / f"{name}.lyp"
+        if path.exists():
+            messagebox.showerror("New .lyp File", f"{path} already exists.", parent=self)
+            return
+        layers_mod.create_new_lyp_file(path)
+        self.load()
+        self.status.set(
+            f"Created a new, empty .lyp file at {path.relative_to(self.pdk_root)} -- "
+            "use New Layer in the Layers tab to start adding layers."
+        )
 
     def layer_colors(self) -> dict[str, tuple[str, str]]:
         return {layer.name: (layer.frame_color, layer.fill_color) for layer in self.project.layers}

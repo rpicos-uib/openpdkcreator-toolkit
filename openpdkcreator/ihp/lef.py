@@ -171,6 +171,39 @@ def find_lef_files(pdk_root: Path) -> list[Path]:
     return sorted((pdk_root / "libs.ref").glob("*/lef/*.lef"))
 
 
+_LEF_SKELETON = """VERSION 5.7 ;
+BUSBITCHARS "[]" ;
+DIVIDERCHAR "/" ;
+"""
+
+
+def create_new_lef_file(path: Path) -> None:
+    """Writes a minimal, valid, real empty-library LEF skeleton --
+    a real ``VERSION``/``BUSBITCHARS``/``DIVIDERCHAR`` header, zero
+    macros (confirmed real: IHP's own real ``.lef`` files never carry
+    a trailing ``END LIBRARY`` either -- they just end after the last
+    real macro's own ``END <name>`` line, so omitting one here matches
+    real convention, not a shortcut). *path* must sit under
+    ``libs.ref/<family>/lef/`` to be found again by ``find_lef_files``
+    above.
+
+    **A real, honest gap, not glossed over**: unlike Layers/Magic
+    Tech's own ``create_new_*``, this alone doesn't unblock authoring
+    a whole new macro from inside this GUI -- ``lef_writer.py``'s own
+    ``render_lef_file`` explicitly refuses to write back a macro with
+    no real source position (``if macro.start_line == 0: continue`` --
+    a real ``MACRO`` block's ``CLASS``/``ORIGIN``/``SIZE``/``SYMMETRY``/
+    ``SITE`` fields are real, separate future work), and there's no
+    **New Macro** action in the LEF tab either. A real macro still has
+    to be hand-authored (or copied from a template) into a file created
+    this way before this tool's own pin editor has anything to edit."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_LEF_SKELETON, encoding="utf-8")
+
+
 def _apply_layer_field(layer: LefLayer, keyword: str, tokens: list[str]) -> None:
     if keyword == "TYPE" and len(tokens) > 1:
         layer.layer_type = tokens[1]

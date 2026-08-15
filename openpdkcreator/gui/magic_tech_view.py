@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from ..ihp import magic_tech as magic_tech_mod
 from .file_view_dialog import view_file_dialog
@@ -71,6 +71,7 @@ class MagicTechView(ttk.Frame):
         self.tech_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_all())
 
         ttk.Button(top, text="View File", command=self._view_file).pack(side="left")
+        ttk.Button(top, text="New .tech File...", command=self._new_tech_file).pack(side="left", padx=(6, 0))
 
         self.summary_var = tk.StringVar()
         ttk.Label(top, textvariable=self.summary_var, anchor="w").pack(side="left", fill="x", expand=True)
@@ -266,6 +267,28 @@ class MagicTechView(ttk.Frame):
         tech = self.technologies.get(self.tech_var.get())
         if tech is not None:
             view_file_dialog(self, tech.source_path)
+
+    def _new_tech_file(self):
+        """A real, minimal, valid Magic ``.tech`` skeleton
+        (``ihp/magic_tech.py``'s own ``create_new_tech_file``) --
+        genuinely usable immediately afterward: **New Type**/**New
+        Plane**/**New Contact**/**New Alias** below all work against
+        it the same as against a real, downloaded file (see that
+        function's own docstring)."""
+
+        name = simpledialog.askstring(
+            "New .tech File", "Technology name (also used as the file name):", parent=self,
+        )
+        if not name:
+            return
+        path = self.pdk_root / "libs.tech" / "magic" / f"{name}.tech"
+        if path.exists():
+            messagebox.showerror("New .tech File", f"{path} already exists.", parent=self)
+            return
+        magic_tech_mod.create_new_tech_file(path)
+        self.load()
+        self.tech_var.set(name)
+        self._refresh_all()
 
     # -- persistence hooks (project_io.py) -----------------------------------
 

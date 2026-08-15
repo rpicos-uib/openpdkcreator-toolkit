@@ -541,6 +541,53 @@ def find_tech_files(pdk_root: Path) -> list[Path]:
     return sorted((pdk_root / "libs.tech" / "magic").glob("*.tech"))
 
 
+_TECH_SKELETON_TEMPLATE = """tech
+  format 35
+  {name}
+end
+
+version
+ version 0.1.0
+ description "New technology -- edit this description"
+end
+
+planes
+end
+
+types
+end
+
+contact
+end
+
+aliases
+end
+"""
+
+
+def create_new_tech_file(path: Path) -> None:
+    """Writes a minimal, valid, real Magic ``.tech`` skeleton: real
+    ``tech``/``version`` header sections (so it parses as a real,
+    named technology, using *path*'s own stem as the real technology
+    name -- ``tech.name`` below) plus real, empty ``planes``/``types``/
+    ``contact``/``aliases`` sections. Genuinely usable from here, not
+    just a stub: ``_scan_single_line_section`` (below) sets a real
+    section's own start/end line correctly even with zero entries
+    inside, and ``magic_tech_writer.py``'s own ``_render_section_patch``
+    already anchors a brand-new entry just before its own section's
+    real closing ``end`` line -- so **New Type**/**New Plane**/
+    **New Contact**/**New Alias** in the Magic Tech tab, and a real
+    export afterward, work immediately against a file created this
+    way, no different from adding an entry to a real, downloaded one.
+    No real ``include`` line here at all, so ``_safe_prefix_line_count``
+    treats every real line as safely write-back-mappable."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_TECH_SKELETON_TEMPLATE.format(name=path.stem), encoding="utf-8")
+
+
 def _load_lines_with_includes(path: Path, included: list[str], _seen: set[Path] | None = None) -> list[str]:
     """Real textual splicing: an 'include NAME' line's content is
     replaced by NAME.tech's own real lines, read from the same

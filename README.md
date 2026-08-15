@@ -80,21 +80,40 @@ directory glob, never a full parse) plus a **Go to Tab** button
 (`App.goto(*path)`, walking down as many nested `ttk.Notebook` levels
 as needed) that jumps straight there.
 
-A real, honest gap is surfaced both as a legend color and per node:
-**only xschem Symbols/Schematics and Qucs-S Symbols/Components support
-creating a brand-new file from inside this GUI today** (their own "New
-..." actions). Every other domain -- Layers, Magic Tech, DRC Rules,
-LEF, Verilog, Liberty, CDL/SPICE, ngspice Models, and User Models'
-own `.va`/`.v` files -- requires a real file to already exist on disk
-(hand-placed from a template/reference PDK, or written in an external
-editor) before this tool can load and edit it; nothing here pretends
+A real, honest gap is surfaced both as a legend color and per node.
+**Layers, Magic Tech, LEF, xschem Symbols/Schematics, and Qucs-S
+Symbols/Components all support creating a brand-new file from inside
+this GUI today** -- each domain's own file picker/toolbar gained a
+**New .lyp File...**/**New .tech File...**/**Create File** action
+(`ihp/layers.py`'s `create_new_lyp_file`, `ihp/magic_tech.py`'s
+`create_new_tech_file`, `ihp/lef.py`'s `create_new_lef_file`, plus
+xschem/Qucs-S's own already-existing ones) that writes a real,
+minimal, valid skeleton -- an empty `<layer-properties>` root, a
+`tech`/`version` header plus empty Types/Planes/Contacts/Aliases
+sections, or an empty-library `.lef` -- genuinely usable immediately
+afterward, not just a stub: **New Layer**/**New Type**/**New Plane**/
+**New Contact**/**New Alias** and a real export all work against a
+skeleton the same as against a real, downloaded file. **LEF's own
+version is deliberately partial**, still flagged as a real gap: it
+unblocks a valid, empty *library*, not a whole new **MACRO** --
+`ihp/lef_writer.py` explicitly refuses to write back a macro with no
+real source position, and there's no **New Macro** action, only pins
+within an already-existing macro. **DRC Rules is the one domain with
+no real path at all**: a real check needs actual KLayout Ruby DSL
+logic, and `ihp/drc_writer.py` explicitly refuses to write back a
+hand-authored rule with no real source position to patch -- **New
+Rule** stays metadata-only there. Every remaining domain -- Verilog,
+Liberty, CDL/SPICE, ngspice Models, and User Models' own `.va`/`.v`
+files -- requires a real file to already exist on disk (hand-placed
+from a template/reference PDK, or written in an external editor)
+before this tool can load and edit it; nothing here pretends
 otherwise. A from-scratch memristor PDK genuinely starts smallest at
 **User Models** (write a `.va` compact model, drop it under
 `user_models/veriloga/` -- no template needed, and `ihp/cells.py`'s
 own By Cell aggregation picks it up automatically by name) and the
 xschem/Qucs-S symbol editors (draw a device symbol from nothing), then
-grows outward from there once a real `.lyp`/`.tech`/DRC-deck/LEF
-template is in place.
+grows outward through the newly-creatable Layers/Magic Tech/LEF
+skeletons above.
 
 Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
@@ -1165,6 +1184,64 @@ editor yet -- see Future Work.
   `load()` (delegating to its own Symbols/Schematics panes' existing
   `load()` methods), re-verified via the existing
   `test_no_lef_and_reload.py`-style scenario.
+- **Create-from-scratch skeletons for Layers/Magic Tech/LEF**, closing
+  three of the four real gaps the **PDK Wizard** tab surfaced (see its
+  own README section above for exactly what remains -- LEF partially,
+  DRC Rules not at all):
+  - `ihp/layers.py`'s `create_new_lyp_file` writes a minimal, valid,
+    empty `<?xml...?><layer-properties></layer-properties>` skeleton.
+    Required a real fix to `ihp/layers_writer.py`'s own
+    `render_lyp_file`, not just a new writer function: with zero real
+    `<properties>` blocks to anchor after, its existing logic
+    (designed only for "add a layer among existing ones") dumped a
+    brand-new layer's own text *before* the file's own real XML
+    declaration -- found by tracing the code, not by a failing test,
+    before it ever shipped. Fixed by anchoring new blocks just before
+    the real closing `</layer-properties>` tag in that one case.
+  - `ihp/magic_tech.py`'s `create_new_tech_file` writes a real `tech`/
+    `version` header (using the file's own stem as the real technology
+    name) plus empty `planes`/`types`/`contact`/`aliases` sections --
+    no writer fix needed here: `_scan_single_line_section` already sets
+    a real section's own start/end line correctly even with zero
+    entries inside, and `magic_tech_writer.py`'s own
+    `_render_section_patch` already anchors a brand-new entry just
+    before its own section's real closing `end` line.
+  - `ihp/lef.py`'s `create_new_lef_file` writes a real `VERSION 5.7 ;`/
+    `BUSBITCHARS`/`DIVIDERCHAR` header, zero macros (confirmed real:
+    IHP's own real `.lef` files never carry a trailing `END LIBRARY`
+    either -- they just end after the last macro's own `END <name>`
+    line). Deliberately partial, not overclaimed: `ihp/lef_writer.py`
+    already explicitly refuses to write back a whole new macro with no
+    real source position, and there's no **New Macro** action either,
+    so this alone unblocks *loading* a brand-new family's `.lef`, not
+    authoring a macro purely in-GUI -- see its own docstring and the
+    Wizard's own LEF gap note.
+  - GUI wiring differs per domain's own real selector shape rather
+    than forcing one pattern: LEF's file picker already matched
+    xschem/Qucs-S's own editable-combobox-plus-**Create
+    File**/**Edit File** toggle (`gui/file_picker_utils.py`) exactly,
+    so it was switched to reuse that shared helper directly (`state=
+    "readonly"` removed, a `<KeyRelease>` binding added). Layers (a
+    single global file, no file-picker combobox at all) and Magic Tech
+    (its own combobox is keyed by *technology name*, not file path --
+    a different real selection semantic) each instead got a small,
+    separate **New .lyp File...**/**New .tech File...** button
+    prompting for a name via `simpledialog.askstring`.
+  - Verified for real, end-to-end, against a genuinely empty
+    `pdk_root`: create each skeleton (via its own real button/action,
+    not just the bare `create_new_*` function), add a real entry via
+    the domain's own existing editor (**New Layer**/**New Type**+
+    **New Plane**/loading pins), export, and confirm the exported text
+    is valid and round-trips -- e.g. a new `TopElectrode.drawing` layer
+    at GDS 200/0 exported into a real, single `<properties>` block
+    nested correctly inside `<layer-properties>`, then re-parsed back
+    to one real layer. Also verified the real "footgun" this design
+    accepts rather than silently guards against: typing a LEF path
+    that doesn't match the real `libs.ref/<family>/lef/*.lef`
+    convention creates a real file that's simply not picked up by
+    `find_lef_files` afterward (not a crash, not data loss) -- the
+    LEF tab's own new hint label exists specifically to steer around
+    this.
 
 ## Future work
 
@@ -1650,18 +1727,31 @@ models, ...), not just read/display layers. Concretely, still open:
   work for a benefit that's mostly just avoiding ~150 lines of
   duplication. Worth re-checking again if the *data models themselves*
   (not just the code around them) start to diverge.
-- **Create-from-scratch flows for Layers/Magic Tech/DRC Rules/LEF/
-  Verilog/Liberty/CDL-SPICE/ngspice Models**, surfaced honestly (not
-  glossed over) by the **PDK Wizard** tab's own legend/gap notes: today
-  only xschem Symbols/Schematics and Qucs-S Symbols/Components have a
-  real "New..." action; every other domain needs a real starting file
-  already on disk (copied from a template/reference PDK, or hand-
-  written) before this tool can load and edit it. A brand-new,
-  from-scratch memristor PDK genuinely can't originate its own `.lyp`/
-  `.tech`/DRC-deck/`.lef` from inside this GUI yet -- each would need
-  its own "create a minimal, valid skeleton" action, mirroring
-  `xschem.py`'s `create_new_sym_file`/`xschem_sch.py`'s
-  `create_new_sch_file`.
+- **Create-from-scratch flows for Verilog/Liberty/CDL-SPICE/ngspice
+  Models**, surfaced honestly (not glossed over) by the **PDK Wizard**
+  tab's own legend/gap notes: Layers, Magic Tech, LEF (a valid empty
+  library only -- see its own gap note), xschem Symbols/Schematics,
+  and Qucs-S Symbols/Components now all have a real "New..."/**Create
+  File** action; these four still need a real starting file already on
+  disk (copied from a template/reference PDK, or hand-written) before
+  this tool can load and edit it.
+- **A real "New Macro" action for LEF**, plus extending
+  `ihp/lef_writer.py`'s own `render_lef_file` to write one back (today
+  it explicitly refuses -- `if macro.start_line == 0: continue`,
+  matching a real macro's own richer required fields: `CLASS`/
+  `ORIGIN`/`SIZE`/`SYMMETRY`/`SITE`, not a small, uniform block like a
+  KLayout layer or a Magic Tech entry). Until then, `create_new_lef_file`
+  only unblocks a valid, empty library to load pins into once a real
+  macro is hand-authored into it.
+- **A real "create a DRC deck from scratch" path.** Genuinely harder
+  than the other three: a real KLayout DRC check needs actual Ruby DSL
+  logic (`<layer_expr>.width()`/`.space()`/`.enclosed()` etc., see
+  `ihp/drc.py`'s own docstring), which **New Rule** doesn't generate --
+  `ihp/drc_writer.py` already explicitly refuses to write back a rule
+  with no real source position (`"a hand-authored New Rule, which has
+  no real source position to patch"`). A from-scratch memristor PDK's
+  DRC deck still has to start from a real template `.drc` script edited
+  externally.
 
 ## License
 
