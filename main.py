@@ -684,8 +684,8 @@ def cmd_export_drc(pdk_root: Path) -> int:
         f"to its real original -- {len(written) - len(mismatches)}/{len(written)} are."
     )
     if skipped_writeback:
-        print(f"{len(skipped_writeback)} rule(s) with no real, resolvable source position (hand-authored, not written back): "
-              f"{', '.join(skipped_writeback)}")
+        reasons = "; ".join(f"{rule_id} ({reason})" for rule_id, reason in skipped_writeback)
+        print(f"{len(skipped_writeback)} rule(s) not written back: {reasons}")
     if mismatches:
         print("MISMATCHES (a real write-back correctness bug):", file=sys.stderr)
         for path in mismatches:

@@ -338,23 +338,62 @@ class App(ttk.Frame):
         """Writes real, patched DRC-deck text (the .drc scripts a
         rule_id/description live in, plus the one real JSON config
         file a rule's value lives in) for every rule with real,
-        resolvable provenance -- see ``export.py``'s/
-        ``ihp/drc_writer.py``'s own docstrings. A hand-authored rule
-        (New Rule, no real source position) can't be written back --
-        reported in the status line, not silently dropped."""
+        resolvable provenance, and real, *generated* KLayout DRC Ruby
+        (``custom_rules.drc``) for every hand-authored rule (New Rule)
+        whose check_type/value/layers this project knows how to
+        generate -- see ``export.py``'s/``ihp/drc_writer.py``'s own
+        docstrings. A rule that still can't be written back either way
+        is reported in the status line, not silently dropped."""
 
         self.rules_view.commit_pending_edits()
         if self.drc_root is None:
             self.status.set("No DRC deck found -- nothing to export.")
             return
-        written, skipped = export_mod.export_drc_rules(self.pdk_root, self.drc_root, self.project.design_rules)
+        written, failures = export_mod.export_drc_rules(
+            self.pdk_root, self.drc_root, self.project.design_rules, self.project.layers,
+        )
         if not written:
             self.status.set("No real DRC rules to export.")
             return
         status = f"Exported {len(written)} real file(s) (DRC scripts + JSON config) to {export_mod.EXPORT_ROOT / self.pdk_root.name}"
-        if skipped:
-            status += f"; {len(skipped)} hand-authored rule(s) skipped (no real source to write back to): {', '.join(skipped)}"
+        if failures:
+            reasons = "; ".join(f"{rule_id} ({reason})" for rule_id, reason in failures)
+            status += f"; {len(failures)} rule(s) not written back: {reasons}"
         self.status.set(status)
+
+    def _new_drc_deck(self):
+        """A real, minimal, valid, empty DRC deck
+        (``ihp/drc.py``'s own ``create_new_drc_deck``) -- genuinely
+        usable immediately afterward: **New Rule** in the DRC Rules
+        tab, and a real export, both work against it (see that
+        function's own docstring)."""
+
+        if self.drc_root is not None:
+            if not messagebox.askyesno(
+                "New DRC Deck",
+                f"A DRC deck is already loaded ({self.drc_root}). Create a new one anyway?",
+                parent=self,
+            ):
+                return
+        try:
+            new_drc_root = drc_mod.create_new_drc_deck(self.pdk_root)
+        except FileExistsError as exc:
+            messagebox.showerror("New DRC Deck", str(exc), parent=self)
+            return
+        self.load()
+        # ``load()`` early-returns before reaching DRC-root discovery
+        # when there's no real .lyp yet (see its own body) -- a
+        # from-scratch project may well create its DRC deck before its
+        # Layers, so set this directly rather than relying on load()
+        # to have reached that point.
+        self.drc_root = new_drc_root
+        rules, _skipped = drc_mod.extract_design_rules(self.pdk_root, self.drc_root)
+        self.project.design_rules = rules
+        self.rules_view.refresh()
+        self.status.set(
+            f"Created a new, empty DRC deck at {self.drc_root.relative_to(self.pdk_root)} -- "
+            "use New Rule in the DRC Rules tab to start adding rules."
+        )
 
     def _export_magic_types(self):
         """Writes real, patched .tech text for every real technology

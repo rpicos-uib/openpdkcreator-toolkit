@@ -82,27 +82,37 @@ def export_lef_files(
 
 
 def export_drc_rules(
-    pdk_root: Path, drc_root: Path, design_rules: list[DesignRule], dest_root: Path | None = None,
-) -> tuple[list[Path], list[str]]:
+    pdk_root: Path, drc_root: Path, design_rules: list[DesignRule],
+    layers: list[Layer] | None = None, dest_root: Path | None = None,
+) -> tuple[list[Path], list[tuple[str, str]]]:
     """Every real ``.drc`` file with at least one real, resolvable
     rule (grouped by real source file, all real edits in a file
     applied in one pass) plus the one real JSON config file (if any
     rule's value needs patching there). A rule with no real,
-    resolvable provenance (hand-authored via New Rule) can't be
-    written back -- returned by ``rule_id`` in the second list, not
-    silently dropped."""
+    resolvable provenance (hand-authored via New Rule) is instead
+    *generated*, not patched, into a separate, entirely tool-owned
+    ``custom_rules.drc`` (``ihp/drc_writer.py``'s own
+    ``render_custom_drc_file`` -- see its own docstring for why this
+    is a genuinely different write-back discipline from every other
+    real file here). *layers* resolves a generated rule's own real
+    GDS layer/datatype; not needed by the CLI/``export_full`` (neither
+    ever has a hand-authored rule to generate). Every rule that still
+    can't be written back either way -- an unsupported *check_type*, a
+    missing value, or an unresolvable layer name -- is returned as
+    ``(rule_id, reason)`` in the second list, never silently dropped."""
 
     by_relpath: dict[str, list[DesignRule]] = {}
-    skipped: list[str] = []
+    new_rules: list[DesignRule] = []
     for rule in design_rules:
         parsed = drc_writer.parse_provenance(rule.source_provenance)
         if parsed is None:
-            skipped.append(rule.rule_id)
+            new_rules.append(rule)
             continue
         relpath, _check_line, _output_line = parsed
         by_relpath.setdefault(relpath, []).append(rule)
 
     written: list[Path] = []
+    failures: list[tuple[str, str]] = []
     all_value_edits: dict[str, float] = {}
     for relpath, rules in by_relpath.items():
         source_path = pdk_root / relpath
@@ -113,6 +123,15 @@ def export_drc_rules(
         export_path.write_text(text, encoding="utf-8")
         written.append(export_path)
 
+    if new_rules:
+        custom_text, custom_failures = drc_writer.render_custom_drc_file(new_rules, layers or [])
+        failures.extend(custom_failures)
+        custom_path = drc_root / drc_mod.CUSTOM_DRC_FILENAME
+        export_custom_path = export_path_for(pdk_root, custom_path, dest_root)
+        export_custom_path.parent.mkdir(parents=True, exist_ok=True)
+        export_custom_path.write_text(custom_text, encoding="utf-8")
+        written.append(export_custom_path)
+
     json_path = drc_mod.find_json_config_path(drc_root)
     if all_value_edits and json_path is not None:
         json_text = drc_writer.render_json_config(json_path, all_value_edits)
@@ -121,7 +140,7 @@ def export_drc_rules(
         export_json_path.write_text(json_text, encoding="utf-8")
         written.append(export_json_path)
 
-    return written, skipped
+    return written, failures
 
 
 def export_magic_types(
@@ -302,7 +321,7 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     drc_root = drc_mod.find_drc_root(pdk_root)
     if drc_root is not None:
         rules, _skipped_extraction = drc_mod.extract_design_rules(pdk_root, drc_root)
-        export_drc_rules(pdk_root, drc_root, rules, dest_root)
+        export_drc_rules(pdk_root, drc_root, rules, dest_root=dest_root)
 
     technologies: dict[str, magic_tech_mod.MagicTechnology] = {}
     for path in magic_tech_mod.find_tech_files(pdk_root):

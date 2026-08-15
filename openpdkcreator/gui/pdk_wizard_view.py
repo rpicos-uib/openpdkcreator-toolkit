@@ -19,32 +19,36 @@ node's own "For a memristor PDK" note says plainly what that stage
 means for a 2-terminal device with no IHP precedent to copy from.
 
 **A real, honest gap, surfaced once as a legend callout and again per
-node**: Layers, Magic Tech, LEF, xschem Symbols/Schematics, and Qucs-S
-Symbols/Components all support creating a brand-new file from inside
-this GUI today (their own "New..."/**Create File** actions -- see
-``ihp/layers.py``'s ``create_new_lyp_file``, ``ihp/magic_tech.py``'s
-``create_new_tech_file``, ``ihp/lef.py``'s ``create_new_lef_file``,
+node**: Layers, Magic Tech, DRC Rules, LEF, xschem Symbols/Schematics,
+and Qucs-S Symbols/Components all support creating a brand-new file
+from inside this GUI today (their own "New..."/**Create File**
+actions -- see ``ihp/layers.py``'s ``create_new_lyp_file``,
+``ihp/magic_tech.py``'s ``create_new_tech_file``, ``ihp/drc.py``'s
+``create_new_drc_deck``, ``ihp/lef.py``'s ``create_new_lef_file``,
 ``ihp/xschem.py``'s ``create_new_sym_file``, ``ihp/xschem_sch.py``'s
 ``create_new_sch_file``, ``ihp/qucs_sym.py``'s
 ``create_new_symbol_geometry_file``/``create_new_component_file``).
-LEF's own version is deliberately partial, still flagged as a real
-gap (see ``_status_lef`` below): it unblocks a valid, empty library,
-not a whole new **MACRO** (``lef_writer.py`` refuses to write one
-back with no real source position, and there's no **New Macro**
-action). **DRC Rules** is the one domain with no real path at all --
-a real check needs actual KLayout Ruby DSL logic, and
-``drc_writer.py`` explicitly refuses to write back a hand-authored
-rule with no real source position to patch (see ``_status_drc_rules``
-below). Every remaining domain (Verilog, Liberty, CDL/SPICE, ngspice
-Models, and User Models' own ``.va``/``.v`` files) requires a real
-file to already exist on disk -- hand-place one (copied from a
-template/reference PDK, or written in an external editor) under the
-matching real path, and this tool can load and edit it from there.
-This is not glossed over: a from-scratch memristor PDK genuinely
-starts smallest at User Models (just write a ``.va`` file and drop it
-under ``user_models/veriloga/`` -- no template needed at all) and the
-xschem/Qucs-S symbol editors (draw a device symbol from nothing), and
-grows outward from there.
+LEF's and DRC Rules' own versions are each deliberately partial,
+though (see ``_status_lef``/the ``drc_rules`` stage's own description
+below): a new LEF unblocks a valid, empty *library*, not a whole new
+**MACRO** (``lef_writer.py`` refuses to write one back with no real
+source position, and there's no **New Macro** action); a hand-authored
+DRC **New Rule** is genuinely exportable -- real, generated KLayout
+Ruby, not just metadata -- only for the three ``check_type``s with a
+real, single-method shape this project knows how to emit
+(``min_width``/``min_spacing``/``min_enclosure`` -- see
+``ihp/drc_writer.py``'s own docstring); every other check type still
+can't be written back. Every remaining domain (Verilog, Liberty,
+CDL/SPICE, ngspice Models, and User Models' own ``.va``/``.v`` files)
+requires a real file to already exist on disk -- hand-place one
+(copied from a template/reference PDK, or written in an external
+editor) under the matching real path, and this tool can load and edit
+it from there. This is not glossed over: a from-scratch memristor PDK
+genuinely starts smallest at User Models (just write a ``.va`` file
+and drop it under ``user_models/veriloga/`` -- no template needed at
+all) and the xschem/Qucs-S symbol editors (draw a device symbol from
+nothing), and grows outward through the newly-creatable Layers/Magic
+Tech/DRC Rules/LEF skeletons above.
 
 Status per node is computed directly from *app.pdk_root* (and, for User
 Models, ``export.PROJECT_ROOT``) on every ``refresh()`` -- cheap
@@ -130,13 +134,7 @@ def _status_magic_tech(app):
 def _status_drc_rules(app):
     root = drc_mod.find_drc_root(app.pdk_root)
     if root is None:
-        return (
-            False,
-            "No real DRC deck found.",
-            "No in-GUI way to create a DRC deck from scratch -- start "
-            "from a template KLayout DRC script and edit rule "
-            "id/description/value in the DRC Rules tab.",
-        )
+        return False, "No real DRC deck found.", None
     return True, f"{len(app.project.design_rules)} real rule(s) extracted from {root.name}.", None
 
 
@@ -304,7 +302,12 @@ _STAGES: list[WizardStage] = [
     WizardStage(
         "drc_rules", "DRC Rules", 3, 3, ("Technology", "DRC Rules"),
         "Design-rule checks extracted from a real KLayout DRC deck -- "
-        "minimum widths/spacings/enclosures that a real layout must obey.",
+        "minimum widths/spacings/enclosures that a real layout must obey. "
+        "No deck yet? New DRC Deck... creates a valid, empty one. New "
+        "Rule is genuinely exportable too (real, generated KLayout Ruby) "
+        "for minimum width/spacing/enclosure checks specifically -- the "
+        "other check types stay metadata-only, reported plainly on "
+        "export rather than silently dropped.",
         "Your memristor stack's own rules: minimum electrode overlap, "
         "switching-layer enclosure, via alignment to the electrodes, etc.",
         _status_drc_rules,

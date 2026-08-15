@@ -81,39 +81,47 @@ directory glob, never a full parse) plus a **Go to Tab** button
 as needed) that jumps straight there.
 
 A real, honest gap is surfaced both as a legend color and per node.
-**Layers, Magic Tech, LEF, xschem Symbols/Schematics, and Qucs-S
-Symbols/Components all support creating a brand-new file from inside
-this GUI today** -- each domain's own file picker/toolbar gained a
-**New .lyp File...**/**New .tech File...**/**Create File** action
-(`ihp/layers.py`'s `create_new_lyp_file`, `ihp/magic_tech.py`'s
-`create_new_tech_file`, `ihp/lef.py`'s `create_new_lef_file`, plus
-xschem/Qucs-S's own already-existing ones) that writes a real,
-minimal, valid skeleton -- an empty `<layer-properties>` root, a
-`tech`/`version` header plus empty Types/Planes/Contacts/Aliases
-sections, or an empty-library `.lef` -- genuinely usable immediately
-afterward, not just a stub: **New Layer**/**New Type**/**New Plane**/
-**New Contact**/**New Alias** and a real export all work against a
-skeleton the same as against a real, downloaded file. **LEF's own
-version is deliberately partial**, still flagged as a real gap: it
-unblocks a valid, empty *library*, not a whole new **MACRO** --
+**Layers, Magic Tech, DRC Rules, LEF, xschem Symbols/Schematics, and
+Qucs-S Symbols/Components all support creating a brand-new file from
+inside this GUI today** -- each domain's own file picker/toolbar
+gained a **New .lyp File...**/**New .tech File...**/**New DRC
+Deck...**/**Create File** action (`ihp/layers.py`'s
+`create_new_lyp_file`, `ihp/magic_tech.py`'s `create_new_tech_file`,
+`ihp/drc.py`'s `create_new_drc_deck`, `ihp/lef.py`'s
+`create_new_lef_file`, plus xschem/Qucs-S's own already-existing ones)
+that writes a real, minimal, valid skeleton -- an empty
+`<layer-properties>` root, a `tech`/`version` header plus empty
+Types/Planes/Contacts/Aliases sections, an empty DRC deck, or an
+empty-library `.lef` -- genuinely usable immediately afterward, not
+just a stub: **New Layer**/**New Type**/**New Plane**/**New
+Contact**/**New Alias**/**New Rule** and a real export all work
+against a skeleton the same as against a real, downloaded file.
+**LEF's own version is deliberately partial**, still flagged as a real
+gap: it unblocks a valid, empty *library*, not a whole new **MACRO** --
 `ihp/lef_writer.py` explicitly refuses to write back a macro with no
 real source position, and there's no **New Macro** action, only pins
-within an already-existing macro. **DRC Rules is the one domain with
-no real path at all**: a real check needs actual KLayout Ruby DSL
-logic, and `ihp/drc_writer.py` explicitly refuses to write back a
-hand-authored rule with no real source position to patch -- **New
-Rule** stays metadata-only there. Every remaining domain -- Verilog,
-Liberty, CDL/SPICE, ngspice Models, and User Models' own `.va`/`.v`
-files -- requires a real file to already exist on disk (hand-placed
-from a template/reference PDK, or written in an external editor)
-before this tool can load and edit it; nothing here pretends
-otherwise. A from-scratch memristor PDK genuinely starts smallest at
-**User Models** (write a `.va` compact model, drop it under
+within an already-existing macro. **DRC Rules' New Rule is also
+deliberately partial**: a hand-authored rule is genuinely exportable
+-- real, *generated* KLayout DRC Ruby into a separate, tool-owned
+`custom_rules.drc`, not just metadata -- but only for the three
+`check_type`s with a real, single-method shape this project knows how
+to emit (`min_width`/`min_spacing`/`min_enclosure`, the same three
+`ihp/drc.py`'s own extractor already recognizes coming the other way);
+every other `check_type`, or a rule referencing a layer name with no
+matching real `Layer`/GDS layer-datatype, still can't be written back
+-- reported by rule ID and reason in the status line, never silently
+dropped. Every remaining domain -- Verilog, Liberty, CDL/SPICE,
+ngspice Models, and User Models' own `.va`/`.v` files -- requires a
+real file to already exist on disk (hand-placed from a
+template/reference PDK, or written in an external editor) before this
+tool can load and edit it; nothing here pretends otherwise. A
+from-scratch memristor PDK genuinely starts smallest at **User
+Models** (write a `.va` compact model, drop it under
 `user_models/veriloga/` -- no template needed, and `ihp/cells.py`'s
 own By Cell aggregation picks it up automatically by name) and the
 xschem/Qucs-S symbol editors (draw a device symbol from nothing), then
-grows outward through the newly-creatable Layers/Magic Tech/LEF
-skeletons above.
+grows outward through the newly-creatable Layers/Magic Tech/DRC
+Rules/LEF skeletons above.
 
 Tabs are grouped by what they represent, not left flat: **Overview**
 (the real, per-tool file inventory, spanning every domain including
@@ -1242,6 +1250,70 @@ editor yet -- see Future Work.
     `find_lef_files` afterward (not a crash, not data loss) -- the
     LEF tab's own new hint label exists specifically to steer around
     this.
+- **Generate real DRC rules, and export/import them** -- closes the
+  remaining, most-genuinely-hard gap of the four the **PDK Wizard**
+  surfaced (see its own README section above):
+  - `ihp/drc.py`'s `create_new_drc_deck` writes a real, minimal, valid,
+    empty deck (a real `custom_rules.drc` skeleton under
+    `libs.tech/klayout/tech/drc/`) -- **New DRC Deck...** in the DRC
+    Rules tab, mirroring Layers/Magic Tech/LEF's own pattern. No JSON
+    config file is created: a brand-new rule's own value is written as
+    a literal `<value>.um` straight into its own Ruby call rather than
+    indirected through a `drc_rules['KEY']` JSON lookup the way IHP's
+    own real files use -- that indirection is a real IHP convention,
+    not a KLayout requirement, and skipping it avoids inventing a
+    second, empty JSON file with nothing real in it yet.
+  - **The actual "generate" step** -- `ihp/drc_writer.py`'s new
+    `render_new_rule_block`: a hand-authored rule (**New Rule**,
+    already a full, real form -- rule_id/description/check_type/up to
+    3 layer pickers/value, nothing new needed there) becomes real,
+    runnable KLayout DRC Ruby for the three `check_type`s with a real,
+    single-method shape this project already recognizes coming the
+    other way (`min_width` -> `.width()`, `min_spacing` -> `.space()`,
+    `min_enclosure` -> `.enclosed()`). Each rule defines its own real
+    layer(s) inline via KLayout's own `input(gds_layer, gds_datatype)`
+    -- resolved from the rule's own `layers` field against
+    `app.project.layers` by name -- since a from-scratch deck has no
+    real, pre-existing common-include file defining shared Ruby layer
+    variables the way IHP's own real deck does.
+  - **A genuinely different write-back discipline than every other
+    writer here**, not a copy-paste of the "surgical patch" pattern:
+    `custom_rules.drc` is entirely tool-owned (born from New Rule,
+    never a real, downloaded foundry file), so `render_custom_drc_file`
+    fully *regenerates* its content from the current rule list on every
+    export rather than position-tracking a surgical patch -- correct
+    and far simpler here, since there's no third-party formatting to
+    preserve. Real rules with real, resolvable provenance (extracted
+    from IHP's own files) keep the existing surgical-patch path,
+    completely unchanged.
+  - `export.py`'s `export_drc_rules` gained a `layers` parameter and a
+    richer `list[(rule_id, reason)]` failure return (was a bare
+    `list[str]` of skipped IDs) -- every rule that still can't be
+    written back (an unsupported `check_type`, a missing value, or a
+    `layers` entry with no matching real, resolvable `Layer`) is
+    reported with *why*, in the GUI status line and both CLI commands
+    (`export-drc`, `export-full`) alike, never silently dropped. A
+    real, caught-before-shipping bug from this signature change: the
+    positional call inside `export_full_pdk` (`export_drc_rules(...,
+    dest_root)`) would have silently passed *dest_root* as the new
+    *layers* parameter -- fixed by passing `dest_root=dest_root`
+    explicitly.
+  - **Import** is the existing, unmodified extraction path
+    (`find_drc_root`/`extract_design_rules`) -- verified for real that
+    it round-trips: a `custom_rules.drc` exported from 2 hand-authored
+    rules re-parses back to those same 2 real rules by ID.
+  - Verified end-to-end against a genuinely empty `pdk_root` (deck
+    created before Layers even existed, found a real, separate ordering
+    bug in `App._new_drc_deck` this way -- see below) and confirmed
+    byte-identical, zero-`custom_rules.drc` no-edit export against the
+    full real IHP deck's own 75 real rules across 29 real files.
+  - **Found and fixed a second real, pre-existing-shaped bug along the
+    way**: `App.load()` early-returns before reaching DRC-root
+    discovery when there's no real `.lyp` yet (a from-scratch project
+    may well create its DRC deck *before* its Layers) -- `_new_drc_deck`
+    now sets `self.drc_root`/re-extracts directly rather than assuming
+    `load()` reached that point, avoiding a real `AttributeError` on
+    the status-line message.
 
 ## Future work
 
@@ -1743,15 +1815,19 @@ models, ...), not just read/display layers. Concretely, still open:
   KLayout layer or a Magic Tech entry). Until then, `create_new_lef_file`
   only unblocks a valid, empty library to load pins into once a real
   macro is hand-authored into it.
-- **A real "create a DRC deck from scratch" path.** Genuinely harder
-  than the other three: a real KLayout DRC check needs actual Ruby DSL
-  logic (`<layer_expr>.width()`/`.space()`/`.enclosed()` etc., see
-  `ihp/drc.py`'s own docstring), which **New Rule** doesn't generate --
-  `ihp/drc_writer.py` already explicitly refuses to write back a rule
-  with no real source position (`"a hand-authored New Rule, which has
-  no real source position to patch"`). A from-scratch memristor PDK's
-  DRC deck still has to start from a real template `.drc` script edited
-  externally.
+- **Real Ruby generation for DRC Rules' remaining six `check_type`s**
+  (`min_area`/`min_overlap`/`max_length`/`max_current_density`/
+  `max_dimension`/`density_window`) -- `ihp/drc_writer.py`'s own
+  `render_new_rule_block` only emits real KLayout DRC Ruby for
+  `min_width`/`min_spacing`/`min_enclosure` today, the three real,
+  single-method shapes `ihp/drc.py`'s own extractor already recognizes
+  coming the other way; the rest have no established real
+  Ruby-generation pattern here yet (and, for `min_overlap`'s own
+  `layer_roles=("Layer","Layer","Layer")` with `max_layers=None`, no
+  single obvious real KLayout method to target in the first place).
+  A **New Rule** of one of these six is still real, editable metadata
+  -- it just can't be exported into a runnable check yet, reported
+  honestly (rule ID + reason) rather than silently dropped.
 
 ## License
 
