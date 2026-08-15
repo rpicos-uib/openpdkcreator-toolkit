@@ -139,9 +139,15 @@ finally:
     subprocess_mod.Popen = original_popen
 argv2, cwd2 = launched[-1]
 print("klayout launch argv:", argv2)
-assert argv2[-1] == str(lmv._entries["gds"].path)
+assert str(lmv._entries["gds"].path) in argv2
 assert "-l" in argv2
-print("PASS: Open in KLayout resolves a real argv (real .lyp + the real, per-cell .gds).")
+assert "-rr" in argv2
+rb_script_path = Path(argv2[-1])
+rb_script_text = rb_script_path.read_text()
+print("generated Ruby script:\n" + rb_script_text)
+assert 'RBA::CellView::active.cell_name = "sg13g2_inv_1"' in rb_script_text
+rb_script_path.unlink()
+print("PASS: Open in KLayout resolves a real argv (real .lyp + the real, per-cell .gds + a real, correct cell-selection Ruby script via -rr).")
 
 launched.clear()
 subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))

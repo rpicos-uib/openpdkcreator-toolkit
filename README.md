@@ -283,13 +283,18 @@ real, fetched FOSS source of each tool, not assumed:
   own real `src/options.c`; its `--help` prints nothing in this
   container, so this had to be verified from source).
 - **GDS/Layout** -> two real, verified options: **Open in KLayout**
-  (`klayout -l <real .lyp> <real .gds>`, its own already-existing
-  static launch guidance plus the new `extra_argv`) and **Open in
-  Magic** (a real, freshly-written 2-line Tcl script -- `gds read
-  <path>` then `load <cell>` -- verified live in this project's own
-  container: reading a real IHP GDS this way printed every real cell
-  name inside it). No CLI flag exists on either tool to jump straight
-  to one cell inside a multi-cell GDS -- a real, accepted limit.
+  (`klayout -l <real .lyp> <real .gds> -rr <script.rb>`, its own
+  already-existing static launch guidance plus the new `extra_argv` --
+  the script is a real, freshly-written one-liner,
+  `RBA::CellView::active.cell_name = "<cell>"`, jumping straight to
+  the requested real cell even inside a real, combined multi-macro
+  GDS; `-rr` (not `-r`, which exits after running; not `-rm`, which
+  runs *before* files load) is the one confirmed real, from KLayout's
+  own local `-h` text, to run after loading and keep the GUI open) and
+  **Open in Magic** (a real, freshly-written 2-line Tcl script -- `gds
+  read <path>` then `load <cell>` -- verified live in this project's
+  own container: reading a real IHP GDS this way printed every real
+  cell name inside it).
 - **Qucs-S Symbol/Component** -> launches `qucs-s`, but **does not**
   claim to open the file: confirmed real, from Qucs-S's own fetched
   `qucs/main.cpp`, there is no CLI way to open a specific file in its
@@ -1655,6 +1660,28 @@ editor yet -- see Future Work.
   correctly refuses to overwrite an existing real file, plus a real GUI
   test typing a new path, clicking **Create File**, and confirming the
   file exists, is selected, and the button flips to **Edit File**.
+- **Real per-cell navigation inside a multi-cell GDS opened in
+  KLayout** -- closing a Future Work item this README itself called
+  "a real, accepted limit" until an actual, documented KLayout flag
+  was found and verified: **Open in KLayout** now also writes a real,
+  freshly-generated one-line Ruby script,
+  `RBA::CellView::active.cell_name = "<cell>"`, launched via `-rr
+  <script>` (`gui/library_manager_view.py`'s `_open_klayout`, the same
+  `extra_argv` mechanism Magic's own GDS-loading Tcl script already
+  uses). Getting the right flag took real, careful reading of
+  KLayout's own local `-h` output, not just the first plausible-
+  looking one: `-r <script>` runs "after having loaded files" (the
+  right timing) but exits afterward (wrong -- closes the GUI); `-rm
+  <script>` runs "before loading files" (too early --
+  `RBA::CellView::active` has nothing loaded yet); `-rr <script>` is
+  "like -r, but does not exit" -- the one that actually works.
+  Confirmed live, for real, in this project's own container: opening a
+  real, combined 84-macro `sg13g2_stdcell.gds` this way jumped straight
+  to the requested cell, both the window title and the canvas
+  correctly showing it -- not just the default top-level view. Real,
+  driven test coverage: `tests/test_library_manager_view.py`'s own
+  KLayout-launch assertion now also checks for `-rr` and reads the
+  generated script's real content.
 
 ## Future work
 
@@ -2171,11 +2198,6 @@ models, ...), not just read/display layers. Concretely, still open:
   honestly (rule ID + reason) rather than silently dropped.
 - **Real layout-view *creation*** (blocked on this codebase having no
   Magic `.mag` file parser at all yet -- GDS is real, view-only).
-- **Real per-cell navigation inside a multi-cell GDS opened in
-  KLayout** -- no CLI flag exists for it; a real, accepted limit today
-  (Magic's own `gds read`/`load` combo, used for the Library Manager's
-  own **Open in Magic**, doesn't have this limit, but Magic has no
-  layout *editing* story for a real, unparsed `.mag` cell either).
 
 ## License
 

@@ -19,16 +19,24 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   ``--print`` mode). Said plainly to the user before launching, not
   glossed over.
 - GDS/Layout -> **two** real, verified options: **Open in KLayout**
-  (``klayout -l <real .lyp> <real .gds>`` -- KLayout's own existing
-  static ``LaunchGuidance`` already supplies ``-l``; ``extra_argv`` just
-  adds the real, per-cell GDS path on top) and **Open in Magic**
-  (a real, freshly-written 2-line Tcl script -- ``gds read <path>`` then
-  ``load <cell>`` -- passed as ``extra_argv`` on top of Magic's own
-  existing tech-loading ``LaunchGuidance``; verified live, for real, in
-  this project's own container: ``gds read`` against a real IHP GDS
-  printed every real cell name inside it. No CLI flag exists for
-  KLayout to jump to one specific cell in a multi-cell GDS -- a real,
-  accepted limit, not solved here).
+  (``klayout -l <real .lyp> <real .gds> -rr <script.rb>`` -- KLayout's
+  own existing static ``LaunchGuidance`` already supplies ``-l``;
+  ``extra_argv`` adds the real, per-cell GDS path plus a real,
+  freshly-written one-line Ruby script,
+  ``RBA::CellView::active.cell_name = "<cell>"``, run via ``-rr``
+  (confirmed real, from KLayout's own local ``-h`` text: ``-r`` "after
+  having loaded files" but exits afterward; ``-rm`` runs *before*
+  files load, too early for ``CellView::active`` to have anything yet;
+  ``-rr`` is "like -r, but does not exit" -- the one that actually
+  works here, verified live in noVNC: the window title and canvas both
+  correctly jump straight to the requested real cell inside a real,
+  combined multi-macro GDS, closing what was a real, previously
+  accepted CLI limit) and **Open in Magic** (a real, freshly-written
+  2-line Tcl script -- ``gds read <path>`` then ``load <cell>`` --
+  passed as ``extra_argv`` on top of Magic's own existing tech-loading
+  ``LaunchGuidance``; verified live, for real, in this project's own
+  container: ``gds read`` against a real IHP GDS printed every real
+  cell name inside it).
 - LEF/CDL/SPICE/Verilog/Liberty -> ``file_view_dialog`` (in-app text
   view) -- no real external-tool identity for these, matching
   ``cell_hub_view.py``'s own existing precedent.
@@ -534,7 +542,13 @@ class LibraryManagerView(ttk.Frame):
         self._launch("qucs-s")
 
     def _open_klayout(self, entry: li_mod.ViewEntry):
-        self._launch("klayout", extra_argv=(str(entry.path),))
+        handle = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".rb", prefix="openpdkcreator_klayout_cell_", delete=False, encoding="utf-8",
+        )
+        cell_name = self.current_cell.replace('"', '\\"') if self.current_cell else ""
+        with handle:
+            handle.write(f'RBA::CellView::active.cell_name = "{cell_name}"\n')
+        self._launch("klayout", extra_argv=(str(entry.path), "-rr", handle.name))
 
     def _open_magic_gds(self, entry: li_mod.ViewEntry):
         handle = tempfile.NamedTemporaryFile(
