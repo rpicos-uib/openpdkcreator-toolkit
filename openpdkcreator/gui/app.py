@@ -132,6 +132,7 @@ from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
 from ..models import DesignRule, Layer
 from .cell_hub_view import CellHubView
+from .environment_view import EnvironmentView
 from .file_view_dialog import view_file_dialog
 from .layers_view import LayersView
 from .lef_view import LefView
@@ -741,6 +742,11 @@ class App(ttk.Frame):
         self.settings_notebook.add(tools_frame, text="Tools")
         self.tools_view = ToolsView(tools_frame)
         self.tools_view.pack(fill="both", expand=True)
+
+        environment_frame = ttk.Frame(self.settings_notebook)
+        self.settings_notebook.add(environment_frame, text="Environment")
+        self.environment_view = EnvironmentView(environment_frame, self)
+        self.environment_view.pack(fill="both", expand=True)
 
     # -- tab navigation (used by the PDK Wizard tab) -----------------------
 

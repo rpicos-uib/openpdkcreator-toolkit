@@ -230,6 +230,25 @@ whatever's already on PATH -- a thin GUI wrapper around
 `eda_tools.py`'s own existing check/launch logic (no new detection
 code of its own, so the CLI and GUI stay in lock-step).
 
+**Settings > Environment** generates a real, sourceable bash script
+(`ihp/shell_env.py`) for running this PDK's tools directly from a
+terminal, outside this GUI entirely -- `export PDK_ROOT=...`/`export
+PDK=...` (the real convention IHP's own `xschemrc`/README files
+already use, confirmed by reading them directly, not assumed) plus
+`magic_pdk`/`klayout_pdk`/`xschem_pdk`/`ngspice_pdk`/`librelane_pdk`
+shell functions, each pre-pointed at this PDK's own real files (a
+real, discovered `.magicrc`/`.lyp`, not a guessed filename -- see that
+module's own docstring for exactly which real files/behaviors every
+one of these was confirmed against, including two, real, working
+end-to-end checks: `klayout_pdk -v` and a full `librelane_pdk
+--smoke-test` flow). A wrapper for a real file that doesn't exist yet
+(e.g. no `.lyp` in a from-scratch project) is emitted commented-out
+with a plain note, never a function that would fail confusingly the
+first time it's called. **Save Script** writes it to `shell_env/`
+(gitignored -- an absolute, machine-specific `PDK_ROOT` baked in isn't
+shareable content) and makes it executable; **Copy to Clipboard**
+skips the file entirely.
+
 Every real file-backed tab (Layers, Magic Tech, Cells) has a
 **View File** button opening the real, underlying file directly
 (`file_view_dialog.view_file_dialog`) -- read-only at first, since

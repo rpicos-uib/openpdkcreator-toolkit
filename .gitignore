@@ -22,3 +22,8 @@ __pycache__/
 # because this container's own passwd entry sets HOME to this project's
 # own bind-mounted directory. Unrelated to this project's own code.
 .cache/
+
+# Generated shell environment script (Settings > Environment) -- bakes
+# in an absolute, machine-specific PDK_ROOT, so it's derived/local, not
+# shareable content, same reasoning as data/saves/export/ above.
+shell_env/
