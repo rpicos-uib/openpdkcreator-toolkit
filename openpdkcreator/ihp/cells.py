@@ -42,6 +42,17 @@ xschem/Qucs-S file with no matching real cell name here never
 introduces a brand-new entry; a wholly new, project-authored cell
 (symbol/schematic only, no real libs.ref view at all) is
 ``ihp/library_index.py``'s own job, not this function's.
+
+**Registered (Library Manager) entries** work the same way as xschem/
+Qucs-S -- ``registered_views`` (view kind -> path) only ever enriches a
+cell already known from a real view above, matching the same "a
+wholly new cell belongs to ``library_index.py``, not here" boundary.
+The caller (``gui/cell_hub_view.py``) computes which entries are
+registered (via ``ihp/library_index.py``'s own ``merged_entries``,
+``source == "registered"``) and passes them in as a plain
+``dict[str, dict[str, Path]]`` -- this module stays decoupled from
+``library_index.py``'s own dataclasses, the same reason
+``user_models_by_cell`` is pre-computed by its own caller too.
 """
 
 from __future__ import annotations
@@ -86,6 +97,15 @@ class CellViews:
     xschem_schematic_source: Path | None = None
     qucs_symbol_source: Path | None = None
     qucs_component_source: Path | None = None
+    registered_views: dict[str, Path] = field(default_factory=dict)
+    """This cell's own project-authored (Library Manager-registered,
+    ``source == "registered"`` in ``ihp/library_index.py``) views, view
+    kind -> real file path -- e.g. ``{"lef": Path(...)}`` for a
+    hand-authored LEF registered via **Add...** with no real
+    ``libs.ref/`` counterpart. Only set for a view kind this cell has
+    no *real* source for already (real always wins, matching
+    ``library_index.py``'s own merge rule) -- see this module's own
+    docstring for why a wholly new cell can't be introduced this way."""
 
 
 def discover_families(pdk_root: Path) -> list[str]:
@@ -102,6 +122,7 @@ def build_cell_index(
     get_verilog_modules: Callable[[Path], list[verilog_mod.VerilogModule]] | None = None,
     get_liberty_cells: Callable[[Path], list[liberty_mod.LibertyCell]] | None = None,
     user_models_by_cell: dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]] | None = None,
+    registered_by_cell: dict[str, dict[str, Path]] | None = None,
 ) -> dict[str, CellViews]:
     """*get_lef*/*get_netlist_cells*/*get_verilog_modules*/
     *get_liberty_cells*: optional parse-with-caching hooks (the GUI
@@ -121,7 +142,14 @@ def build_cell_index(
     name with no real view of its own here (a wholly new, user-defined
     cell not yet in the real PDK) still gets a real ``CellViews``
     entry -- ``get_or_create`` runs for user models the same as every
-    real view above."""
+    real view above.
+
+    *registered_by_cell*: cell name -> view kind -> real path, for this
+    family's own ``library_index.yaml`` entries with
+    ``source == "registered"`` (pre-computed by the caller -- see this
+    module's own docstring). Enriches an already-known cell's
+    ``registered_views`` only, the same real "no brand-new cell this
+    way" boundary xschem/Qucs-S already has."""
 
     parse_lef = get_lef or lef_mod.parse_lef_file
     parse_netlist = get_netlist_cells or netlist_mod.find_cells
@@ -226,6 +254,13 @@ def build_cell_index(
         for cell_name, models in user_models_by_cell.items():
             cv = get_or_create(cell_name)
             cv.user_models.extend(models)
+
+    if registered_by_cell:
+        for cell_name, views in registered_by_cell.items():
+            cv = index.get(cell_name)
+            if cv is None:
+                continue  # a wholly new cell: library_index.py's own job, not this one's -- see docstring.
+            cv.registered_views.update(views)
 
     return index
 

@@ -186,7 +186,9 @@ still-unparsed domain.
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
 Verilog/Liberty/GDS, plus a **User** column counting any linked
-user-authored Verilog/Verilog-A model) actually exist, jump straight
+user-authored Verilog/Verilog-A model) actually exist -- each column
+also shows a `+` instead of `✓` for a project-authored view registered
+via the Library Manager with no real counterpart -- jump straight
 to that cell's own real block inside each, and **edit its real LEF
 pins directly** in a **Pins** pane -- the exact same in-memory macro/pins the LEF tab's own
 "LEF Macros" sub-tab edits (both tabs parse through one shared,
@@ -1605,6 +1607,34 @@ editor yet -- see Future Work.
     rendering issue specific to that noVNC session, not a bug in
     `rules_view.py`. Documented here so the record stays honest, not
     because a fix was needed.
+- **By Cell now surfaces `library_index.yaml`'s own registered entries
+  too**, not just real `pdk_root` ones -- closing the Future Work item
+  of the same name. `CellViews` gained a `registered_views` dict (view
+  kind -> path); `build_cell_index` gained a `registered_by_cell`
+  param, enriching an already-known cell exactly the same way xschem/
+  Qucs-S already do (a registered-only cell never introduces a
+  brand-new row here -- that's still the Library Manager's own job, a
+  deliberate, documented boundary, not an oversight). `gui/
+  cell_hub_view.py` computes it from `merged_entries`, filtered to
+  `source == "registered"`, and reshapes it into the plain dict shape
+  `cells.py` expects, keeping that module decoupled from
+  `library_index.py`'s own dataclasses (the same reason
+  `user_models_by_cell` is pre-computed by its own caller). The tree's
+  own existing LEF/CDL/SPICE/Verilog/Liberty/GDS columns show a `+`
+  instead of `✓` for a registered-only view (a new legend row spells
+  out the difference); real always wins, matching `library_index.py`'s
+  own merge rule -- a registered entry never touches a cell's real,
+  parsed fields, only `registered_views`. **Deliberately out of
+  scope this pass**: the View/Edit Ports buttons stay gated on the
+  real, parsed object, so a registered-only entry doesn't get an
+  in-app viewer yet -- a natural, small follow-on, not required for
+  this one to be genuinely useful (the point was visibility, not full
+  interactivity). Verified for real, driven: an isolated unit test
+  (`build_cell_index` enriches a known cell, never fabricates a new
+  one) plus an end-to-end GUI test registering a real SPICE file for a
+  real IHP cell (`sg13g2_Corner`, which genuinely has no real per-cell
+  SPICE) and confirming it shows up as `+` in the actual tree, with
+  every real, unrelated column untouched.
 
 ## Future work
 
@@ -2114,10 +2144,6 @@ models, ...), not just read/display layers. Concretely, still open:
   A **New Rule** of one of these six is still real, editable metadata
   -- it just can't be exported into a runnable check yet, reported
   honestly (rule ID + reason) rather than silently dropped.
-- **Surface `library_index.yaml`'s own registered entries inside By
-  Cell too** -- currently real-`pdk_root`-only there; a natural, small
-  extension once the Library Manager's own real usage patterns settle,
-  not required for its first pass.
 - **Real layout-view *creation*** (blocked on this codebase having no
   Magic `.mag` file parser at all yet -- GDS is real, view-only).
 - **Real per-cell navigation inside a multi-cell GDS opened in
