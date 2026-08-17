@@ -1836,6 +1836,68 @@ editor yet -- see Future Work.
   round-trip/persistence regression, since `stack_order` is
   project-metadata-only and several existing tests already exercise
   `import_layers` without asserting on that field.
+- **The Layers stack cross-section is now zoomable, scrollable, and its
+  real viewport genuinely tracks the window.** A real, full IHP stack
+  (377 real layers) on the old fixed 260px-tall canvas squeezed every
+  band under a pixel -- unreadable regardless of window size, since the
+  canvas never grew past that constant, and every band stretched to
+  fit whatever height was available.
+  - **The real viewport now comes from the canvas's own live
+    `winfo_width()`/`winfo_height()`**, not `STACK_CANVAS_W`/`_H` (now
+    just the initial size hint and pre-layout fallback) -- the
+    containing frame is gridded `sticky="nsew"` with real row/column
+    weight (was `sticky="n"`, capped to its packed content size
+    regardless of available window space) and the canvas redraws on
+    every real `<Configure>` event.
+  - **Each real band is always drawn at one fixed, always-readable
+    pixel height (`FIXED_BAND_H`)**, never stretched or shrunk to fit
+    the viewport -- a real vertical `ttk.Scrollbar` (plus mouse-wheel
+    binding) now scrolls through whatever doesn't fit, matching the
+    layer list beside it, which gained the exact same real, wired
+    `ttk.Scrollbar` (it previously had none at all -- only Tk's own
+    unlabeled built-in wheel scrolling, no visible/draggable thumb).
+    The very first draw, and every real Zoom-bound change, scrolls to
+    the real, physical *bottom* of the (possibly zoomed) range --
+    matching this pane's own "(bottom -> top)" label -- while an
+    ordinary redraw (a form-field edit, a window resize) leaves the
+    user's own current scroll position alone. Confirmed live, driven:
+    growing the real window from 1000x800 to 1000x1600 genuinely grew
+    the canvas's own real viewport (493px -> 1424px) while each real
+    band's own height stayed exactly fixed; the real, unzoomed
+    377-layer scrollregion (9842px) genuinely exceeds the real viewport,
+    confirming the scrollbar has real content to scroll through, not a
+    no-op.
+  - **A "Zoom" control** (two editable Min/Max `stack_order` bounds,
+    positioned beside the drawing -- a real, editable "lateral scale",
+    not a draggable-handle range slider) filters which real layers get
+    drawn *before* the fixed-height/scrollbar layout above ever runs;
+    blank means no bound (full range) on either side, an inverted
+    Min/Max is silently swapped rather than left broken, and an
+    out-of-range value clamps to the real current stack instead of
+    crashing or drawing nothing. **Reset** clears both back to blank.
+  - **A real, found-before-shipping Tk quirk**: the first version
+    called `Spinbox.configure(from_=..., to=...)` on every redraw to
+    keep the widgets' own arrow-key bounds current -- confirmed live,
+    empirically, that this silently **overwrites the Spinbox's own
+    bound `textvariable` to the new `from_` value** on every single
+    call, which stomped a real, just-typed Min/Max (or the blank
+    "no bound" default) on the very next redraw, collapsing the
+    drawing to one real layer. Fixed by never reconfiguring `from_`/
+    `to` after construction at all -- real range clamping already
+    happens in Python (`_current_zoom_bounds`) regardless of what the
+    widget's own arrow-key bounds say, so the widget-level bounds were
+    only ever cosmetic in the first place.
+  - Verified for real, driven: `tests/test_layers_zoom.py` (new, 11
+    real assertions) -- the default (no zoom) view draws all 377 real
+    layers; a real Min=0/Max=5 zoom draws exactly those 6 with their
+    real name labels; an inverted and an out-of-range real input are
+    both handled correctly, not crashing; Reset restores the full view;
+    both scrollbars are real and wired; the real scroll-to-bottom
+    default and its preservation across an unrelated edit, and its
+    real re-anchor on a Zoom-bound change; and the live window-resize
+    assertions above. Verified live in the real, running GUI via noVNC
+    too, not just the automated suite -- both scrollbar thumbs visibly
+    present and correctly positioned. Full suite re-run clean (52/52).
 
 ## Future work
 

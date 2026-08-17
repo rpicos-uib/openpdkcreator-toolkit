@@ -11,6 +11,20 @@ The reposition helper (Move Up / Move Down) is what lets a contributor
 fix stack ordering without hand-editing ``stack_order`` integers in YAML;
 it swaps the selected layer's ``stack_order`` with its neighbor's and
 redraws both the list and the cross-section canvas immediately.
+
+The cross-section canvas's own real, laid-out *viewport* genuinely
+grows with the window (gridded ``sticky="nsew"`` with real weight, band
+width redrawn on every real ``<Configure>`` event from the canvas's own
+current, real ``winfo_width()``, never a fixed constant), but each real
+layer's band is always drawn at one fixed, always-readable pixel height
+(``FIXED_BAND_H``) -- a real vertical ``ttk.Scrollbar`` (also mouse-wheel
+bound) scrolls through whatever doesn't fit, exactly like the layer
+list beside it, rather than squeezing every band to fit the viewport (a
+real PDK's full stack -- 377 real layers for IHP -- would otherwise
+still need each band under a pixel tall to avoid scrolling at all). A
+"Zoom" control beside the drawing -- two editable Min/Max ``stack_order``
+bounds (blank means "no bound") -- filters which real layers are drawn
+in the first place, independent of the scrollbar.
 """
 
 from __future__ import annotations
@@ -27,8 +41,23 @@ STATUSES = ("placeholder", "confirmed")
 TRISTATE = ("", "yes", "no")
 
 STACK_CANVAS_W = 260
+"""Initial size hint for the canvas widget, and the minimum fallback
+used before its first real ``<Configure>`` event has fired -- every
+actual redraw uses the canvas's own live ``winfo_width()`` instead, so
+band width genuinely tracks the real window size, not this constant."""
 STACK_CANVAS_H = 260
 BAND_MARGIN = 20
+FIXED_BAND_H = 26
+"""Every real layer's band is always drawn at exactly this pixel
+height, regardless of viewport size or how many real layers are in the
+current zoomed range -- real content taller than the real viewport
+scrolls (see the vertical ``ttk.Scrollbar`` in ``_build_stack_pane``)
+rather than shrinking bands until a real layer name no longer fits."""
+_SPIN_BOUND = 1_000_000
+"""A wide, static Zoom Spinbox range -- real clamping to the current
+stack's own real min/max happens in Python (``_current_zoom_bounds``),
+never via these widgets' own ``from_``/``to`` (see ``_build_stack_pane``'s
+own comment for why reconfiguring those is actively unsafe)."""
 
 
 class LayersView(ttk.Frame):
@@ -78,38 +107,157 @@ class LayersView(ttk.Frame):
             self.tree.column(col, width=width, anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree_scrollbar = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
+        self.tree_scrollbar.grid(row=1, column=1, sticky="ns", pady=(6, 0))
+        self.tree.configure(yscrollcommand=self.tree_scrollbar.set)
 
     # -- stack cross-section preview -------------------------------------
 
     def _build_stack_pane(self):
         mid = ttk.Frame(self)
-        mid.grid(row=0, column=1, sticky="n", padx=4, pady=8)
-        ttk.Label(mid, text="Stack cross-section (bottom → top)").pack()
+        mid.grid(row=0, column=1, sticky="nsew", padx=4, pady=8)
+        mid.rowconfigure(1, weight=1)
+        mid.columnconfigure(1, weight=1)
+
+        ttk.Label(mid, text="Stack cross-section (bottom → top)").grid(
+            row=0, column=0, columnspan=2, pady=(0, 4)
+        )
+
+        # A "lateral scale": two editable stack_order bounds, positioned
+        # beside the drawing rather than a real draggable-handle range
+        # slider -- with 377 real layers on one screen, each band is
+        # under a pixel tall and unreadable; typing a real Min/Max here
+        # zooms the drawing to just that sub-range instead.
+        zoom_frame = ttk.Frame(mid)
+        zoom_frame.grid(row=1, column=0, sticky="ns", padx=(0, 6))
+        ttk.Label(zoom_frame, text="Zoom", font=("TkDefaultFont", 8, "bold")).pack(pady=(0, 4))
+        ttk.Label(zoom_frame, text="Max").pack()
+        self.zoom_max_var = tk.StringVar()
+        self.zoom_max_spin = tk.Spinbox(
+            zoom_frame, from_=_SPIN_BOUND, to=_SPIN_BOUND, textvariable=self.zoom_max_var,
+            width=6, justify="center",
+        )
+        self.zoom_max_spin.pack(pady=(0, 10))
+        ttk.Label(zoom_frame, text="Min").pack()
+        self.zoom_min_var = tk.StringVar()
+        self.zoom_min_spin = tk.Spinbox(
+            zoom_frame, from_=-_SPIN_BOUND, to=_SPIN_BOUND, textvariable=self.zoom_min_var,
+            width=6, justify="center",
+        )
+        self.zoom_min_spin.pack()
+        # Real Min/Max clamping to the current, real stack_order range
+        # happens in Python (_current_zoom_bounds) on every redraw, not
+        # via these widgets' own from_/to -- Tk's own Spinbox silently
+        # overwrites its bound textvariable to the new "from_" value
+        # every time .configure(from_=..., to=...) is called (confirmed
+        # empirically), which would otherwise stomp a real, just-typed
+        # Min/Max on the very next redraw. So from_/to are set once,
+        # here, to a wide static range, and never reconfigured again.
+        self.zoom_min_var.set("")
+        self.zoom_max_var.set("")
+        ttk.Button(zoom_frame, text="Reset", command=self._reset_zoom).pack(pady=(10, 0))
+        # A blank Min/Max means "no bound" -- covers direct typing, the
+        # spinbox arrows, and Reset, all through the one code path.
+        self.zoom_min_var.trace_add("write", self._on_zoom_changed)
+        self.zoom_max_var.trace_add("write", self._on_zoom_changed)
+
         self.stack_canvas = tk.Canvas(
             mid, width=STACK_CANVAS_W, height=STACK_CANVAS_H,
             background="white", highlightthickness=1, highlightbackground="#c0c0c0",
         )
-        self.stack_canvas.pack(pady=(4, 0))
+        self.stack_canvas.grid(row=1, column=1, sticky="nsew", pady=(4, 0))
+        self.stack_scrollbar = ttk.Scrollbar(mid, orient="vertical", command=self.stack_canvas.yview)
+        self.stack_scrollbar.grid(row=1, column=2, sticky="ns", pady=(4, 0))
+        self.stack_canvas.configure(yscrollcommand=self.stack_scrollbar.set)
+        # The canvas's own real, laid-out width (not a fixed constant)
+        # drives every redraw's band width, so it genuinely tracks the
+        # window -- height, though, is a real, fixed-per-band, scrollable
+        # region now (see FIXED_BAND_H), not stretched to fit the
+        # viewport, so a real layer name is always readable regardless
+        # of how many real layers are in the current zoomed range.
+        self.stack_canvas.bind("<Configure>", lambda _e: self._redraw_stack())
+        self.stack_canvas.bind("<Button-4>", lambda _e: self.stack_canvas.yview_scroll(-3, "units"))
+        self.stack_canvas.bind("<Button-5>", lambda _e: self.stack_canvas.yview_scroll(3, "units"))
+        self.stack_canvas.bind(
+            "<MouseWheel>", lambda e: self.stack_canvas.yview_scroll(-1 if e.delta > 0 else 1, "units")
+        )
+        # The very first draw (and every real Zoom-bound change) starts
+        # scrolled to the *bottom* of the scrollable content -- the
+        # real, physical bottom of the stack (e.g. Substrate), matching
+        # this pane's own "(bottom -> top)" label -- rather than
+        # wherever Tk's own default top-of-scrollregion happens to be.
+        # An ordinary redraw (a form-field edit, a window resize)
+        # leaves the user's own current scroll position alone.
+        self._pending_scroll_reset = True
+
+    def _reset_zoom(self):
+        self.zoom_min_var.set("")
+        self.zoom_max_var.set("")
+
+    def _on_zoom_changed(self, *_args):
+        self._pending_scroll_reset = True
+        self._redraw_stack()
+
+    @staticmethod
+    def _parse_zoom_bound(raw: str, default: int) -> int:
+        raw = raw.strip()
+        if not raw:
+            return default
+        try:
+            return int(raw)
+        except ValueError:
+            return default
+
+    def _current_zoom_bounds(self, full_min: int, full_max: int) -> tuple[int, int]:
+        zmin = self._parse_zoom_bound(self.zoom_min_var.get(), full_min)
+        zmax = self._parse_zoom_bound(self.zoom_max_var.get(), full_max)
+        zmin = max(full_min, min(zmin, full_max))
+        zmax = max(full_min, min(zmax, full_max))
+        if zmin > zmax:
+            zmin, zmax = zmax, zmin
+        return zmin, zmax
 
     def _redraw_stack(self):
         self.stack_canvas.delete("all")
-        layers = self.app.project.sorted_layers()
-        if not layers:
+        layers_all = self.app.project.sorted_layers()
+        if not layers_all:
+            self.stack_canvas.configure(scrollregion=(0, 0, 0, 0))
             return
-        band_h = (STACK_CANVAS_H - 2 * BAND_MARGIN) / max(len(layers), 1)
+
+        full_min = layers_all[0].stack_order
+        full_max = layers_all[-1].stack_order
+        zmin, zmax = self._current_zoom_bounds(full_min, full_max)
+        layers = [l for l in layers_all if zmin <= l.stack_order <= zmax]
+        if not layers:
+            self.stack_canvas.configure(scrollregion=(0, 0, 0, 0))
+            return
+
+        canvas_w = max(self.stack_canvas.winfo_width(), STACK_CANVAS_W)
+        content_h = 2 * BAND_MARGIN + len(layers) * FIXED_BAND_H
+        left, right = 40, canvas_w - 20
         for i, layer in enumerate(layers):
-            y1 = STACK_CANVAS_H - BAND_MARGIN - i * band_h
-            y0 = y1 - band_h + 2
+            # Real layer 0 (the lowest real stack_order) sits at the
+            # *bottom* of the real, scrollable content -- "Stack
+            # cross-section (bottom -> top)" -- so higher real index
+            # means smaller y, same as before, just against the real
+            # scrollable content height rather than the viewport's own.
+            y1 = content_h - BAND_MARGIN - i * FIXED_BAND_H
+            y0 = y1 - FIXED_BAND_H + 2
             is_selected = layer is self.current_layer
             outline = "#000000" if is_selected else layer.frame_color
             width = 3 if is_selected else 1
             self.stack_canvas.create_rectangle(
-                40, y0, STACK_CANVAS_W - 20, y1, outline=outline, fill=layer.fill_color, width=width
+                left, y0, right, y1, outline=outline, fill=layer.fill_color, width=width
             )
             self.stack_canvas.create_text(
-                (40 + STACK_CANVAS_W - 20) / 2, (y0 + y1) / 2, text=layer.name,
+                (left + right) / 2, (y0 + y1) / 2, text=layer.name,
                 font=("TkDefaultFont", 9, "bold"),
             )
+
+        self.stack_canvas.configure(scrollregion=(0, 0, canvas_w, content_h))
+        if self._pending_scroll_reset:
+            self.stack_canvas.yview_moveto(1.0)
+            self._pending_scroll_reset = False
 
     # -- form pane -----------------------------------------------------
 
