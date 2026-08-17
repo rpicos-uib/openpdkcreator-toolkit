@@ -88,8 +88,11 @@ to follow when adding a new one.
 
 ## GUI structure
 
-**PDK Wizard** is the first tab shown -- a guided flowchart (`gui/
-pdk_wizard_view.py`) laying out every real domain below as a diagram:
+**Wizard** is the first tab shown, and its own top-level tab (not
+nested inside **PDK** -- moved there deliberately so it's the very
+first thing a new user sees, before any per-domain tab) -- a guided
+flowchart (`gui/pdk_wizard_view.py`) laying out every real domain below
+as a diagram:
 starting from the real layout definition (**Layers**) at the top,
 forking into a **Digital** path (Verilog / Liberty / CDL-SPICE, all
 surfaced in **By Cell**) and an **Analog / Memristor** path (**User
@@ -101,7 +104,14 @@ a detail panel (what it is, what it means for a from-scratch
 directly from whichever `pdk_root` is currently loaded -- a cheap
 directory glob, never a full parse) plus a **Go to Tab** button
 (`App.goto(*path)`, walking down as many nested `ttk.Notebook` levels
-as needed) that jumps straight there.
+as needed) that jumps straight there. Every node also carries a
+**hover** tooltip (no click needed) showing that exact same "what this
+step is supposed to accomplish" text -- `gui/tooltip.py`'s new
+`CanvasItemTooltip`, a sibling of the plain-widget `Tooltip` used
+elsewhere (see the Library Manager section below) built specifically
+for canvas-drawn items, which have no `winfo_rootx` of their own to
+position a popup from -- it takes the triggering `<Enter>` event's
+mouse position instead.
 
 A real, honest gap is surfaced both as a legend color and per node.
 **Layers, Magic Tech, DRC Rules, LEF, xschem Symbols/Schematics, and
@@ -153,7 +163,9 @@ level up, **everything actually about the PDK's own content lives
 under a single top-level PDK tab**, deliberately separate from
 **Settings** (project naming/tool config, not PDK content itself, kept
 outside so it doesn't compete for space with the actual PDK-authoring
-tabs). Inside **PDK**: **PDK Wizard** (see above), **Overview**
+tabs; **Wizard**, see above, is a third top-level tab of its own, for
+the same reason -- a new user should see it before anything else, not
+after opening **PDK**). Inside **PDK**: **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
@@ -237,16 +249,23 @@ split whatsoever), so mirroring it would have bought nothing real.
 Cross-domain cell matching goes by cell **name** (file stem)
 instead, the same real pattern the existing GDS matching already used.
 **New Library...**/**New Cell...** register a name; **Create** writes
-a real, minimal, valid new file for the six view kinds with genuine
+a real, minimal, valid new file for the seven view kinds with genuine
 create-from-scratch support (xschem Symbol/Schematic, Qucs-S
-Symbol/Component, **Verilog**, **Verilog-A** -- the same real limit as
-everywhere else in this project for the rest: LEF/CDL/SPICE/Liberty
-writers all explicitly refuse a brand-new entry) to a real, tracked
-`libraries/<library>/` directory -- except Verilog/Verilog-A, which
-default instead into the already-established `user_models/{verilog,
-veriloga}/` convention (see **Simulation > User Models** below), giving
-a newly-created one free integration with its own "User Models"
-column and OSDI-snippet generation. **If the cell being created for
+Symbol/Component, **Verilog**, **Verilog-A**, and **Magic Layout**
+(`.mag` -- see below) -- the same real limit as everywhere else in this
+project for the rest: LEF/CDL/SPICE/Liberty writers all explicitly
+refuse a brand-new entry) to a real, tracked `libraries/<library>/`
+directory -- except Verilog/Verilog-A, which default instead into the
+already-established `user_models/{verilog, veriloga}/` convention (see
+**Simulation > User Models** below), giving a newly-created one free
+integration with its own "User Models" column and OSDI-snippet
+generation. A newly-created `.mag` file declares whichever real Magic
+technology is actually active for this PDK (`_default_tech_name()`,
+`gui/library_manager_view.py`) -- picked as the *shortest* stem among
+every real `.tech` file found under `libs.tech/magic/`, since real IHP
+data names its per-domain fragment files `<main>-<suffix>.tech`
+(confirmed empirically, see the changelog entry above for the real bug
+this caught). **If the cell being created for
 already has another known view with real pins** -- LEF first (the most
 authoritative real physical source), then an xschem symbol, then an
 existing Verilog/Verilog-A module of the same name
@@ -295,6 +314,11 @@ real, fetched FOSS source of each tool, not assumed:
   read <path>` then `load <cell>` -- verified live in this project's
   own container: reading a real IHP GDS this way printed every real
   cell name inside it).
+- **Magic Layout** -> **Open in Magic**, a real, freshly-written
+  self-contained one-line-load Tcl script (`cd <dir>; load <cell>`) --
+  genuinely simpler than GDS's own two-step script above, since a
+  `.mag` file is already Magic's own real, native format, so no `gds
+  read` conversion step is needed first.
 - **Qucs-S Symbol/Component** -> launches `qucs-s`, but **does not**
   claim to open the file: confirmed real, from Qucs-S's own fetched
   `qucs/main.cpp`, there is no CLI way to open a specific file in its
@@ -306,6 +330,12 @@ real, fetched FOSS source of each tool, not assumed:
 - **LEF/CDL/SPICE/Verilog/Liberty** -> the existing in-app
   `file_view_dialog`, matching **By Cell**'s own precedent -- no real
   external-tool identity exists for viewing a text snippet.
+
+Every view-kind row also carries a small hover-help "?" icon (`gui/
+tooltip.py`'s `add_help_icon`) explaining, in one real sentence, what
+that kind of file actually is -- no click needed, and no separate
+documentation to go find (see the GUI structure section above for the
+matching PDK Wizard node tooltips).
 
 **Prior art, checked, not assumed to be novel**: IHP-GmbH's own
 [LibMan](https://github.com/IHP-GmbH/LibMan) (a separate, standalone
@@ -1682,6 +1712,96 @@ editor yet -- see Future Work.
   driven test coverage: `tests/test_library_manager_view.py`'s own
   KLayout-launch assertion now also checks for `-rr` and reads the
   generated script's real content.
+- **Real Magic layout-view (`.mag`) creation**, closing the "Real
+  layout-view creation" Future Work item -- the one blocker that had
+  stood since GDS support first landed ("no Magic `.mag` file parser at
+  all"). Grounded in two real sources, not just the official manual
+  alone (the real, current format has drifted from what the manual
+  documents): Magic's own `mag_manpage.html`, **and** a real,
+  live-exported ground-truth `.mag` file, generated by actually running
+  the real, installed Magic binary against real IHP GDS data in this
+  project's own container. Real, empirically confirmed structural facts
+  the manual alone wouldn't have given: an undocumented `magscale <a>
+  <b>` line right after `tech`; layer sections and the special `<<
+  checkpaint >>` section share one identical shape; real pin labels use
+  `flabel` (not the manual's own `rlabel`), each followed by its own
+  `port N direction` line.
+  - `ihp/mag.py` (new): `parse_mag_file` (bounded -- section names +
+    real rect counts, `use`/label/property counts, `magscale`, not full
+    geometry, same "bounded, not a full parser" precedent as everywhere
+    else here) and `create_new_mag_file` (a real, minimal, valid
+    `magic`/`tech <name>`/`timestamp`/`<< end >>` skeleton -- confirmed
+    live: the real Magic binary loads it cleanly and echoes the correct
+    cell name back). `find_mag_files` scans a new, project-defined
+    `libs.ref/<family>/mag/*.mag` convention (not an IHP one -- no real
+    upstream precedent exists for where hand-drawn `.mag` files would
+    live in this PDK).
+  - **Magic Layout** is now Library Manager's seventh creatable view
+    kind (`ihp/library_index.py`'s `CREATABLE_VIEW_KINDS`) -- **Create**
+    writes a real, minimal skeleton declaring the PDK's own real, active
+    Magic technology name; **Open in Magic** writes a real,
+    self-contained one-line-load Tcl script (`cd <dir>; load <cell>`,
+    genuinely simpler than GDS's own two-step `gds read` + `load`, since
+    a `.mag` file is already Magic's real, native format) and launches
+    with it.
+  - **A real bug found and fixed while adding this**: the first version
+    of `_default_tech_name()` (the helper that picks which real
+    technology name a new `.mag` skeleton declares) took
+    `find_tech_files()[0]` -- alphabetically first, which is
+    `ihp-sg13g2-GDS.tech`, a per-domain *fragment* meant to be
+    `include`d by the real, complete `ihp-sg13g2.tech`, not a
+    standalone loadable technology (confirmed live: `parse_tech_file`
+    returns an empty `name` for every real fragment except this one,
+    which parses its own name as literally `"ihp-sg13g2-GDS"` -- wrong).
+    Caught by a real, driven GUI test asserting the picked name against
+    the real IHP deck, not by inspection. Fixed with a real, generic
+    heuristic instead of a special case: real IHP fragment files are
+    always named `<main>-<suffix>.tech`, so the *shortest* stem among
+    every real `.tech` file found is always the real, main, active
+    technology's own name -- confirmed correct for real IHP data
+    (`ihp-sg13g2`, 10 characters, shortest of all six real files found).
+  - Verified for real, driven: `tests/test_mag.py` (new) --
+    `create_new_mag_file`'s skeleton round-trips through this project's
+    own parser *and* loads cleanly in the real, installed Magic binary;
+    `parse_mag_file` reads a real `.mag` file generated fresh, at test
+    time, by that same real binary from real IHP GDS data (not a
+    committed fixture copy, so a real format drift would still be
+    caught) and gets every real structural fact right (16 sections, 126
+    rects, 4 labels, `magscale (1, 2)`); `find_mag_files` discovers a
+    real probe file under the new `libs.ref/<family>/mag/` convention.
+    `tests/test_library_manager_view.py` gained a full **Create** ->
+    **Open in Magic** round trip against a real IHP cell
+    (`sg13g2_inv_1`), confirming the real, correct tech name and the
+    real, generated Tcl script's exact content.
+- **Hover-help tooltips**: every Library Manager view-kind row and
+  every PDK Wizard stage node now shows an explanatory tooltip on plain
+  mouse hover, no click needed -- `gui/tooltip.py`'s `Tooltip` (for a
+  real child widget, e.g. the new "?" icon next to each Library Manager
+  view-kind label, one real sentence per kind in `VIEW_KIND_HELP`) and
+  the new `CanvasItemTooltip` (for the Wizard's own canvas-drawn stage
+  boxes, which have no `winfo_rootx` of their own to position a popup
+  from -- it positions from the triggering `<Enter>` event's mouse
+  location instead, reusing that same stage's existing `description`
+  field, the same text its own click-to-select detail panel's "What
+  this is" section already showed). Both share one internal
+  `_show_popup` helper so the popup itself (a borderless, pale-yellow
+  `Toplevel`) looks identical either way. Verified for real, driven:
+  `tests/test_tooltip.py` (hover shows/leaving hides/empty text never
+  opens a popup, for both `Tooltip` and `CanvasItemTooltip`) and a new
+  assertion block in `tests/test_pdk_wizard.py` confirming every one of
+  the 18 real stages carries a live tooltip reusing its own real
+  description text.
+- **The Wizard tab moved back out to top level**, no longer nested
+  under **PDK** (renamed from "PDK Wizard" to plain "Wizard" at the
+  same time) -- it's the very first thing a new user should see, before
+  opening any per-domain tab, not one level deep inside PDK alongside
+  Overview/Technology/Cells/Library Manager/Simulation. `gui/app.py`'s
+  `_build_wizard_tab` now targets `self.notebook` directly instead of
+  `self.pdk_notebook`, and runs first in `App`'s own tab-build order.
+  `App.goto(*path)` is unaffected (Wizard was never one of its
+  targets). Verified for real, driven: `tests/test_pdk_wizard.py`
+  asserts the root notebook's first tab is literally titled `"Wizard"`
+  and is the one selected on startup.
 
 ## Future work
 
@@ -2196,9 +2316,6 @@ models, ...), not just read/display layers. Concretely, still open:
   A **New Rule** of one of these six is still real, editable metadata
   -- it just can't be exported into a runnable check yet, reported
   honestly (rule ID + reason) rather than silently dropped.
-- **Real layout-view *creation*** (blocked on this codebase having no
-  Magic `.mag` file parser at all yet -- GDS is real, view-only).
-
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project

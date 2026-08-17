@@ -204,13 +204,13 @@ class App(ttk.Frame):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
 
+        self._build_wizard_tab()
         self._build_pdk_tab()
         self._build_overview_tab()
         self._build_technology_group()
         self._build_cells_group()
         self._build_library_manager_tab()
         self._build_simulation_group()
-        self._build_wizard_tab()
         self._build_settings_tab()
 
         self.status = tk.StringVar(value="Ready.")
@@ -593,8 +593,8 @@ class App(ttk.Frame):
     # -- PDK Wizard tab -----------------------------------------------------
 
     def _build_wizard_tab(self):
-        frame = ttk.Frame(self.pdk_notebook)
-        self.pdk_notebook.insert(0, frame, text="PDK Wizard")
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Wizard")
         self.wizard_view = PdkWizardView(frame, self)
         self.wizard_view.pack(fill="both", expand=True)
 

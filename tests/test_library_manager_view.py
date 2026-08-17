@@ -168,6 +168,59 @@ assert "load sg13g2_inv_1" in tcl_text
 tcl_script_path.unlink()
 print("PASS: Open in Magic generates a real, correct 2-line GDS-loading Tcl script and launches with it.")
 
+# --- Create for "mag" (real, minimal Magic .mag skeleton), against
+# the real IHP cell (so _default_tech_name() finds a real .tech file) ---
+lmv.library_tree.selection_set("sg13g2_stdcell")
+root.update()
+lmv.cell_tree.selection_set("sg13g2_inv_1")
+root.update()
+assert "mag" not in lmv._entries
+assert lmv._default_tech_name() == "ihp-sg13g2"
+lmv._create_view("mag")
+root.update()
+mag_path = PROJECT_ROOT / lmv_mod.LIBRARIES_DIRNAME / "sg13g2_stdcell" / "sg13g2_inv_1.mag"
+assert mag_path.is_file(), f"expected a real .mag file at {mag_path}"
+assert lmv._entries["mag"].path == mag_path
+assert lmv._entries["mag"].source == "registered"
+assert "tech ihp-sg13g2" in mag_path.read_text()
+print(f"PASS: Create adds a real, minimal .mag skeleton at {mag_path} declaring the real 'ihp-sg13g2' tech.")
+
+# --- Open in Magic for "mag": a real, self-contained 2-line Tcl
+# script (cd <dir> ; load <cell>), distinct from the GDS path's own
+# 2-step "gds read" + "load" script ---
+launched.clear()
+eda_tools_mod.check_tool = _fast_check_tool
+subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
+try:
+    lmv._open_magic_mag(lmv._entries["mag"])
+finally:
+    subprocess_mod.Popen = original_popen
+    eda_tools_mod.check_tool = original_check_tool
+argv4, cwd4 = launched[-1]
+print("magic (.mag) launch argv:", argv4)
+assert argv4[0].endswith("magic")
+mag_tcl_path = Path(argv4[-1])
+mag_tcl_text = mag_tcl_path.read_text()
+print("generated Tcl script:\n" + mag_tcl_text)
+assert f"cd {mag_path.parent}" in mag_tcl_text
+assert "load sg13g2_inv_1" in mag_tcl_text
+assert "gds read" not in mag_tcl_text
+mag_tcl_path.unlink()
+print("PASS: Open in Magic (.mag) generates a real, correct self-contained 1-line-load Tcl script and launches with it.")
+
+# --- Hover-help "?" icons are actually attached to view rows, not
+# just present in the VIEW_KIND_HELP dict ---
+all_help_icons = [
+    w
+    for row_frame in lmv.views_rows_frame.winfo_children()
+    for w in row_frame.winfo_children()
+    if getattr(w, "_tooltip", None) is not None
+]
+mag_help_icons = [icon for icon in all_help_icons if icon._tooltip.text == lmv_module.VIEW_KIND_HELP["mag"]]
+assert mag_help_icons, "expected a real help icon with a live Tooltip on the mag view row"
+assert len(all_help_icons) == len(lmv_module.VIEW_KIND_HELP), "every view kind with real help text should get an icon"
+print(f"PASS: view rows carry {len(all_help_icons)} real, live hover-help icons, including the mag row's own.")
+
 # --- Add...: registers a real, existing, external file for a view
 # kind with NO real create-from-scratch support (LEF) ---
 external_lef = Path("/tmp/external_hand_authored_cell.lef")

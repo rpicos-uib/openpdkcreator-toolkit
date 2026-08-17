@@ -76,6 +76,7 @@ from ..ihp import user_models as user_models_mod
 from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
 from .settings_view import DEFAULT_PROJECT_NAME
+from .tooltip import CanvasItemTooltip
 
 _COLOR_DONE = "#2e7d32"
 _COLOR_TODO = "#616161"
@@ -471,6 +472,7 @@ class PdkWizardView(ttk.Frame):
         self._stage_by_id = {stage.stage_id: stage for stage in _STAGES}
         self._box_ids: dict[str, int] = {}
         self._label_ids: dict[str, int] = {}
+        self._stage_tooltips: dict[str, CanvasItemTooltip] = {}
         self._selected: str | None = None
         self._build()
 
@@ -571,6 +573,7 @@ class PdkWizardView(ttk.Frame):
         self._label_ids[stage.stage_id] = label_id
         for item_id in (box_id, label_id):
             self.canvas.tag_bind(item_id, "<Button-1>", lambda _e, sid=stage.stage_id: self._select(sid))
+        self._stage_tooltips[stage.stage_id] = CanvasItemTooltip(self.canvas, (box_id, label_id), stage.description)
 
     def refresh(self):
         for stage in _STAGES:

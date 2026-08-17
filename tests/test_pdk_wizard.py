@@ -13,11 +13,9 @@ root.update()
 
 wv = app.wizard_view
 print("Root tab 0:", app.notebook.tab(app.notebook.tabs()[0], "text"))
-assert app.notebook.tab(app.notebook.tabs()[0], "text") == "PDK"
-print("PDK Wizard is tab 0 of the PDK tab:", app.pdk_notebook.tab(app.pdk_notebook.tabs()[0], "text"))
-assert app.pdk_notebook.tab(app.pdk_notebook.tabs()[0], "text") == "PDK Wizard"
-print("Currently selected tab:", app.pdk_notebook.tab(app.pdk_notebook.select(), "text"))
-assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "PDK Wizard"
+assert app.notebook.tab(app.notebook.tabs()[0], "text") == "Wizard"
+print("Currently selected tab:", app.notebook.tab(app.notebook.select(), "text"))
+assert app.notebook.tab(app.notebook.select(), "text") == "Wizard"
 
 # --- Every stage's status_fn runs cleanly against the real, loaded IHP data ---
 from openpdkcreator.gui.pdk_wizard_view import _STAGES, _EDGES
@@ -98,6 +96,24 @@ root.update()
 has_data, detail, _ = by_id["project_setup"].status_fn(app)
 assert has_data and "memristor-pdk" in detail
 print("PASS: refresh() reflects a live project-name change.")
+
+# --- Hover-help: each stage's own real box/label canvas items carry a
+# live CanvasItemTooltip showing that stage's own real "what this step
+# is supposed to accomplish" description, reusing the exact same text
+# the click-to-select detail panel's own "What this is" field shows ---
+layers_stage = by_id["layers"]
+tooltip = wv._stage_tooltips["layers"]
+assert tooltip.text == layers_stage.description
+assert tooltip.tip_window is None
+tooltip._show(event=None)
+root.update()
+assert tooltip.tip_window is not None
+assert tooltip.tip_window.winfo_exists()
+tooltip._hide()
+root.update()
+assert tooltip.tip_window is None
+assert len(wv._stage_tooltips) == len(_STAGES)
+print("PASS: every stage box carries a real, live hover tooltip reusing its own 'what this step accomplishes' text.")
 
 root.destroy()
 print("ALL PDK WIZARD TESTS PASS")

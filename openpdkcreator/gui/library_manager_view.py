@@ -37,15 +37,25 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   ``LaunchGuidance``; verified live, for real, in this project's own
   container: ``gds read`` against a real IHP GDS printed every real
   cell name inside it).
+- Magic Layout (``.mag``) -> **Open in Magic**, a real, freshly-written
+  1-line Tcl script (``cd <dir>; load <cell>``) -- unlike GDS, a
+  ``.mag`` file is already Magic's own real, native format, so no
+  ``gds read`` two-step is needed.
 - LEF/CDL/SPICE/Verilog/Liberty -> ``file_view_dialog`` (in-app text
   view) -- no real external-tool identity for these, matching
   ``cell_hub_view.py``'s own existing precedent.
 
-**Create** only appears for the six view kinds with real
+**Create** only appears for the seven view kinds with real
 create-from-scratch support (``ihp/library_index.py``'s own
 ``CREATABLE_VIEW_KINDS`` -- xschem Symbol/Schematic, Qucs-S
-Symbol/Component, Verilog, Verilog-A); every other kind still gets a
-real **Add...** button. A created xschem/Qucs-S view's real file
+Symbol/Component, Verilog, Verilog-A, Magic Layout); every other kind
+still gets a real **Add...** button. A created Magic Layout is
+deliberately *not* meant to be edited in this Python GUI -- it writes
+a real, minimal, empty ``.mag`` skeleton (``ihp/mag.py``'s own
+``create_new_mag_file``, grounded in Magic's own official file-format
+manual and verified live against the real installed Magic binary),
+then **Open in Magic** is where the real drawing happens; Magic's own
+real ``gds write`` is the real path from there to an actual, real GDS. A created xschem/Qucs-S view's real file
 defaults to ``<project_root>/libraries/<library>/<cell>.<ext>`` (a
 real, tracked, but entirely optional convention -- nothing elsewhere
 requires it). A created **Verilog**/**Verilog-A** view instead defaults
@@ -89,12 +99,15 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .. import eda_tools
 from .. import export as export_mod
 from ..ihp import library_index as li_mod
+from ..ihp import mag as mag_mod
+from ..ihp import magic_tech as magic_tech_mod
 from ..ihp import qucs_sym as qucs_sym_mod
 from ..ihp import user_models as user_models_mod
 from ..ihp import verilog as verilog_mod
 from ..ihp import xschem as xschem_mod
 from ..ihp import xschem_sch as xschem_sch_mod
 from .file_view_dialog import view_file_dialog
+from .tooltip import add_help_icon
 
 LIBRARIES_DIRNAME = li_mod.LIBRARIES_DIRNAME
 
@@ -119,23 +132,56 @@ _EXT_FOR_VIEW_KIND: dict[str, str] = {
     "verilog": ".v",
     "veriloga": ".va",
     "liberty": ".lib",
+    "mag": ".mag",
     "gds": ".gds",
 }
 """Every real view kind's own extension -- used by **Create** (the
-six ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
-file-dialog filter (all eleven, so browsing for an existing LEF/GDS/...
+seven ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
+file-dialog filter (all twelve, so browsing for an existing LEF/GDS/...
 file to register starts pre-filtered too)."""
+
+VIEW_KIND_HELP: dict[str, str] = {
+    "xschem_schematic": "The real, editable circuit -- device instances and wires, drawn in xschem. "
+                         "What you'd hand-draw or simulate from.",
+    "xschem_symbol": "The real, editable device icon xschem shows when this cell is instantiated "
+                      "inside another schematic -- pins, shape, no internal circuitry.",
+    "qucs_symbol": "Qucs-S's own drawn-geometry symbol for this cell (ports only, no port names) -- "
+                   "a separate real format from xschem's own .sym, sharing the same .sym extension.",
+    "qucs_component": "Qucs-S's own real device/model definition (parameters, netlist templates) for "
+                       "this cell -- what Qucs-S actually simulates.",
+    "lef": "The real, physical abstract: pin locations/directions and the cell's own footprint, used "
+           "for placement and routing -- no internal geometry, just the outside-facing contract.",
+    "cdl": "A real SPICE-family netlist (CDL dialect) describing this cell's own transistor-level "
+           "circuit -- used for LVS (layout-vs-schematic) comparison.",
+    "spice": "A real, plain SPICE netlist for this cell -- similar role to CDL, a different real "
+             "dialect/toolchain expects this one instead.",
+    "verilog": "A real, plain digital Verilog module for this cell -- structural/behavioral, for "
+               "digital simulation or synthesis.",
+    "veriloga": "A real Verilog-A compact model for this cell -- analog/mixed-signal behavior, "
+                "compiled with OpenVAF then loaded into ngspice via its own real 'osdi' command.",
+    "liberty": "Real timing/power data (.lib) for this cell -- what a digital synthesis/STA tool "
+               "reads to know delays, setup/hold, and power per real PVT corner.",
+    "mag": "The real, editable Magic layout source for this cell -- draw real geometry here in "
+           "Magic itself; Magic's own 'gds write' then produces a real, exportable GDS from it.",
+    "gds": "The real, final physical layout (polygons on real mask layers) -- what actually gets "
+           "fabricated, or the read-only result of exporting a drawn Magic layout.",
+}
+"""One real sentence per view kind, shown as a hover tooltip next to
+its own row label -- what the file *is*, not how to use this tab."""
 
 
 def _create_view_file(
     view_kind: str, path: Path, cell_name: str, ports: list[tuple[str, str]] | None = None,
+    tech_name: str = "",
 ) -> None:
     """Dispatches to the one real ``create_new_*`` function for
     *view_kind* -- only ever called for a key in
     ``li_mod.CREATABLE_VIEW_KINDS``. *ports* (real ``(name,
     direction)`` pairs, from ``li_mod.infer_ports_for_cell``) only
     matters for Verilog/Verilog-A -- every other real create-from-
-    scratch view here has no real per-cell pin data to seed from."""
+    scratch view here has no real per-cell pin data to seed from.
+    *tech_name* only matters for ``mag`` -- the real Magic technology
+    name written into its own ``tech <name>`` header line."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
     if view_kind == "xschem_symbol":
@@ -150,6 +196,8 @@ def _create_view_file(
         verilog_mod.create_new_verilog_file(path, cell_name, ports)
     elif view_kind == "veriloga":
         verilog_mod.create_new_veriloga_file(path, cell_name, ports)
+    elif view_kind == "mag":
+        mag_mod.create_new_mag_file(path, tech_name)
     else:
         raise ValueError(f"{view_kind!r} has no real create-from-scratch support")
 
@@ -373,6 +421,9 @@ class LibraryManagerView(ttk.Frame):
         self.views_rows_frame.columnconfigure(0, weight=1)
 
         ttk.Label(row_frame, text=label, width=16, anchor="w").pack(side="left")
+        help_text = VIEW_KIND_HELP.get(view_kind, "")
+        if help_text:
+            add_help_icon(row_frame, help_text).pack(side="left", padx=(0, 4))
 
         if entry is None:
             ttk.Label(row_frame, text="(absent)", foreground="#9e9e9e").pack(side="left", padx=(4, 8))
@@ -405,6 +456,10 @@ class LibraryManagerView(ttk.Frame):
                 side="left", padx=(0, 4)
             )
             ttk.Button(row_frame, text="Open in Magic", command=lambda e=entry: self._open_magic_gds(e)).pack(
+                side="left"
+            )
+        elif view_kind == "mag":
+            ttk.Button(row_frame, text="Open in Magic", command=lambda e=entry: self._open_magic_mag(e)).pack(
                 side="left"
             )
         else:
@@ -459,6 +514,26 @@ class LibraryManagerView(ttk.Frame):
             root = self.project_root / LIBRARIES_DIRNAME / self.current_library
         return root / f"{self.current_cell}{ext}"
 
+    def _default_tech_name(self) -> str:
+        """The real Magic technology name a newly-created ``.mag``
+        file's own ``tech`` line should declare. Real IHP data (found
+        empirically: ``libs.tech/magic/*.tech``) has one complete,
+        loadable tech file (``ihp-sg13g2.tech``, the one the real
+        ``.magicrc``'s own ``tech load`` line references) plus several
+        per-domain *fragments* meant to be ``include``d by it
+        (``ihp-sg13g2-GDS.tech``, ``-cifin``, ``-cifout``, ``-drc``,
+        ``-extract``) -- each fragment's stem is the main file's own
+        stem plus a ``-suffix``, so the shortest stem among every real
+        ``.tech`` file found is always the main, real, active
+        technology's name. Falls back to the pdk_root's own directory
+        name if no ``.tech`` file exists yet (a genuinely from-scratch
+        project)."""
+
+        tech_files = magic_tech_mod.find_tech_files(self.app.pdk_root)
+        if tech_files:
+            return min(tech_files, key=lambda p: (len(p.stem), p.stem)).stem
+        return self.app.pdk_root.name
+
     def _create_view(self, view_kind: str):
         if self.current_library is None or self.current_cell is None:
             return
@@ -471,8 +546,9 @@ class LibraryManagerView(ttk.Frame):
             ports = li_mod.infer_ports_for_cell(
                 self.app.pdk_root, self.project_root, self.current_library, self.current_cell,
             )
+        tech_name = self._default_tech_name() if view_kind == "mag" else ""
         try:
-            _create_view_file(view_kind, default_path, self.current_cell, ports)
+            _create_view_file(view_kind, default_path, self.current_cell, ports, tech_name)
         except (FileExistsError, OSError, ValueError) as exc:
             messagebox.showerror("Create", str(exc), parent=self)
             return
@@ -556,4 +632,19 @@ class LibraryManagerView(ttk.Frame):
         )
         with handle:
             handle.write(f"gds read {entry.path}\nload {self.current_cell}\n")
+        self._launch("magic", extra_argv=(handle.name,))
+
+    def _open_magic_mag(self, entry: li_mod.ViewEntry):
+        """Unlike GDS (which needs the real ``gds read`` + ``load``
+        two-step -- see ``_open_magic_gds`` above), a ``.mag`` file is
+        already Magic's own real, native format: a real, freshly-
+        written 1-line Tcl script (``cd <dir>; load <cell>``, self-
+        contained rather than relying on Magic's own cwd) is enough to
+        open it directly, ready for real drawing."""
+
+        handle = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".tcl", prefix="openpdkcreator_magic_mag_", delete=False, encoding="utf-8",
+        )
+        with handle:
+            handle.write(f"cd {entry.path.parent}\nload {entry.path.stem}\n")
         self._launch("magic", extra_argv=(handle.name,))

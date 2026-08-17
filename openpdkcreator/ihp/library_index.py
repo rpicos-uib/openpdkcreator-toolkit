@@ -50,6 +50,7 @@ import yaml
 
 from . import cells as cells_mod
 from . import lef as lef_mod
+from . import mag as mag_mod
 from . import verilog as verilog_mod
 from . import xschem as xschem_mod
 
@@ -75,20 +76,27 @@ VIEW_KIND_LABELS: dict[str, str] = {
     "verilog": "Verilog",
     "veriloga": "Verilog-A",
     "liberty": "Liberty",
+    "mag": "Magic Layout",
     "gds": "GDS/Layout",
 }
 VIEW_KIND_ORDER: tuple[str, ...] = tuple(VIEW_KIND_LABELS.keys())
 """Real create-from-scratch support exists (this session, verified)
-only for these six -- ``ihp/cells.py``'s own docstring/every other
+only for these seven -- ``ihp/cells.py``'s own docstring/every other
 writer's own real ``start_line == 0`` skip explains why the rest
 don't yet. Verilog/Verilog-A were added later than the original four
 xschem/Qucs-S ones -- see ``create_new_verilog_file``/
 ``create_new_veriloga_file`` in ``ihp/verilog.py`` and
 ``infer_ports_for_cell`` below for how a newly-created one gets a
 real cell's own already-known pins pre-populated, not an empty
-template."""
+template. ``mag`` (Magic Layout) was added later still -- see
+``ihp/mag.py``'s own ``create_new_mag_file``; unlike every other real
+view here, a newly-created one is *not* meant to be edited in this
+Python GUI at all, only opened in real Magic to actually draw real
+geometry (the same "Create an empty skeleton, do the real work in the
+real external tool" pattern xschem/Qucs-S Symbol/Schematic already
+established)."""
 CREATABLE_VIEW_KINDS: frozenset[str] = frozenset(
-    {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga"}
+    {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga", "mag"}
 )
 
 
@@ -145,6 +153,17 @@ def discover_real_entries_for_family(pdk_root: Path, family: str) -> list[ViewEn
         # multi-cell GDS with no confirmed per-cell membership -- see
         # ihp/cells.py's own docstring) is deliberately not indexed:
         # pointing every cell at the same shared file would mislead.
+
+    # Magic .mag layouts: matched by real cell name (file stem), same
+    # "enrich an already-known cell, never introduce a new one" real
+    # boundary xschem/Qucs-S already have -- ihp/cells.py's own
+    # CellViews has no mag_source field (this is a Library-Manager-
+    # only view kind), so this can't reuse build_cell_index's own
+    # output the way every other real view kind above does.
+    for mag_path in mag_mod.find_mag_files(pdk_root):
+        if mag_path.parent.parent.name == family and mag_path.stem in index:
+            entries.append(ViewEntry(family, mag_path.stem, "mag", mag_path, "real"))
+
     return entries
 
 
@@ -345,6 +364,7 @@ _EXT_TO_UNAMBIGUOUS_VIEW_KIND: dict[str, str] = {
     ".spice": "spice",
     ".v": "verilog",
     ".lib": "liberty",
+    ".mag": "mag",
     ".gds": "gds",
 }
 
