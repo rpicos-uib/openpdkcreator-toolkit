@@ -36,10 +36,13 @@ patch back into their own real, original file this way. A
 hand-authored **New Rule** has no such position to patch -- it instead
 gets *generated*, not patched, into a separate, entirely tool-owned
 file (``custom_rules.drc``, see ``render_new_rule_block``/
-``render_custom_drc_file`` below), for the three ``check_type``s with
-a real, single-method KLayout DRC shape this project knows how to
-emit (``min_width``/``min_spacing``/``min_enclosure``) -- everything
-else about a rule (``classification``/``condition``/
+``render_custom_drc_file`` below), for the six ``check_type``s with a
+real, single-method KLayout DRC shape this project knows how to emit
+(``min_width``/``min_spacing``/``min_enclosure``, plus, added later,
+``min_area``/``min_overlap``/``max_length`` -- see
+``render_new_rule_block``'s own docstring for the real, local ground
+truth each one was checked against before writing any generation code)
+-- everything else about a rule (``classification``/``condition``/
 ``process_revision``/``owner``/``why``/``status``/...) is this
 project's own metadata with no real counterpart in the KLayout deck at
 all, and stays ``project_io.py``-only, same as before.
@@ -199,7 +202,7 @@ def render_json_config(original_path: Path, value_edits: dict[str, float]) -> st
 # hand-authored rule's own position across sessions the way a real
 # rule's source_provenance does.
 
-_GENERATABLE_CHECK_TYPES = {"min_width", "min_spacing", "min_enclosure"}
+_GENERATABLE_CHECK_TYPES = {"min_width", "min_spacing", "min_enclosure", "min_area", "min_overlap", "max_length"}
 _IDENT_RE = re.compile(r"[^0-9A-Za-z_]+")
 
 
@@ -210,6 +213,17 @@ def _sanitize_ruby_identifier(text: str) -> str:
     return ident
 
 
+_FIXED_LAYER_COUNTS = {"min_area": 1, "min_overlap": 2}
+"""``min_area``/``min_overlap`` both have a real ``max_layers=None`` in
+``CHECK_TYPES`` (a real rule *can* reference more, for shapes this
+project doesn't attempt to generate), but the one real, single-method
+KLayout DRC idiom each maps to (``with_area(0, v)``/``overlap(other,
+v)``, see ``render_new_rule_block`` below) only has a real meaning for
+exactly this many layers -- more than that is refused with an honest
+reason rather than guessing which real, wider Boolean combination the
+rule author actually meant."""
+
+
 def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) -> tuple[list[str], str | None]:
     """Real, runnable KLayout DRC Ruby for one hand-authored rule --
     each real layer it references is defined right there, inline, via
@@ -218,13 +232,37 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
     downloaded deck's own included common file would provide -- a
     from-scratch deck has no such file yet). Returns ``(lines, None)``
     on success, or ``([], reason)`` when this rule genuinely can't be
-    generated -- an unsupported *check_type* (only ``min_width``/
-    ``min_spacing``/``min_enclosure`` map to a real, single-method
-    KLayout DRC shape this project knows how to emit, the same three
-    ``ihp/drc.py``'s own extractor already recognizes coming the other
-    way), a missing *value*, or a *layers* entry with no matching real,
-    resolvable ``Layer`` (real ``gds_layer``/``gds_datatype``) --
-    reported back to the caller, never silently dropped."""
+    generated -- an unsupported *check_type*, a missing *value*, a
+    *layers* entry with no matching real, resolvable ``Layer`` (real
+    ``gds_layer``/``gds_datatype``), or (``min_area``/``min_overlap``
+    only) the wrong real layer count -- reported back to the caller,
+    never silently dropped.
+
+    Six real ``check_type``s map to a real, single-method KLayout DRC
+    shape this project knows how to emit: ``min_width``/``min_spacing``/
+    ``min_enclosure`` (the original three, also the three ``ihp/
+    drc.py``'s own extractor already recognizes coming the other way)
+    plus ``min_area``/``min_overlap``/``max_length``, added later --
+    grounded in real, local ground truth, not external documentation
+    alone: ``layer.with_area(0, v)``, ``layer.overlap(other, v)``, and
+    ``layer.edges.with_length(v, nil)`` were each confirmed as real,
+    already-used idioms by grepping this project's own real, downloaded
+    IHP deck (``antenna.drc``'s own real
+    ``dantenna_connected.with_area(0, ant_g_min_area)``;
+    ``sg13g2_maximal.drc``'s own real ``self.overlap(other, value)``;
+    ``5_16_metal1.drc``'s own real
+    ``m1_g_l1.with_length(m1_g_length.um + 0.001.um, nil)``) before
+    writing a single line of generation code, the same discipline as
+    everywhere else in this project. **A real, honest gap, not silently
+    closed**: unlike the original three, these three don't feed
+    straight into ``.output()`` anywhere in the real deck the simple
+    way ``width()``/``space()``/``enclosed()`` do (confirmed by
+    grepping for it) -- ``ihp/drc.py``'s own extractor still only
+    recognizes the original three coming the other way, so a
+    min_area/min_overlap/max_length rule generated here does not yet
+    round-trip back through re-extraction the way the original three
+    do. Extending the extractor for these three is real, separate,
+    future work (see the README's own Future Work section)."""
 
     if rule.check_type not in _GENERATABLE_CHECK_TYPES:
         return [], f"check_type {rule.check_type!r} has no real Ruby-generation pattern yet"
@@ -233,6 +271,9 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
     spec = CHECK_TYPES[rule.check_type]
     if len(rule.layers) < spec.min_layers:
         return [], f"needs at least {spec.min_layers} real layer(s), has {len(rule.layers)}"
+    fixed_count = _FIXED_LAYER_COUNTS.get(rule.check_type)
+    if fixed_count is not None and len(rule.layers) != fixed_count:
+        return [], f"{rule.check_type} needs exactly {fixed_count} real layer(s), has {len(rule.layers)}"
 
     needed = rule.layers[: spec.max_layers] if spec.max_layers else rule.layers
     ident = _sanitize_ruby_identifier(rule.rule_id)
@@ -251,8 +292,14 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
         lines.append(f"{result_var} = {layer_vars[0]}.width({rule.value}.um)")
     elif rule.check_type == "min_spacing":
         lines.append(f"{result_var} = {layer_vars[0]}.space({rule.value}.um)")
-    else:  # min_enclosure
+    elif rule.check_type == "min_enclosure":
         lines.append(f"{result_var} = {layer_vars[0]}.enclosed({layer_vars[1]}, {rule.value}.um)")
+    elif rule.check_type == "min_area":
+        lines.append(f"{result_var} = {layer_vars[0]}.with_area(0, {rule.value}.um2)")
+    elif rule.check_type == "min_overlap":
+        lines.append(f"{result_var} = {layer_vars[0]}.overlap({layer_vars[1]}, {rule.value}.um)")
+    else:  # max_length
+        lines.append(f"{result_var} = {layer_vars[0]}.edges.with_length({rule.value}.um, nil)")
     description = (rule.description or "").replace('"', "'")
     lines.append(f'{result_var}.output("{rule.rule_id}", "{description}")')
     return lines, None

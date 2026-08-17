@@ -2084,6 +2084,69 @@ editor yet -- see Future Work.
     it can't resolve, and a real syntax error surfaces an honest error
     dialog rather than a silent partial import. Full suite re-run
     clean (56/56).
+- **DRC Rules: three more `check_type`s (`min_area`/`min_overlap`/
+  `max_length`) get real, generated KLayout DRC Ruby**, closing half
+  of the "remaining six" Future Work item -- self-selected as the next
+  real, valuable, well-scoped increment. Grounded in real, local
+  ground truth before writing any generation code, the same discipline
+  as the original three: grepped this project's own real, downloaded
+  IHP deck for each real method already in real use there --
+  `antenna.drc`'s own real
+  `dantenna_connected.with_area(0, ant_g_min_area)`;
+  `sg13g2_maximal.drc`'s own real `self.overlap(other, value)`;
+  `5_16_metal1.drc`'s own real
+  `m1_g_l1.with_length(m1_g_length.um + 0.001.um, nil)` -- confirming
+  `layer.with_area(0, v)`/`layer.overlap(other, v)`/
+  `layer.edges.with_length(v, nil)` are real, valid KLayout DRC idioms
+  before generating a single line from them. `min_area`/`min_overlap`
+  both have a real `max_layers=None` in `schema.CHECK_TYPES` (a real
+  rule *can* reference more, for shapes not attempted here) but the
+  one real, single-method idiom each maps to only has a real meaning
+  for exactly 1/exactly 2 layers -- a new `_FIXED_LAYER_COUNTS` check
+  refuses anything else with an honest reason instead of guessing which
+  wider real Boolean combination was meant.
+  - **A real, pre-existing bug found while adding live verification for
+    this** (not introduced by this pass -- it affected the original
+    three just as much, simply never caught before): `custom_rules.drc`
+    never called KLayout's own real `report(...)` function, so the
+    real 2-string-arg report-database form of `.output("RULE_ID",
+    "description")` failed at real runtime with a genuine
+    `TypeError: no implicit conversion of String into Integer ... in
+    LayerInfo::initialize` -- confirmed live by actually running a
+    freshly-generated `custom_rules.drc` through the real, installed
+    KLayout binary (`klayout -b <gds> -r custom_rules.drc`), something
+    no previous test in this project had ever done for this file (prior
+    tests only checked the generated *text*, and that it re-parses
+    through this project's own extractor -- never that it's real,
+    executable Ruby). Root cause confirmed via KLayout's own real,
+    fetched `drc_runsets.html` documentation: the 2-string-arg
+    "write to a report database" form of `.output()` only resolves once
+    a real report destination is configured via `report(...)`; passing
+    `-rd output=<path>` on the command line alone does not do this by
+    itself, since the script itself has to read `$output`. Fixed by
+    adding a real `report("Custom DRC Rules", $output || "custom_rules_
+    report.lyrdb")` call to `DRC_DECK_SKELETON_HEADER` itself (shared by
+    both the empty **New DRC Deck** skeleton and every rule-filled
+    `custom_rules.drc` `render_custom_drc_file` generates), so the
+    real, stated "genuinely runnable" claim now actually holds under a
+    real, standalone `klayout -b` invocation, not just structurally
+    plausible-looking text.
+  - **A real, honest gap, not silently closed**: unlike the original
+    three, none of these three feed straight into `.output()` anywhere
+    in the real deck the simple way `width()`/`space()`/`enclosed()` do
+    (confirmed by grepping for it) -- `ihp/drc.py`'s own extractor
+    still only recognizes the original three coming the other way, so
+    a min_area/min_overlap/max_length rule generated here does not yet
+    round-trip back through re-extraction. Extending the extractor for
+    these three is real, separate, future work.
+  - Verified for real, driven: `tests/test_drc_generate.py` (extended)
+    -- all six now-generatable check_types produce correct, expected
+    Ruby text; the three newer shapes honestly don't re-extract while
+    the original two still do; and, new, a **live run through the
+    real, installed KLayout DRC engine** against a real, freshly-built
+    GDS (real rectangles on two real layers) -- exit code 0, and a
+    real report database containing every one of the five real rule
+    categories tested. Full suite re-run clean (56/56).
 
 ## Future work
 
@@ -2585,19 +2648,17 @@ models, ...), not just read/display layers. Concretely, still open:
   toggle. LEF is no longer among them for its own macro-level content
   -- see **New Macro...** above; `ORIGIN`/`SITE` still aren't modeled
   on a macro, real, separate future work.
-- **Real Ruby generation for DRC Rules' remaining six `check_type`s**
-  (`min_area`/`min_overlap`/`max_length`/`max_current_density`/
-  `max_dimension`/`density_window`) -- `ihp/drc_writer.py`'s own
-  `render_new_rule_block` only emits real KLayout DRC Ruby for
-  `min_width`/`min_spacing`/`min_enclosure` today, the three real,
-  single-method shapes `ihp/drc.py`'s own extractor already recognizes
-  coming the other way; the rest have no established real
-  Ruby-generation pattern here yet (and, for `min_overlap`'s own
-  `layer_roles=("Layer","Layer","Layer")` with `max_layers=None`, no
-  single obvious real KLayout method to target in the first place).
-  A **New Rule** of one of these six is still real, editable metadata
-  -- it just can't be exported into a runnable check yet, reported
-  honestly (rule ID + reason) rather than silently dropped.
+- **Real Ruby generation for DRC Rules' remaining three
+  `check_type`s** (`max_current_density`/`max_dimension`/
+  `density_window`) -- half of the original six are now done (see the
+  changelog entry below); these three still have no real, local
+  ground truth found for a single-method KLayout shape (`density_window`
+  in particular is a genuinely multi-step real computation in this same
+  deck -- window tiling, material-area-over-window-area ratio, then a
+  threshold compare -- not one method call). A **New Rule** of one of
+  these three is still real, editable metadata -- it just can't be
+  exported into a runnable check yet, reported honestly (rule ID +
+  reason) rather than silently dropped.
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project

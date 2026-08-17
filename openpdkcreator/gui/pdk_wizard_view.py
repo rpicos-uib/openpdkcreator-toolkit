@@ -34,11 +34,12 @@ below): a new LEF unblocks a valid, empty *library*, not a whole new
 **MACRO** (``lef_writer.py`` refuses to write one back with no real
 source position, and there's no **New Macro** action); a hand-authored
 DRC **New Rule** is genuinely exportable -- real, generated KLayout
-Ruby, not just metadata -- only for the three ``check_type``s with a
+Ruby, not just metadata -- only for the six ``check_type``s with a
 real, single-method shape this project knows how to emit
-(``min_width``/``min_spacing``/``min_enclosure`` -- see
-``ihp/drc_writer.py``'s own docstring); every other check type still
-can't be written back. Every remaining domain (Verilog, Liberty,
+(``min_width``/``min_spacing``/``min_enclosure``/``min_area``/
+``min_overlap``/``max_length`` -- see ``ihp/drc_writer.py``'s own
+docstring); every other check type still can't be written back. Every
+remaining domain (Verilog, Liberty,
 CDL/SPICE, ngspice Models, and User Models' own ``.va``/``.v`` files)
 requires a real file to already exist on disk -- hand-place one
 (copied from a template/reference PDK, or written in an external
