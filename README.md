@@ -2005,6 +2005,85 @@ editor yet -- see Future Work.
   filter change, numeric GDS sorting, Move Up/Down's real independence
   from display sort, and Show All restoring the full 377-layer view.
   Full suite re-run clean (54/54).
+- **Real, native, bidirectional support for IHP-GmbH's own LibMan
+  tool's `.projects` file format**, per direct user request ("would it
+  be some way to use IHP file manager structure? ... I'd prefer
+  natively"). Researched properly before writing a line of code, not
+  guessed: fetched LibMan's own real repo
+  (`github.com/IHP-GmbH/LibMan`, commit
+  `84c5974a647c5d7d5a9ddc3bae7b6396e008ce33`, pushed 2026-08-12 --
+  under real, active development) and found it has **two entirely
+  separate real formats**, not one: a heavy, real Cap'n Proto "CORE"
+  binary geometry-streaming layer (`capnp/*.capnp`, needs LibMan's own
+  real `gds_to_core`/`xschem_to_core`/... converter toolchain to read
+  at all -- genuinely out of scope, not attempted) and a **real,
+  simple, plain-text library-registry format** (`.projects`/`.lib`
+  files, `define("lib","path");`/`attach(design,tech);`/
+  `include("other.projects");` statements) -- the one actually
+  analogous to this project's own `library_index.yaml`, and genuinely
+  tractable to implement for real.
+  - **`ihp/libman_project.py`** (new): a real, bounded parser/writer
+    ported statement-for-statement from LibMan's own real, fetched
+    `src/libfileparser.cpp` -- real `#`-comment stripping (respected
+    inside string literals), real top-level-`;`-terminated statement
+    splitting (respecting nested `()`/`[]`/strings), real `\n`/`\r`/
+    `\t`/`\\`/`\"` string-literal escapes, both real `define()` forms
+    (`define(path)`, library name inferred via Qt's own real
+    `completeBaseName()` semantics -- strip everything from the
+    *first* `.`, not just the last extension; and `define(name,
+    path)`), `attach()`, and real, recursive `include()` with real
+    cycle detection. Verified against a **second real source**, not
+    just the parser: LibMan's own real, committed
+    `tests/data/sg13g2.projects` -- a real ground-truth fixture for
+    the exact same SG13G2 PDK this project already works with,
+    embedded verbatim in `tests/test_libman_project.py`. Real, honest
+    edge cases this fixture surfaced and the parser handles correctly:
+    a bare, non-file reference (`define("analogLib", "analogLib");`,
+    a well-known external library, not a real path at all) and a real
+    relative path walking outside the project directory (`../../../`).
+  - **A real, stated risk, not glossed over**: LibMan is under active
+    development with **no version marker inside a real `.projects`
+    file** and no live way for this project to detect a future grammar
+    change -- this parser is pinned to the commit above; re-verify
+    against LibMan's own current real source before trusting this
+    against a newer LibMan build. This is exactly the tradeoff native
+    support was asked for despite: a one-off, hand-triggered converter
+    would have sidestepped the risk entirely, at the cost of never
+    being able to just open the same real project file in both tools.
+  - **Library Manager gained Import from LibMan Project.../Export to
+    LibMan Project...** (new toolbar row, top of the tab). Export
+    writes one real `define("library", "path");` per real view whose
+    kind LibMan's own real Import feature actually understands (GDS/
+    Xschem Symbol+Schematic/Qucs-S Symbol+Component -- confirmed from
+    LibMan's own real `docs/setup/IMPORT.md`) across every real
+    library at once; every other real kind here (LEF/CDL/SPICE/
+    Verilog/Liberty/Magic Layout) has no LibMan counterpart and is
+    skipped, counted (not hidden) in the real status-bar summary.
+    Import registers every real `define()` whose own real path
+    resolves to a real, existing file on this machine, reusing the
+    exact same real, content-sniffed `infer_view_kind` **Automatic
+    tracking** already established (disambiguating xschem vs. Qucs-S
+    `.sym` the same way) -- or, for a real path this project's own
+    formats don't cover at all (LibMan's own real `.layout.core`/
+    `.schematic.core`/... Cap'n Proto files), a new, honestly
+    **tracked-but-unopenable `libman_core`** view kind: real location
+    known, real "View" button deliberately absent (would otherwise
+    open through the generic text-preview dialog and show garbled
+    binary -- actively misleading, not honestly absent) in favor of a
+    plain label explaining why.
+  - Verified for real, driven: `tests/test_libman_project.py` (new, 13
+    real assertions, the real ground-truth fixture above) and
+    `tests/test_libman_project_gui.py` (new, 5 real assertions) --
+    Export against the real, full IHP deck produces a real,
+    re-parseable `.projects` file with exactly the real count of
+    LibMan-understood views; Import against a real, hand-authored
+    fixture pointing at real files already in this project (a real
+    `.gds`, a real xschem `.sym`, a real opaque `.layout.core`-style
+    file, a nonexistent path, and the real `analogLib` bare reference)
+    registers exactly the right real view kinds, honestly skips what
+    it can't resolve, and a real syntax error surfaces an honest error
+    dialog rather than a silent partial import. Full suite re-run
+    clean (56/56).
 
 ## Future work
 

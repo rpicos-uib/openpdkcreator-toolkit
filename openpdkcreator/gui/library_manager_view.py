@@ -86,6 +86,28 @@ to disambiguate xschem vs. Qucs-S ``.sym`` files -- both share the same
 real extension) and registers them immediately -- so a file some other
 tool wrote there directly (e.g. a real "Save As" in xschem) shows up
 here without an explicit **Add...** click.
+
+**Import from LibMan Project.../Export to LibMan Project...**: real,
+native, bidirectional support for IHP-GmbH's own real LibMan tool's
+own real ``.projects`` file format (``ihp/libman_project.py`` -- a
+real, bounded parser/writer verified against LibMan's own real,
+fetched C++ source and a real, committed ground-truth fixture for this
+same SG13G2 PDK; see that module's own docstring for the exact
+real grammar and which real commit it's pinned to, and the real risk
+that an actively-developed, unversioned external file format could
+still drift). Export writes one real ``define("library", "path");``
+line per real view whose kind LibMan's own real Import feature
+actually understands (GDS/Xschem/Qucs); every other real kind here has
+no LibMan counterpart and is silently skipped (counted, not hidden, in
+the real status-bar summary afterward). Import registers every real
+``define()`` whose own real path resolves to a real, existing file on
+this machine -- as a normal, openable view kind when this project
+already understands the real file's own extension (``ihp/
+library_index.py``'s own ``infer_view_kind``, the same real,
+content-sniffed function **Automatic tracking** above already uses),
+or as the new, honestly tracked-but-unopenable **LibMan CORE View**
+kind otherwise (LibMan's own real, proprietary Cap'n Proto binary
+format -- needs LibMan's own converter toolchain, not embedded here).
 """
 
 from __future__ import annotations
@@ -98,6 +120,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .. import eda_tools
 from .. import export as export_mod
+from ..ihp import libman_project as libman_mod
 from ..ihp import library_index as li_mod
 from ..ihp import mag as mag_mod
 from ..ihp import magic_tech as magic_tech_mod
@@ -165,6 +188,9 @@ VIEW_KIND_HELP: dict[str, str] = {
            "Magic itself; Magic's own 'gds write' then produces a real, exportable GDS from it.",
     "gds": "The real, final physical layout (polygons on real mask layers) -- what actually gets "
            "fabricated, or the read-only result of exporting a drawn Magic layout.",
+    "libman_core": "A real view from IHP-GmbH's own LibMan tool, tracked by location only -- its "
+                    "'.layout.core'/'.schematic.core' files are LibMan's own proprietary Cap'n Proto "
+                    "format and need LibMan's own converter tools to open; this app can't view it.",
 }
 """One real sentence per view kind, shown as a hover tooltip next to
 its own row label -- what the file *is*, not how to use this tab."""
@@ -220,6 +246,24 @@ class LibraryManagerView(ttk.Frame):
     # -- layout -------------------------------------------------------------
 
     def _build(self):
+        libman_row = ttk.Frame(self)
+        libman_row.pack(fill="x", padx=8, pady=(8, 0))
+        ttk.Label(libman_row, text="IHP LibMan project file:").pack(side="left")
+        ttk.Button(
+            libman_row, text="Import from LibMan Project...", command=self._import_libman_project,
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            libman_row, text="Export to LibMan Project...", command=self._export_libman_project,
+        ).pack(side="left", padx=(6, 0))
+        add_help_icon(
+            libman_row,
+            "Real, native support for IHP-GmbH/LibMan's own real '.projects' file format "
+            "(define(\"lib\",\"path\"); lines) -- NOT its separate, much heavier Cap'n Proto "
+            "'CORE' binary geometry format, which needs LibMan's own converter tools to read. "
+            "LibMan is under active development with no version marker in its own file format; "
+            "this is pinned to a specific, real, fetched commit -- see ihp/libman_project.py.",
+        ).pack(side="left", padx=(4, 0))
+
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -462,6 +506,14 @@ class LibraryManagerView(ttk.Frame):
             ttk.Button(row_frame, text="Open in Magic", command=lambda e=entry: self._open_magic_mag(e)).pack(
                 side="left"
             )
+        elif view_kind == "libman_core":
+            # A real, proprietary LibMan Cap'n Proto binary -- offering
+            # a "View" button here would open it through the generic
+            # text-preview dialog and show garbled binary, actively
+            # misleading rather than honestly absent. No button at all.
+            ttk.Label(
+                row_frame, text="  LibMan's own format -- open in LibMan itself", foreground="#e65100",
+            ).pack(side="left")
         else:
             ttk.Button(row_frame, text="View", command=lambda e=entry: view_file_dialog(self, e.path)).pack(
                 side="left"
@@ -648,3 +700,74 @@ class LibraryManagerView(ttk.Frame):
         with handle:
             handle.write(f"cd {entry.path.parent}\nload {entry.path.stem}\n")
         self._launch("magic", extra_argv=(handle.name,))
+
+    # -- IHP LibMan project-file import/export ---------------------------------
+
+    _LIBMAN_EXPORTABLE_KINDS = ("gds", "xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component")
+    """Real view kinds LibMan's own real Import doc lists as real,
+    convertible source formats (GDS/Xschem/Qucs -- see ``ihp/
+    libman_project.py``'s own docstring for the real, fetched source).
+    Every other real kind here (LEF/CDL/SPICE/Verilog/Liberty/Magic
+    Layout) has no real LibMan counterpart, so exporting them would
+    just be a dead ``define()`` LibMan itself can't do anything with."""
+
+    def _export_libman_project(self):
+        path_str = filedialog.asksaveasfilename(
+            title="Export to LibMan Project", defaultextension=".projects",
+            filetypes=[("LibMan project file", "*.projects"), ("All files", "*")], parent=self,
+        )
+        if not path_str:
+            return
+        defines: list[libman_mod.LibManDefine] = []
+        skipped = 0
+        for library, _is_real in li_mod.merged_libraries(self.app.pdk_root, self.project_root):
+            entries = li_mod.merged_entries(self.app.pdk_root, self.project_root, library)
+            for (_cell, view_kind), entry in entries.items():
+                if view_kind not in self._LIBMAN_EXPORTABLE_KINDS:
+                    skipped += 1
+                    continue
+                defines.append(libman_mod.LibManDefine(name=library, path=str(entry.path)))
+        Path(path_str).write_text(libman_mod.render_project_file(defines))
+        self.status_var.set(
+            f"Exported {len(defines)} real view(s) to {path_str} "
+            f"({skipped} real view(s) skipped -- no real LibMan-understood format for them)."
+        )
+
+    def _import_libman_project(self):
+        path_str = filedialog.askopenfilename(
+            title="Import from LibMan Project",
+            filetypes=[("LibMan project file", "*.projects *.lib"), ("All files", "*")], parent=self,
+        )
+        if not path_str:
+            return
+        try:
+            project = libman_mod.parse_project_file(Path(path_str))
+        except libman_mod.LibManParseError as exc:
+            messagebox.showerror("Import from LibMan Project", str(exc), parent=self)
+            return
+        registered = 0
+        opaque = 0
+        skipped = 0
+        for define in project.defines:
+            resolved = libman_mod.resolve_path(define)
+            if not resolved.is_file():
+                # A real, honest LibMan gap, not a bug: a define() path
+                # can be a bare, non-file reference (its own real
+                # "analogLib" self-reference is exactly this), or point
+                # at a real file simply not present on this machine.
+                skipped += 1
+                continue
+            view_kind = li_mod.infer_view_kind(resolved)
+            if view_kind is None:
+                view_kind = "libman_core"
+                opaque += 1
+            else:
+                registered += 1
+            cell = libman_mod.infer_library_name(str(resolved))
+            li_mod.register_entry(self.project_root, define.name, cell, view_kind, resolved)
+        self.refresh_libraries()
+        self.status_var.set(
+            f"Imported from {path_str}: {registered} real, viewable view(s) + {opaque} real LibMan "
+            f"CORE view(s) (tracked, not openable) registered; {skipped} real define(s) skipped "
+            f"(no real file found at their own real path)."
+        )

@@ -78,6 +78,7 @@ VIEW_KIND_LABELS: dict[str, str] = {
     "liberty": "Liberty",
     "mag": "Magic Layout",
     "gds": "GDS/Layout",
+    "libman_core": "LibMan CORE View",
 }
 VIEW_KIND_ORDER: tuple[str, ...] = tuple(VIEW_KIND_LABELS.keys())
 """Real create-from-scratch support exists (this session, verified)
@@ -94,7 +95,15 @@ view here, a newly-created one is *not* meant to be edited in this
 Python GUI at all, only opened in real Magic to actually draw real
 geometry (the same "Create an empty skeleton, do the real work in the
 real external tool" pattern xschem/Qucs-S Symbol/Schematic already
-established)."""
+established). ``libman_core`` (added still later, ``ihp/
+libman_project.py``'s own real **Import from LibMan Project...**) is
+different again: a real view whose real file this project can neither
+create *nor open* -- it's LibMan's own real, proprietary Cap'n Proto
+"CORE" binary format (``*.layout.core``/``*.schematic.core``/...),
+which needs LibMan's own real converter toolchain to read at all.
+Tracked by real location only, the same "Add..." precedent every
+other un-openable view kind already has, never silently dropped just
+because this project can't view it."""
 CREATABLE_VIEW_KINDS: frozenset[str] = frozenset(
     {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga", "mag"}
 )
