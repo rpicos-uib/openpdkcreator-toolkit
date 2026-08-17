@@ -12,6 +12,17 @@ fix stack ordering without hand-editing ``stack_order`` integers in YAML;
 it swaps the selected layer's ``stack_order`` with its neighbor's and
 redraws both the list and the cross-section canvas immediately.
 
+The layer list is filtered by two, independent, combined criteria: a
+**Name** search box (plain substring, case-insensitive) and a **Type**
+multi-select listbox -- real layer-name "types" (the segment after a
+real layer's last ``.``, e.g. ``"pin"`` for ``"Activ.pin"``; see
+``_layer_type``), generated fresh from whatever the currently loaded
+project's own layers actually contain, never a static list (the real
+IHP deck alone has 51 distinct real types). Deliberately *not* the
+project's own ``purpose`` field, which every real, imported layer gets
+set to a fixed ``"drawing"`` regardless of its real name -- filtering
+on that would be close to a no-op.
+
 The cross-section canvas's own real, laid-out *viewport* genuinely
 grows with the window (gridded ``sticky="nsew"`` with real weight, band
 width redrawn on every real ``<Configure>`` event from the canvas's own
@@ -40,6 +51,28 @@ PLANES = ("routing", "annotation")
 STATUSES = ("placeholder", "confirmed")
 TRISTATE = ("", "yes", "no")
 
+_NO_TYPE_LABEL = "(no dot)"
+"""Real IHP layer names are always ``<layer>.<type>`` (e.g.
+``Activ.pin``) -- but a brand-new layer added via **New Layer** starts
+as a plain ``NEWLAYERn`` with no dot at all until renamed. Grouped
+under this one, honest pseudo-type in the Type selector rather than
+silently dropped or crashing ``_layer_type``."""
+
+
+def _layer_type(name: str) -> str:
+    """The real "type" component of a real layer name -- the segment
+    after its last real ``.``, e.g. ``"pin"`` for ``"Activ.pin"``. This
+    is deliberately *not* the project's own ``purpose`` field (which
+    ``ihp/layers.py``'s own ``import_layers`` sets to a fixed
+    ``"drawing"`` for every real, imported layer regardless of its
+    real name -- not a real, per-layer classification at all) -- this
+    reads the real name itself, so it's genuinely per-project and
+    reflects whatever real types actually appear in the loaded file."""
+
+    if "." not in name:
+        return _NO_TYPE_LABEL
+    return name.rsplit(".", 1)[1]
+
 STACK_CANVAS_W = 260
 """Initial size hint for the canvas widget, and the minimum fallback
 used before its first real ``<Configure>`` event has fired -- every
@@ -67,6 +100,12 @@ class LayersView(ttk.Frame):
         self.current_layer: Layer | None = None
         self._suspend_trace = False
         self._filter_query = ""
+        self._known_types: list[str] = []
+        """The real, distinct layer-name types (see ``_layer_type``)
+        the Type selector was last populated with -- rebuilt only when
+        this actually changes (a real layer added/deleted/renamed),
+        not on every ``refresh()``, so an in-progress selection/scroll
+        in that listbox survives an unrelated edit elsewhere."""
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -87,7 +126,7 @@ class LayersView(ttk.Frame):
         left.columnconfigure(0, weight=1)
 
         button_row = ttk.Frame(left)
-        button_row.grid(row=0, column=0, sticky="ew")
+        button_row.grid(row=0, column=0, columnspan=3, sticky="ew")
         ttk.Button(button_row, text="New Layer", command=self._new_layer).pack(side="left")
         ttk.Button(button_row, text="Delete", command=self._delete_layer).pack(
             side="left", padx=(6, 0)
@@ -98,7 +137,7 @@ class LayersView(ttk.Frame):
         ttk.Button(button_row, text="▼ Move Down", command=lambda: self._move(1)).pack(
             side="left", padx=(6, 0)
         )
-        self.filter_var = build_filter_row(button_row, self._on_filter_changed)
+        self.filter_var = build_filter_row(button_row, self._on_filter_changed, label="Name:")
 
         columns = ("stack_order", "name", "gds", "purpose", "status")
         self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
@@ -110,6 +149,27 @@ class LayersView(ttk.Frame):
         self.tree_scrollbar = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
         self.tree_scrollbar.grid(row=1, column=1, sticky="ns", pady=(6, 0))
         self.tree.configure(yscrollcommand=self.tree_scrollbar.set)
+
+        # Type selector: a real, multi-select "selection box" listing
+        # whatever real layer-name types (see _layer_type) are actually
+        # present in the currently loaded project -- generated fresh
+        # from the real data every time it changes, never a static,
+        # hardcoded list (the real IHP deck alone has 51 distinct real
+        # types: drawing/pin/label/net/boundary/text/... down to
+        # one-off via names like "m2tm1"). Everything selected by
+        # default, so an untouched filter never hides real data.
+        type_frame = ttk.Frame(left)
+        type_frame.grid(row=1, column=2, sticky="ns", padx=(6, 0), pady=(6, 0))
+        type_frame.rowconfigure(1, weight=1)
+        ttk.Label(type_frame, text="Type").grid(row=0, column=0, columnspan=2, sticky="w")
+        self.type_listbox = tk.Listbox(
+            type_frame, selectmode="extended", exportselection=False, width=12, activestyle="none",
+        )
+        self.type_listbox.grid(row=1, column=0, sticky="ns")
+        type_scrollbar = ttk.Scrollbar(type_frame, orient="vertical", command=self.type_listbox.yview)
+        type_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.type_listbox.configure(yscrollcommand=type_scrollbar.set)
+        self.type_listbox.bind("<<ListboxSelect>>", lambda _e: self.refresh())
 
     # -- stack cross-section preview -------------------------------------
 
@@ -341,14 +401,45 @@ class LayersView(ttk.Frame):
         # renaming a layer would knock the selection loose mid-edit.
         return str(id(layer))
 
+    def _selected_types(self) -> set[str]:
+        return {self.type_listbox.get(i) for i in self.type_listbox.curselection()}
+
+    def _refresh_type_listbox(self, types_present: list[str]):
+        if types_present == self._known_types:
+            return
+        old_types = set(self._known_types)
+        previously_selected = self._selected_types()
+        self._known_types = types_present
+        self.type_listbox.delete(0, tk.END)
+        for t in types_present:
+            self.type_listbox.insert(tk.END, t)
+        for i, t in enumerate(types_present):
+            # A real type carries over its own previous checked state;
+            # a brand-new one (never seen before -- e.g. a layer just
+            # got renamed to a new real suffix) starts selected, so an
+            # untouched Type selector never hides real, new data.
+            if t not in old_types or t in previously_selected:
+                self.type_listbox.select_set(i)
+
     def refresh(self):
         selected = self.tree.selection()
         selected_iid = selected[0] if selected else None
+
+        # The Type selector is generated from *every* real, current
+        # layer -- not just the ones the Name filter currently shows --
+        # so a type stays selectable/visible even while it's the only
+        # thing being searched for.
+        types_present = sorted({_layer_type(l.name) for l in self.app.project.layers})
+        self._refresh_type_listbox(types_present)
+        selected_types = self._selected_types()
+
         for row in self.tree.get_children():
             self.tree.delete(row)
         self._layer_by_iid = {}
         for layer in self.app.project.sorted_layers():
-            if not matches(self._filter_query, layer.name, layer.purpose, layer.status):
+            if not matches(self._filter_query, layer.name):
+                continue
+            if _layer_type(layer.name) not in selected_types:
                 continue
             gds = "" if layer.gds_layer is None else f"{layer.gds_layer}/{layer.gds_datatype}"
             iid = self._iid(layer)

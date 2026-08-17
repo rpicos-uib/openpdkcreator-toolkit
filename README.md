@@ -1898,6 +1898,50 @@ editor yet -- see Future Work.
     assertions above. Verified live in the real, running GUI via noVNC
     too, not just the automated suite -- both scrollbar thumbs visibly
     present and correctly positioned. Full suite re-run clean (52/52).
+- **Layers gained a real Name search + Type multi-select filter**, on
+  top of the existing free-text substring box.
+  - **Name** is the same free-text box as before, narrowed to search
+    only `layer.name` -- it previously also substring-matched
+    `purpose`/`status`, which meant searching e.g. "drawing" matched
+    *every* real layer (every real, imported layer's `purpose` defaults
+    to `"drawing"` -- see the `stack_order` bug entry above for the
+    same root fact) or "placeholder" matched all of them via `status`,
+    neither a real, useful name search.
+  - **Type** is a real, multi-select `tk.Listbox` (a real "selection
+    box", scrollable via its own `ttk.Scrollbar`) -- generated fresh
+    from whatever real layer-name types this project's own currently
+    loaded layers actually contain, never a static list. "Type" here is
+    a new, derived-only concept (`_layer_type` -- the segment after a
+    real layer's last `.`, e.g. `"pin"` for `"Activ.pin"`), computed
+    directly from each real name, **not** the existing `purpose` field
+    (project-only metadata that every real, imported layer gets set to
+    a fixed `"drawing"`, unconnected to its real name -- filtering on
+    that would be close to a no-op, confirmed empirically: the real IHP
+    deck's own 377 layers span 51 distinct real name-derived types, but
+    only one distinct real `purpose` value). Every real type starts
+    selected (an untouched filter never hides real data); Name and Type
+    combine (AND); deselecting every type honestly shows zero rows
+    rather than silently falling back to "show everything".
+  - Rebuilding the Type listbox's own items is skipped whenever the
+    real, distinct type set hasn't actually changed (most `refresh()`
+    calls, e.g. an unrelated form-field edit) -- only a real add/
+    delete/rename that changes which types exist triggers a rebuild,
+    which preserves each still-existing type's own checked state and
+    defaults any brand-new type (e.g. **New Layer**'s dot-less
+    `NEWLAYERn`, grouped under one honest `"(no dot)"` pseudo-type) to
+    selected, so it's visible immediately.
+  - Verified for real, driven: `tests/test_layers_type_filter.py` (new,
+    9 real assertions) -- the Type listbox lists exactly the real IHP
+    deck's own 51 distinct types, not a static list; selecting only
+    "pin" filters to exactly the 24 real `.pin` layers; Name and Type
+    combine correctly; deselecting everything shows zero rows; a
+    brand-new, dot-less layer adds and auto-selects a new, real
+    `"(no dot)"` entry; and Name no longer false-matches on
+    `purpose`/`status`. Verified live in the real, running GUI via
+    noVNC too: selecting "pin" in the real Type listbox visibly
+    filtered the real tree down to exactly its real `.pin` layers
+    (Activ.pin, Metal1.pin, TopMetal2.pin, IND.pin, ...). Full suite
+    re-run clean (53/53).
 
 ## Future work
 
