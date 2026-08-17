@@ -13,15 +13,17 @@ it swaps the selected layer's ``stack_order`` with its neighbor's and
 redraws both the list and the cross-section canvas immediately.
 
 The layer list is filtered by two, independent, combined criteria: a
-**Name** search box (plain substring, case-insensitive) and a **Type**
-multi-select listbox -- real layer-name "types" (the segment after a
-real layer's last ``.``, e.g. ``"pin"`` for ``"Activ.pin"``; see
-``_layer_type``), generated fresh from whatever the currently loaded
-project's own layers actually contain, never a static list (the real
-IHP deck alone has 51 distinct real types). Deliberately *not* the
-project's own ``purpose`` field, which every real, imported layer gets
-set to a fixed ``"drawing"`` regardless of its real name -- filtering
-on that would be close to a no-op.
+**Name** search box (plain substring, case-insensitive) and a
+**Purpose** multi-select listbox -- generated fresh from whatever
+``purpose`` values the currently loaded project's own layers actually
+have, never a static list (the real IHP deck alone has 51 distinct
+real values). ``purpose`` itself is now a real, derived-at-import
+value (``ihp/layers.py``'s own ``purpose_from_name`` -- the segment
+after a real layer's last ``.``, e.g. ``"pin"`` for ``"Activ.pin"``),
+not the small, fixed 6-value enum this field used to be force-fit
+into -- so the **Purpose** field in the edit form on the right is now
+a free-typed, per-project-suggested combobox too, not a closed
+``state="readonly"`` one.
 
 The cross-section canvas's own real, laid-out *viewport* genuinely
 grows with the window (gridded ``sticky="nsew"`` with real weight, band
@@ -46,32 +48,9 @@ from tkinter import colorchooser, ttk
 from ..models import Layer
 from .list_filter import build_filter_row, matches
 
-PURPOSES = ("drawing", "pin", "label", "marker", "fill", "exclude")
 PLANES = ("routing", "annotation")
 STATUSES = ("placeholder", "confirmed")
 TRISTATE = ("", "yes", "no")
-
-_NO_TYPE_LABEL = "(no dot)"
-"""Real IHP layer names are always ``<layer>.<type>`` (e.g.
-``Activ.pin``) -- but a brand-new layer added via **New Layer** starts
-as a plain ``NEWLAYERn`` with no dot at all until renamed. Grouped
-under this one, honest pseudo-type in the Type selector rather than
-silently dropped or crashing ``_layer_type``."""
-
-
-def _layer_type(name: str) -> str:
-    """The real "type" component of a real layer name -- the segment
-    after its last real ``.``, e.g. ``"pin"`` for ``"Activ.pin"``. This
-    is deliberately *not* the project's own ``purpose`` field (which
-    ``ihp/layers.py``'s own ``import_layers`` sets to a fixed
-    ``"drawing"`` for every real, imported layer regardless of its
-    real name -- not a real, per-layer classification at all) -- this
-    reads the real name itself, so it's genuinely per-project and
-    reflects whatever real types actually appear in the loaded file."""
-
-    if "." not in name:
-        return _NO_TYPE_LABEL
-    return name.rsplit(".", 1)[1]
 
 STACK_CANVAS_W = 260
 """Initial size hint for the canvas widget, and the minimum fallback
@@ -100,12 +79,12 @@ class LayersView(ttk.Frame):
         self.current_layer: Layer | None = None
         self._suspend_trace = False
         self._filter_query = ""
-        self._known_types: list[str] = []
-        """The real, distinct layer-name types (see ``_layer_type``)
-        the Type selector was last populated with -- rebuilt only when
-        this actually changes (a real layer added/deleted/renamed),
-        not on every ``refresh()``, so an in-progress selection/scroll
-        in that listbox survives an unrelated edit elsewhere."""
+        self._known_purposes: list[str] = []
+        """The real, distinct ``purpose`` values the Purpose selector
+        was last populated with -- rebuilt only when this actually
+        changes (a real layer added/deleted/re-purposed), not on every
+        ``refresh()``, so an in-progress selection/scroll in that
+        listbox survives an unrelated edit elsewhere."""
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -150,26 +129,30 @@ class LayersView(ttk.Frame):
         self.tree_scrollbar.grid(row=1, column=1, sticky="ns", pady=(6, 0))
         self.tree.configure(yscrollcommand=self.tree_scrollbar.set)
 
-        # Type selector: a real, multi-select "selection box" listing
-        # whatever real layer-name types (see _layer_type) are actually
-        # present in the currently loaded project -- generated fresh
-        # from the real data every time it changes, never a static,
-        # hardcoded list (the real IHP deck alone has 51 distinct real
-        # types: drawing/pin/label/net/boundary/text/... down to
-        # one-off via names like "m2tm1"). Everything selected by
-        # default, so an untouched filter never hides real data.
-        type_frame = ttk.Frame(left)
-        type_frame.grid(row=1, column=2, sticky="ns", padx=(6, 0), pady=(6, 0))
-        type_frame.rowconfigure(1, weight=1)
-        ttk.Label(type_frame, text="Type").grid(row=0, column=0, columnspan=2, sticky="w")
-        self.type_listbox = tk.Listbox(
-            type_frame, selectmode="extended", exportselection=False, width=12, activestyle="none",
+        # Purpose selector: a real, multi-select "selection box" listing
+        # whatever real purpose values are actually present in the
+        # currently loaded project -- generated fresh from the real
+        # data every time it changes, never a static, hardcoded list
+        # (the real IHP deck alone has 51 distinct real values: drawing/
+        # pin/label/net/boundary/text/... down to one-off via names
+        # like "m2tm1", since purpose is itself now derived from each
+        # real layer's own name -- see ihp/layers.py's own
+        # purpose_from_name). Everything selected by default, so an
+        # untouched filter never hides real data.
+        purpose_frame = ttk.Frame(left)
+        purpose_frame.grid(row=1, column=2, sticky="ns", padx=(6, 0), pady=(6, 0))
+        purpose_frame.rowconfigure(1, weight=1)
+        ttk.Label(purpose_frame, text="Purpose").grid(row=0, column=0, columnspan=2, sticky="w")
+        self.purpose_listbox = tk.Listbox(
+            purpose_frame, selectmode="extended", exportselection=False, width=12, activestyle="none",
         )
-        self.type_listbox.grid(row=1, column=0, sticky="ns")
-        type_scrollbar = ttk.Scrollbar(type_frame, orient="vertical", command=self.type_listbox.yview)
-        type_scrollbar.grid(row=1, column=1, sticky="ns")
-        self.type_listbox.configure(yscrollcommand=type_scrollbar.set)
-        self.type_listbox.bind("<<ListboxSelect>>", lambda _e: self.refresh())
+        self.purpose_listbox.grid(row=1, column=0, sticky="ns")
+        purpose_scrollbar = ttk.Scrollbar(
+            purpose_frame, orient="vertical", command=self.purpose_listbox.yview
+        )
+        purpose_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.purpose_listbox.configure(yscrollcommand=purpose_scrollbar.set)
+        self.purpose_listbox.bind("<<ListboxSelect>>", lambda _e: self.refresh())
 
     # -- stack cross-section preview -------------------------------------
 
@@ -338,20 +321,30 @@ class LayersView(ttk.Frame):
             self.vars[field] = var
             row += 1
 
-        def add_combo(field, label, values):
+        def add_combo(field, label, values, editable=False):
             nonlocal row
             ttk.Label(right, text=label).grid(row=row, column=0, sticky="w", pady=2)
             var = tk.StringVar()
-            combo = ttk.Combobox(right, textvariable=var, values=values, state="readonly")
+            combo = ttk.Combobox(
+                right, textvariable=var, values=values, state="normal" if editable else "readonly",
+            )
             combo.grid(row=row, column=1, sticky="ew", pady=2)
             combo.bind("<<ComboboxSelected>>", self._on_field_changed)
+            if editable:
+                # Purpose is now real, derived, per-project data (see
+                # ihp/layers.py's own purpose_from_name) -- free-typed,
+                # live-committing on every keystroke like a plain Entry,
+                # not locked to a closed enum; `values` (its dropdown
+                # suggestions) is kept current from refresh().
+                var.trace_add("write", self._on_field_changed)
+                self.purpose_combo = combo
             self.vars[field] = var
             row += 1
 
         add_entry("name", "Name")
         add_entry("gds_layer", "GDS layer #")
         add_entry("gds_datatype", "GDS datatype #")
-        add_combo("purpose", "Purpose", PURPOSES)
+        add_combo("purpose", "Purpose", (), editable=True)
         add_combo("plane", "Plane (Magic)", PLANES)
         add_combo("streamout_allowed", "Streamout allowed", TRISTATE)
 
@@ -401,37 +394,40 @@ class LayersView(ttk.Frame):
         # renaming a layer would knock the selection loose mid-edit.
         return str(id(layer))
 
-    def _selected_types(self) -> set[str]:
-        return {self.type_listbox.get(i) for i in self.type_listbox.curselection()}
+    def _selected_purposes(self) -> set[str]:
+        return {self.purpose_listbox.get(i) for i in self.purpose_listbox.curselection()}
 
-    def _refresh_type_listbox(self, types_present: list[str]):
-        if types_present == self._known_types:
+    def _refresh_purpose_listbox(self, purposes_present: list[str]):
+        if purposes_present == self._known_purposes:
             return
-        old_types = set(self._known_types)
-        previously_selected = self._selected_types()
-        self._known_types = types_present
-        self.type_listbox.delete(0, tk.END)
-        for t in types_present:
-            self.type_listbox.insert(tk.END, t)
-        for i, t in enumerate(types_present):
-            # A real type carries over its own previous checked state;
-            # a brand-new one (never seen before -- e.g. a layer just
-            # got renamed to a new real suffix) starts selected, so an
-            # untouched Type selector never hides real, new data.
-            if t not in old_types or t in previously_selected:
-                self.type_listbox.select_set(i)
+        old_purposes = set(self._known_purposes)
+        previously_selected = self._selected_purposes()
+        self._known_purposes = purposes_present
+        self.purpose_listbox.delete(0, tk.END)
+        for p in purposes_present:
+            self.purpose_listbox.insert(tk.END, p)
+        for i, p in enumerate(purposes_present):
+            # A real purpose carries over its own previous checked
+            # state; a brand-new one (never seen before -- e.g. a layer
+            # just got re-purposed to a new real value) starts
+            # selected, so an untouched Purpose selector never hides
+            # real, new data.
+            if p not in old_purposes or p in previously_selected:
+                self.purpose_listbox.select_set(i)
 
     def refresh(self):
         selected = self.tree.selection()
         selected_iid = selected[0] if selected else None
 
-        # The Type selector is generated from *every* real, current
+        # The Purpose selector (and the Purpose combobox's own
+        # dropdown suggestions) is generated from *every* real, current
         # layer -- not just the ones the Name filter currently shows --
-        # so a type stays selectable/visible even while it's the only
-        # thing being searched for.
-        types_present = sorted({_layer_type(l.name) for l in self.app.project.layers})
-        self._refresh_type_listbox(types_present)
-        selected_types = self._selected_types()
+        # so a purpose stays selectable/visible even while it's the
+        # only thing being searched for.
+        purposes_present = sorted({l.purpose for l in self.app.project.layers})
+        self._refresh_purpose_listbox(purposes_present)
+        self.purpose_combo.configure(values=purposes_present)
+        selected_purposes = self._selected_purposes()
 
         for row in self.tree.get_children():
             self.tree.delete(row)
@@ -439,7 +435,7 @@ class LayersView(ttk.Frame):
         for layer in self.app.project.sorted_layers():
             if not matches(self._filter_query, layer.name):
                 continue
-            if _layer_type(layer.name) not in selected_types:
+            if layer.purpose not in selected_purposes:
                 continue
             gds = "" if layer.gds_layer is None else f"{layer.gds_layer}/{layer.gds_datatype}"
             iid = self._iid(layer)

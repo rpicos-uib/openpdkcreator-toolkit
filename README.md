@@ -1942,6 +1942,48 @@ editor yet -- see Future Work.
     filtered the real tree down to exactly its real `.pin` layers
     (Activ.pin, Metal1.pin, TopMetal2.pin, IND.pin, ...). Full suite
     re-run clean (53/53).
+- **The "Type" filter above was corrected to actually be "Purpose"**,
+  per direct user feedback -- unifying two concepts that had been kept
+  artificially separate. The previous version derived its filter value
+  live from each real layer's own name (`_layer_type`, GUI-only,
+  never stored) specifically *because* the existing `purpose` field
+  was real, stored, project metadata that every imported layer's own
+  `import_layers` set to a fixed `"drawing"`, disconnected from its
+  real name -- a deliberate design note in `ihp/layers.py`'s own
+  docstring even argued this split was correct, since the real name's
+  own 51 distinct trailing segments would never fit the old, small,
+  fixed 6-value `PURPOSES` enum (`drawing`/`pin`/`label`/`marker`/
+  `fill`/`exclude`). Corrected instead of left as two parallel
+  concepts: `ihp/layers.py` gained a new `purpose_from_name` (the same
+  real derivation, now the *authoritative* one) and `import_layers`
+  now sets each real layer's own real, stored `purpose` from it
+  directly, reversing that earlier note. The GUI's own Purpose
+  selector/filter (renamed from "Type") now reads `layer.purpose`
+  itself -- a real, stored, independently-editable field again, not a
+  shadow value recomputed from `name` on every redraw -- and the
+  **Purpose** field in the edit form switched from a closed,
+  `state="readonly"` 6-value combobox to a real, free-typed,
+  per-project-suggested one (`values=` refreshed from the real,
+  current project on every `refresh()`, confirmed live and empirically
+  that `ttk.Combobox.configure(values=...)` does *not* share
+  `tk.Spinbox`'s own textvariable-stomping quirk from the entry above,
+  so this was safe to do unconditionally on every redraw without
+  losing whatever the user is mid-typing). `PURPOSES` and the GUI-only
+  `_layer_type`/`_NO_TYPE_LABEL` are gone; a brand-new, dot-less layer
+  now simply gets the real `Layer` dataclass's own existing `"drawing"`
+  default (matching `purpose_from_name`'s own fallback), needing no
+  separate pseudo-value at all. Verified for real, driven:
+  `tests/test_layers_purpose_filter.py` (replacing the prior test file,
+  12 real assertions) -- `purpose_from_name` and `import_layers` both
+  checked directly; the Purpose selector/combobox both reflect the
+  real, current per-project data; filtering, combining with Name, and
+  the empty-selection case all still behave the same as before; and a
+  new one: free-typing a brand-new Purpose value in the edit form
+  live-commits to the real layer and is immediately reflected in the
+  Purpose selector. Verified live in the real, running GUI via noVNC
+  too: typing a custom Purpose value into the edit form's own real
+  Entry-like combobox updated that row's real Purpose column
+  immediately. Full suite re-run clean (53/53).
 
 ## Future work
 
