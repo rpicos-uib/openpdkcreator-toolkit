@@ -137,9 +137,12 @@ def import_layers(pdk_root: Path, lyp_path: Path) -> list[Layer]:
                 frame_color=fields.get("frame-color", "").strip() or "#7f7f7f",
                 fill_color=fields.get("fill-color", "").strip() or "#d9d9d9",
                 status="placeholder",
+                stack_order=len(layers),
                 notes=f"Imported from {rel} on {today}. Real GDS layer/datatype/color; "
-                      f"plane/stack_order/streamout_allowed not derivable from a .lyp "
-                      f"and still need a human decision.",
+                      f"stack_order defaults to this .lyp file's own real block order "
+                      f"(a reasonable starting point, not a verified physical stack -- "
+                      f"reorder with Move Up/Down if it's wrong); plane/streamout_allowed "
+                      f"are not derivable from a .lyp at all and still need a human decision.",
                 start_line=start_line,
                 end_line=end_line,
             )

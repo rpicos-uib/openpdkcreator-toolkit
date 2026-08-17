@@ -1802,6 +1802,40 @@ editor yet -- see Future Work.
   targets). Verified for real, driven: `tests/test_pdk_wizard.py`
   asserts the root notebook's first tab is literally titled `"Wizard"`
   and is the one selected on startup.
+- **Real bug found and fixed: Layers' own Stack Order always showed
+  `0`, and Move Up/Down silently did nothing about it.** `import_layers`
+  (`ihp/layers.py`) never set `stack_order` at all, so every real,
+  freshly-imported layer sat at the `models.Layer` dataclass's own
+  default (`0`) -- confirmed live against the real IHP deck, all 377
+  real layers. That part alone was arguably an honest, already-
+  documented gap (a `.lyp` file genuinely has no real stack-order field
+  to import from). The real bug is what it broke downstream: the
+  Layers tab's own Move Up/Down reorder helper (`gui/layers_view.py`'s
+  `_move`) works by *swapping* the selected layer's `stack_order` with
+  its neighbor's -- swapping two layers that are both `0` is a real
+  no-op, confirmed live (Move Down on a freshly-loaded real layer
+  changed nothing at all, silently). The list still *looked* right by
+  accident (Python's `sorted()` is stable, so ties preserve the
+  `.lyp`'s own real block order), which is exactly why this went
+  unnoticed until someone actually looked at the Stack Order column's
+  numbers. Fixed at the real source: `import_layers` now assigns
+  `stack_order` from each layer's own real position among the `.lyp`
+  file's real `<properties>` blocks (`stack_order=len(layers)` at
+  append time -- contiguous `0..n-1` for whatever's actually kept, even
+  if some real block were skipped for missing `name`/`source`) --
+  `stack_order` has no real `.lyp` write-back counterpart either way
+  (`ihp/layers_writer.py`'s own docstring), so this is purely an
+  import-time default, still a human-adjustable starting point via Move
+  Up/Down, not a claim of verified physical stack order. Verified for
+  real, driven: `tests/test_layers_stack_order.py` (new) -- all 377
+  real, imported layers get distinct `stack_order` values matching the
+  real `.lyp` file's own order; Move Down against the real, freshly-
+  loaded deck now genuinely swaps the first two real layers instead of
+  no-op'ing; **New Layer** still correctly continues numbering past the
+  real, imported max. Full suite re-run clean (51/51) to confirm no
+  round-trip/persistence regression, since `stack_order` is
+  project-metadata-only and several existing tests already exercise
+  `import_layers` without asserting on that field.
 
 ## Future work
 
