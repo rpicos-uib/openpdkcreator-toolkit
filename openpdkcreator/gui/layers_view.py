@@ -23,7 +23,13 @@ after a real layer's last ``.``, e.g. ``"pin"`` for ``"Activ.pin"``),
 not the small, fixed 6-value enum this field used to be force-fit
 into -- so the **Purpose** field in the edit form on the right is now
 a free-typed, per-project-suggested combobox too, not a closed
-``state="readonly"`` one.
+``state="readonly"`` one. **Show All** re-selects every real purpose
+in one click. Clicking any column header sorts the *displayed* list by
+it (toggling ascending/descending on repeat clicks, shown with a
+``▲``/``▼`` marker) -- a real, display-only convenience: Move Up/Down,
+the stack cross-section, and every other real, physical-order consumer
+keep reading real ``stack_order`` via ``sorted_layers()`` regardless of
+which column the list currently happens to be sorted by.
 
 The cross-section canvas's own real, laid-out *viewport* genuinely
 grows with the window (gridded ``sticky="nsew"`` with real weight, band
@@ -51,6 +57,23 @@ from .list_filter import build_filter_row, matches
 PLANES = ("routing", "annotation")
 STATUSES = ("placeholder", "confirmed")
 TRISTATE = ("", "yes", "no")
+
+_TREE_COLUMNS = ("stack_order", "name", "gds", "purpose", "status")
+_SORT_KEYS = {
+    "stack_order": lambda l: l.stack_order,
+    "name": lambda l: l.name.lower(),
+    "gds": lambda l: (
+        l.gds_layer if l.gds_layer is not None else -1,
+        l.gds_datatype if l.gds_datatype is not None else -1,
+    ),
+    "purpose": lambda l: l.purpose.lower(),
+    "status": lambda l: l.status.lower(),
+}
+"""One real sort key per real Treeview column -- clicking a header
+sorts the *displayed* list by it; every other real, physical-order
+consumer (Move Up/Down, the stack cross-section, a brand-new layer's
+own ``stack_order`` numbering) keeps reading real ``stack_order``
+directly via ``sorted_layers()``, unaffected by this."""
 
 STACK_CANVAS_W = 260
 """Initial size hint for the canvas widget, and the minimum fallback
@@ -85,6 +108,14 @@ class LayersView(ttk.Frame):
         changes (a real layer added/deleted/re-purposed), not on every
         ``refresh()``, so an in-progress selection/scroll in that
         listbox survives an unrelated edit elsewhere."""
+        self._sort_column: str | None = None
+        """A column name once its own header has been clicked -- the
+        tree then displays in that order instead of real
+        ``stack_order``. Purely a display convenience: Move Up/Down,
+        the stack cross-section, and every other real, physical-order
+        consumer keep reading ``sorted_layers()`` (real ``stack_order``)
+        directly, never this."""
+        self._sort_reverse = False
 
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
@@ -118,10 +149,9 @@ class LayersView(ttk.Frame):
         )
         self.filter_var = build_filter_row(button_row, self._on_filter_changed, label="Name:")
 
-        columns = ("stack_order", "name", "gds", "purpose", "status")
-        self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
-        for col, width in zip(columns, (60, 90, 80, 90, 90)):
-            self.tree.heading(col, text=col.replace("_", " ").title())
+        self.tree = ttk.Treeview(left, columns=_TREE_COLUMNS, show="headings", selectmode="browse")
+        for col, width in zip(_TREE_COLUMNS, (60, 90, 80, 90, 90)):
+            self.tree.heading(col, text=col.replace("_", " ").title(), command=lambda c=col: self._sort_by(c))
             self.tree.column(col, width=width, anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -153,6 +183,9 @@ class LayersView(ttk.Frame):
         purpose_scrollbar.grid(row=1, column=1, sticky="ns")
         self.purpose_listbox.configure(yscrollcommand=purpose_scrollbar.set)
         self.purpose_listbox.bind("<<ListboxSelect>>", lambda _e: self.refresh())
+        ttk.Button(purpose_frame, text="Show All", command=self._select_all_purposes).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0)
+        )
 
     # -- stack cross-section preview -------------------------------------
 
@@ -415,6 +448,26 @@ class LayersView(ttk.Frame):
             if p not in old_purposes or p in previously_selected:
                 self.purpose_listbox.select_set(i)
 
+    def _select_all_purposes(self):
+        self.purpose_listbox.select_set(0, tk.END)
+        self.refresh()
+
+    def _sort_by(self, col: str):
+        if self._sort_column == col:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = col
+            self._sort_reverse = False
+        self._update_sort_headings()
+        self.refresh()
+
+    def _update_sort_headings(self):
+        for col in _TREE_COLUMNS:
+            text = col.replace("_", " ").title()
+            if col == self._sort_column:
+                text += " ▼" if self._sort_reverse else " ▲"
+            self.tree.heading(col, text=text)
+
     def refresh(self):
         selected = self.tree.selection()
         selected_iid = selected[0] if selected else None
@@ -429,14 +482,22 @@ class LayersView(ttk.Frame):
         self.purpose_combo.configure(values=purposes_present)
         selected_purposes = self._selected_purposes()
 
+        # Real stack_order is the default display order (matching the
+        # stack cross-section's own bottom -> top reading) -- clicking
+        # a column header re-sorts the *displayed* list only; Move Up/
+        # Down and the cross-section always keep reading real
+        # stack_order via sorted_layers(), never this.
+        shown = [
+            l for l in self.app.project.sorted_layers()
+            if matches(self._filter_query, l.name) and l.purpose in selected_purposes
+        ]
+        if self._sort_column is not None:
+            shown.sort(key=_SORT_KEYS[self._sort_column], reverse=self._sort_reverse)
+
         for row in self.tree.get_children():
             self.tree.delete(row)
         self._layer_by_iid = {}
-        for layer in self.app.project.sorted_layers():
-            if not matches(self._filter_query, layer.name):
-                continue
-            if layer.purpose not in selected_purposes:
-                continue
+        for layer in shown:
             gds = "" if layer.gds_layer is None else f"{layer.gds_layer}/{layer.gds_datatype}"
             iid = self._iid(layer)
             self._layer_by_iid[iid] = layer

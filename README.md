@@ -1984,6 +1984,27 @@ editor yet -- see Future Work.
   too: typing a custom Purpose value into the edit form's own real
   Entry-like combobox updated that row's real Purpose column
   immediately. Full suite re-run clean (53/53).
+- **Layers gained "Show All" and sortable column headers.** **Show
+  All** (`_select_all_purposes`) re-selects every real purpose in the
+  Purpose listbox in one click, instead of clicking/shift-clicking each
+  one back individually after narrowing the filter. Clicking any real
+  Treeview column header (Stack Order/Name/GDS/Purpose/Status) sorts
+  the *displayed* list by that column, toggling ascending/descending on
+  repeat clicks and marking the active one with a real ``▲``/``▼``
+  glyph in its own header text. **Deliberately display-only**: Move
+  Up/Down, the stack cross-section, and a brand-new layer's own
+  ``stack_order`` numbering all keep reading real ``stack_order`` via
+  ``sorted_layers()`` directly, regardless of which column the list
+  happens to be sorted by at the time -- confirmed live, driven: Move
+  Up/Down still swaps the correct real, physical layers even while the
+  list is displayed sorted by Purpose. The GDS column sorts
+  numerically by real ``(gds_layer, gds_datatype)``, not as text (so
+  `9/0` sorts before `10/0`, not after). Verified for real, driven:
+  `tests/test_layers_sort_and_showall.py` (new, 8 real assertions) --
+  ascending/descending/column-switch behavior, sort surviving a Name
+  filter change, numeric GDS sorting, Move Up/Down's real independence
+  from display sort, and Show All restoring the full 377-layer view.
+  Full suite re-run clean (54/54).
 
 ## Future work
 
