@@ -104,5 +104,40 @@ assert "Wizard" in help_text and "Library Manager" in help_text
 assert "File" in help_text and "Export" in help_text
 print("PASS: About/Help open real dialogs with real, correct content (repo URL, LibMan link, license, tab guide).")
 
+# --- The real show_text_dialog (not the app.py wrapper monkeypatched
+# above) uses real, dynamic word-wrap to the dialog's own current
+# pixel width -- confirmed live, not just checking the static config
+# option: resizing the real dialog narrower genuinely re-flows the
+# real displayed line count. The previous wrap="none" had no
+# horizontal scrollbar either, so a real long line was genuinely
+# unreachable, not just inconvenient -- a real bug, not a style choice. ---
+from openpdkcreator.gui.text_dialog import show_text_dialog as real_show_text_dialog
+
+long_paragraph = "word " * 200  # long enough to definitely wrap at any reasonable width
+wrap_results = {}
+
+
+def _inspect_and_close():
+    dialog = next(w for w in root.winfo_children() if isinstance(w, tk.Toplevel) and w.title() == "Wrap Test")
+    body = next(w for w in dialog.winfo_children() if isinstance(w, tk.Text))
+    assert body.cget("wrap") == "word"
+    root.update()
+    wide = body.count("1.0", "end", "displaylines")
+    wrap_results["wide"] = wide[0] if isinstance(wide, tuple) else wide
+    dialog.geometry("260x300")
+    root.update()
+    narrow = body.count("1.0", "end", "displaylines")
+    wrap_results["narrow"] = narrow[0] if isinstance(narrow, tuple) else narrow
+    dialog.destroy()
+
+
+root.after(200, _inspect_and_close)
+real_show_text_dialog(root, "Wrap Test", long_paragraph)
+assert wrap_results["narrow"] > wrap_results["wide"], wrap_results
+print(
+    f"PASS: show_text_dialog uses real, dynamic word-wrap -- a narrower real window genuinely "
+    f"re-flows from {wrap_results['wide']} to {wrap_results['narrow']} real display lines."
+)
+
 root.destroy()
 print("ALL MENU STRUCTURE TESTS PASS")

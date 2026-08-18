@@ -2258,6 +2258,26 @@ editor yet -- see Future Work.
   pre-filled at the current real project directory, listing the real
   `saves/`/`library_index.yaml`/`user_models/` alongside it. Full
   suite re-run clean (58/58).
+- **`gui/text_dialog.py`'s Help/About modal (and the OSDI snippet
+  dialog that already reused it) now genuinely word-wraps to the
+  dialog's own current window size**, per direct user request. A real
+  bug, not just a style choice: the previous `wrap="none"` had no
+  horizontal scrollbar either, so a real line wider than the window
+  was genuinely unreachable, not just inconvenient. Fixed with one
+  real, well-understood Tk option, `wrap="word"` -- real, dynamic
+  re-flow to the widget's own current pixel width, recalculated by Tk
+  itself on every real resize, no extra code needed; never touches the
+  real underlying text buffer, so a real select/copy still grabs
+  exactly what was inserted. Verified for real, driven, not just a
+  config-value check: `tests/test_menu_structure.py` (extended) drives
+  the real, un-mocked `show_text_dialog` (via a real `Toplevel.after()`
+  scheduled callback, since the function itself blocks on a real modal
+  `wait_window()`), resizes the real dialog narrower, and confirms the
+  real, displayed line count actually grows (12 -> 40 for a long,
+  synthetic paragraph) -- proof the re-flow is live, not assumed from
+  the option alone. Verified live via noVNC too: dragging the real
+  Help window narrower visibly re-flowed its own real text on the
+  spot. Full suite re-run clean (58/58).
 
 ## Future work
 
