@@ -2278,6 +2278,51 @@ editor yet -- see Future Work.
   the option alone. Verified live via noVNC too: dragging the real
   Help window narrower visibly re-flowed its own real text on the
   spot. Full suite re-run clean (58/58).
+- **File > Create a New PDK.../Create a Blank PDK...** -- two new
+  actions, per direct user request, pointing this whole app at a
+  genuinely new `pdk_root`. **Create a Blank PDK...** builds the bare
+  `libs.tech`/`libs.ref` directory shape and nothing else -- the same
+  empty-project starting point several tests already built by hand.
+  **Create a New PDK...** layers a real, minimal, immediately-usable
+  skeleton on top: one real file per domain this project can create
+  from scratch today (Layers `.lyp`, Magic Tech `.tech`, DRC deck,
+  LEF), each written by the *exact* real `create_new_*` function (and
+  real path convention) its own individual "New X File..."/"New DRC
+  Deck" actions already use -- a real, deliberate scope match, since no
+  writer here supports a brand-new Verilog/Liberty/CDL-SPICE/GDS/
+  xschem/Qucs-S cell either (same honest gap the PDK Wizard's own
+  legend already surfaces). Both share one new, real module,
+  `pdklib/skeleton.py` (`build_blank_pdk`/`build_new_pdk_skeleton`) --
+  reused by `test_drc_generate.py` and `test_pdk_wizard_empty.py`
+  themselves (refactored to call it, per direct user request, instead
+  of hand-rolling the same directory shape a second time) as well as
+  by the new GUI actions, so there's one real source of truth for
+  "empty starting point," not two independently-drifting copies.
+  `self.pdk_root` turned out to be cached directly at construction time
+  in nine separate view classes (unlike `project_root` above, reassigned
+  live everywhere by `change_project_directory`) -- confirmed by reading
+  every real call site before writing any code, not assumed -- so live
+  reassignment wasn't a safe option here; per direct user choice, this
+  instead tears down and rebuilds the whole `App` fresh
+  (`_restart_with_pdk_root`: `self.destroy()` then `App(self.root,
+  new_pdk_root)`), the same real construction `main.py`'s own entry
+  point already uses. A non-empty target directory prompts for
+  confirmation first; a `FileExistsError` from any real `create_new_*`
+  call is surfaced as a real error dialog, not swallowed. Verified for
+  real, driven: `tests/test_create_pdk.py` (new) -- `build_blank_pdk`
+  produces genuinely zero domain files; `build_new_pdk_skeleton`'s four
+  real files each parse back through their own real reader
+  (`parse_tech_file`/`parse_lef_file`/`extract_design_rules`), and a
+  real `App` constructed against them finds every one through the
+  exact same discovery path (`find_lyp`/`load()`) a real, loaded PDK
+  uses; the full, real GUI flow for both actions through mocked
+  `filedialog`/`simpledialog`/`messagebox` dialogs, confirming the old
+  `App` frame is genuinely destroyed (`winfo_exists()` false) and the
+  new one's window title reflects the new `pdk_root`; declining the
+  directory picker, the name prompt, or the non-empty-directory
+  confirmation each leave the current app and target directory
+  untouched. `tests/test_menu_structure.py` extended for the two new
+  File entries. Full suite re-run clean (59/59).
 
 ## Future work
 

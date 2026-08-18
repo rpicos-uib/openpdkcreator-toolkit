@@ -5,12 +5,12 @@ from pathlib import Path
 
 from openpdkcreator.gui.app import App
 from openpdkcreator.gui.pdk_wizard_view import _STAGES
+from openpdkcreator.pdklib import skeleton as skeleton_mod
 
 PDK_ROOT = Path("/tmp/empty_pdk_fresh")
 import shutil
 shutil.rmtree(PDK_ROOT, ignore_errors=True)
-(PDK_ROOT / "libs.tech").mkdir(parents=True)
-(PDK_ROOT / "libs.ref").mkdir(parents=True)
+skeleton_mod.build_blank_pdk(PDK_ROOT)
 
 root = tk.Tk()
 app = App(root, PDK_ROOT)

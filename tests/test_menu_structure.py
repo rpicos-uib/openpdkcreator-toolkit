@@ -39,6 +39,7 @@ print("PASS: the real menu bar has exactly File / Export / Help, in that order."
 # real LibMan project actions -- none of the ten per-domain exports ---
 file_labels = entry_labels(cascade_menu("File"))
 assert file_labels == [
+    "Create a New PDK...", "Create a Blank PDK...",
     "Save Edits", "Reload from Real Files", "Import from LibMan Project...", "Export to LibMan Project...",
 ], file_labels
 print(f"PASS: File holds exactly the real project-level actions: {file_labels}")

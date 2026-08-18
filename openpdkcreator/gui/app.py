@@ -115,7 +115,7 @@ from __future__ import annotations
 import re
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .. import export as export_mod
 from .. import project_io
@@ -126,6 +126,7 @@ from ..pdklib import lef as lef_mod
 from ..pdklib import liberty as liberty_mod
 from ..pdklib import netlist as netlist_mod
 from ..pdklib import qucs_sym as qucs_sym_mod
+from ..pdklib import skeleton as skeleton_mod
 from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
 from ..pdklib import xschem as xschem_mod
@@ -327,6 +328,9 @@ class App(ttk.Frame):
         # hold all of those too, which buried the two, real project-
         # level actions among ten domain-specific ones.
         file_menu = tk.Menu(menubar, tearoff=False)
+        file_menu.add_command(label="Create a New PDK...", command=self._create_new_pdk)
+        file_menu.add_command(label="Create a Blank PDK...", command=self._create_blank_pdk)
+        file_menu.add_separator()
         file_menu.add_command(label="Save Edits", command=self._save_project, accelerator="Ctrl+S")
         file_menu.add_command(label="Reload from Real Files", command=self._reload_from_real_files)
         file_menu.add_separator()
@@ -375,6 +379,71 @@ class App(ttk.Frame):
 
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
+
+    def _create_new_pdk(self):
+        self._create_pdk(blank=False)
+
+    def _create_blank_pdk(self):
+        self._create_pdk(blank=True)
+
+    def _create_pdk(self, *, blank: bool):
+        """File > Create a New PDK.../Create a Blank PDK... -- points
+        this whole app at a genuinely new ``pdk_root``, either bare
+        (just ``libs.tech``/``libs.ref``, the same empty-project shape
+        ``pdklib/skeleton.py``'s own ``build_blank_pdk`` builds) or
+        seeded with one real, immediately-usable file per
+        create-from-scratch domain (Layers/Magic Tech/DRC Rules/LEF,
+        via that module's ``build_new_pdk_skeleton``).
+
+        ``self.pdk_root`` is cached directly at construction time in
+        nine separate view classes (unlike ``project_root``, which
+        ``change_project_directory`` above reassigns live everywhere)
+        -- so switching it can't reuse that live-reassignment approach;
+        instead this tears down and rebuilds the whole App fresh
+        against the new root, via ``_restart_with_pdk_root``."""
+
+        new_dir_str = filedialog.askdirectory(
+            title="Choose a Blank PDK Directory" if blank else "Choose a New PDK Directory", parent=self,
+        )
+        if not new_dir_str:
+            return
+        new_pdk_root = Path(new_dir_str).resolve()
+
+        name = None
+        if not blank:
+            name = simpledialog.askstring(
+                "Create a New PDK",
+                "Technology/library name (used for the .lyp/.tech/.lef skeleton files):",
+                parent=self,
+            )
+            if not name:
+                return
+
+        if new_pdk_root.is_dir() and any(new_pdk_root.iterdir()):
+            if not messagebox.askyesno(
+                "Create a PDK", f"{new_pdk_root} is not empty. Continue anyway?", parent=self,
+            ):
+                return
+
+        try:
+            if blank:
+                skeleton_mod.build_blank_pdk(new_pdk_root)
+            else:
+                skeleton_mod.build_new_pdk_skeleton(new_pdk_root, name)
+        except FileExistsError as exc:
+            messagebox.showerror("Create a PDK", str(exc), parent=self)
+            return
+
+        self._restart_with_pdk_root(new_pdk_root)
+
+    def _restart_with_pdk_root(self, new_pdk_root: Path):
+        """Tears down this whole App and rebuilds it fresh against
+        ``new_pdk_root`` -- see ``_create_pdk``'s own docstring for why
+        a full rebuild, not a live reassignment, is used here."""
+
+        root = self.root
+        self.destroy()
+        App(root, new_pdk_root)
 
     def _import_libman_project(self):
         self.goto("Library Manager")
@@ -425,7 +494,8 @@ class App(ttk.Frame):
             "script.\n\n"
             "Menus\n"
             "-----\n"
-            "File -- save/reload your edits, import/export a LibMan .projects file.\n"
+            "File -- create a new PDK (minimal skeleton files) or a blank one (no files), "
+            "save/reload your edits, import/export a LibMan .projects file.\n"
             "Export -- write real, edited content back out in open_pdks format, one command "
             "per domain.\n"
             "Help -- this dialog, and About.\n\n"

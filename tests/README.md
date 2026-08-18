@@ -46,7 +46,7 @@ for exercising a genuinely *empty*, from-scratch project (the
 `create_new_*` skeleton functions, the PDK Wizard's own from-scratch
 status) without needing the full real deck at all:
 `test_skeletons.py`, `test_skeleton_buttons.py`, `test_drc_generate.py`,
-`test_pdk_wizard_empty.py`.
+`test_pdk_wizard_empty.py`, `test_create_pdk.py`.
 
 A handful exercise a real **Create File** action against the shared,
 real `data/` tree itself (not a throwaway dir) -- `test_edit_create_buttons.py`

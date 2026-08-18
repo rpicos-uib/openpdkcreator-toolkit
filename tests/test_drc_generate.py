@@ -7,13 +7,13 @@ import shutil
 from openpdkcreator.gui.app import App
 from openpdkcreator.pdklib import drc as drc_mod
 from openpdkcreator.pdklib import layers as layers_mod
+from openpdkcreator.pdklib import skeleton as skeleton_mod
 from openpdkcreator import export as export_mod
 from openpdkcreator.models import Layer
 
 PDK_ROOT = Path("/tmp/drc_test_pdk")
 shutil.rmtree(PDK_ROOT, ignore_errors=True)
-(PDK_ROOT / "libs.tech").mkdir(parents=True)
-(PDK_ROOT / "libs.ref").mkdir(parents=True)
+skeleton_mod.build_blank_pdk(PDK_ROOT)
 
 root = tk.Tk()
 app = App(root, PDK_ROOT)
