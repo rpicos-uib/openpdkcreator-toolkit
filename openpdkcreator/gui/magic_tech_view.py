@@ -30,9 +30,14 @@ extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
 flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
 Misc**/**Extract Coefficients**/**Extract Devices**/**Extract**'s own
-**Plane order** and **Sheet resistance** sub-panes are editable --
-every real ``extract``-section construct this module recognizes is now
-editable, no read-only sub-tab remains in that domain. Types keeps its
+**Plane order** and **Sheet resistance** sub-panes/**DRC (Magic)**'s
+own **angles** sub-pane are editable -- every real ``extract``-section
+construct this module recognizes is now editable, no read-only sub-tab
+remains in that domain; **DRC (Magic)** itself is still split, its own
+``width``/``spacing``/``maxwidth`` statements staying read-only for
+now (see ``MagicAngleCheck``'s own docstring, in
+``pdklib/magic_tech.py``, for why ``angles`` alone was safe to make
+editable first). Types keeps its
 own hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
@@ -136,11 +141,23 @@ real, deliberate edit collapses it to one freshly formatted line
 rather than attempting to reproduce the original author's own real
 line-wrapping choice. Every real ``extract``-section construct this
 parser recognizes is now editable -- this domain has no remaining
-read-only sub-tab of its own. Every other remaining domain across the
-rest of Magic Tech stays read-only (each would need its own real
-editor design -- the genuinely harder mini-DSL sections aren't a clean
-fit for any existing editor shape; see README's own Future Work).
-Editing is in-memory, same as
+read-only sub-tab of its own. **DRC (Magic)**'s own **angles** sub-pane
+(``MagicAngleCheck``) is the same real ranged shape as Extract Devices
+(one of the real 17 entries, ``allm7``, also wraps across two real
+physical lines) -- it shares ``pdklib/magic_tech_writer.py``'s own
+``_render_section_patch``'s *range_groups* mechanism, generalized once
+and reused here rather than rebuilt. Its own real sibling constructs,
+``width``/``spacing``/``maxwidth`` (``MagicDrcCheck``, still shown
+read-only in the same tab's own left-hand ``Treeview``), stay
+deliberately out of scope: unlike ``angles``, those three routinely
+carry a real ``mode``/exception-list filler this parser doesn't model
+at all yet, and editing them before that content is captured would
+silently discard it -- see ``MagicAngleCheck``'s own docstring
+(``pdklib/magic_tech.py``) for the full real reasoning. Every other
+remaining domain across the rest of Magic Tech stays read-only (each
+would need its own real editor design -- the genuinely harder mini-DSL
+sections aren't a clean fit for any existing editor shape; see
+README's own Future Work). Editing is in-memory, same as
 DRC Rules/LEF pins, with native write-back into the real ``.tech``
 file via ``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
@@ -250,10 +267,7 @@ class MagicTechView(ttk.Frame):
             entry_label="Connect Rule",
             help_text="Real Magic .tech connectivity rule: 'types_a types_b' (each a comma-separated type list).",
         )
-        self.drc_tree = self._make_tab(
-            sub, "DRC (Magic)", ("check_type", "layers", "value_um", "rule_ids", "message"),
-            (80, 220, 80, 100, 300),
-        )
+        self._build_drc_tab(sub)
         self._build_extract_tab(sub)
         self.extract_coeff_editor = self._build_simple_editor(
             sub, "Extract Coefficients",
@@ -285,6 +299,47 @@ class MagicTechView(ttk.Frame):
                       "A real 'contact' entry can repeat once per real variants(...) corner block -- each row "
                       "here is its own independently-editable real line, not resolved to a specific corner.",
         )
+
+    def _build_drc_tab(self, notebook: ttk.Notebook):
+        """Real ``width``/``spacing``/``maxwidth``/``angles`` DRC
+        statements from the ``drc`` section -- only ``angles`` is
+        editable (see ``MagicAngleCheck``'s own docstring, in
+        ``pdklib/magic_tech.py``, for why the other three aren't yet:
+        a real, currently-unmodeled ``mode``/exception-list filler
+        those three routinely carry would be silently dropped by an
+        edit)."""
+
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="DRC (Magic)")
+        frame.columnconfigure(0, weight=2)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(frame, text="width/spacing/maxwidth (read-only):").grid(
+            row=0, column=0, sticky="w", padx=(0, 4)
+        )
+        self.drc_tree = ttk.Treeview(
+            frame, columns=("check_type", "layers", "value_um", "rule_ids", "message"), show="headings",
+        )
+        for col, label, width in zip(
+            ("check_type", "layers", "value_um", "rule_ids", "message"),
+            ("Check Type", "Layers", "Value Um", "Rule Ids", "Message"),
+            (80, 220, 80, 100, 300),
+        ):
+            self.drc_tree.heading(col, text=label)
+            self.drc_tree.column(col, width=width, anchor="w")
+        self.drc_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+
+        ttk.Label(frame, text="angles:").grid(row=0, column=1, sticky="w")
+        angles_frame = ttk.Frame(frame)
+        angles_frame.grid(row=1, column=1, sticky="nsew")
+        self.drc_angles_editor = SimpleListEditor(
+            angles_frame, [("layer", "Layer", 120), ("degrees_text", "Degrees", 60), ("message", "Message", 260)],
+            lambda: magic_tech_mod.MagicAngleCheck(layer="newlayer", degrees=90, message="new message"),
+            entry_label="Angle Check",
+            help_text="Real drc-section 'angles LAYER DEGREES \"MESSAGE\"' statement.",
+        )
+        self.drc_angles_editor.pack(fill="both", expand=True)
 
     def _build_extract_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -498,6 +553,7 @@ class MagicTechView(ttk.Frame):
         self.extract_resist_editor.commit_pending_edits()
         self.extract_coeff_editor.commit_pending_edits()
         self.extract_devices_editor.commit_pending_edits()
+        self.drc_angles_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -544,6 +600,9 @@ class MagicTechView(ttk.Frame):
     def collect_extract_devices_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractDevice]]:
         return {name: tech.extract_devices for name, tech in self.technologies.items()}
 
+    def collect_drc_angle_checks_by_tech(self) -> dict[str, list[magic_tech_mod.MagicAngleCheck]]:
+        return {name: tech.drc_angle_checks for name, tech in self.technologies.items()}
+
     # -- data ---------------------------------------------------------------
 
     def load(self):
@@ -588,6 +647,7 @@ class MagicTechView(ttk.Frame):
         self.extract_resist_editor.commit_pending_edits()
         self.extract_coeff_editor.commit_pending_edits()
         self.extract_devices_editor.commit_pending_edits()
+        self.drc_angles_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
@@ -612,6 +672,7 @@ class MagicTechView(ttk.Frame):
             self.extract_resist_editor.set_entries(None)
             self.extract_coeff_editor.set_entries(None)
             self.extract_devices_editor.set_entries(None)
+            self.drc_angles_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -631,6 +692,7 @@ class MagicTechView(ttk.Frame):
         self.extract_resist_editor.set_entries(tech.extract_resist)
         self.extract_coeff_editor.set_entries(tech.extract_cap_coefficients)
         self.extract_devices_editor.set_entries(tech.extract_devices)
+        self.drc_angles_editor.set_entries(tech.drc_angle_checks)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -645,14 +707,6 @@ class MagicTechView(ttk.Frame):
             self.drc_tree.insert(
                 "", "end",
                 values=(check.check_type, layers_text, f"{check.value_um:g}", check.rule_ids_raw or "", check.message),
-            )
-        for angle_check in tech.drc_angle_checks:
-            # Real degrees, not microns -- the '°' suffix keeps this
-            # column honest rather than implying the same unit as
-            # width/spacing/maxwidth's own real value_um.
-            self.drc_tree.insert(
-                "", "end",
-                values=("angles", angle_check.layer, f"{angle_check.degrees}°", "", angle_check.message),
             )
 
         summary = (

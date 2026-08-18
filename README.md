@@ -3002,6 +3002,55 @@ editor yet -- see Future Work.
   `File > Save Edits` and a simulated relaunch; a real write-back lands
   the edited value in `ihp-sg13g2-extract.tech` specifically. Full
   suite re-run clean (69/69).
+- **Magic Tech write-back extended to `drc`'s own `angles` statements**
+  (`MagicAngleCheck`) -- the fourteenth editable domain, and the first
+  real domain outside `extract`'s own section since Compose/Connect.
+  **Investigated before writing any code, not assumed safe**: `drc`'s
+  own four recognized real constructs -- `width`/`spacing`/`maxwidth`
+  (`MagicDrcCheck`) and `angles` (`MagicAngleCheck`) -- were checked
+  individually for a real, silent-data-loss risk before any of them
+  were made editable. Found: `width`/`spacing`/`maxwidth` routinely
+  carry a real `mode`/exception-list filler between the numeric value
+  and the quoted message (e.g. `touching_ok`/`touching_illegal`/
+  `surround_ok`, sometimes a real comma-separated exception layer
+  list) that this parser has never captured into any field -- editing
+  one of those three lines today would silently discard that real
+  content. `angles` alone has no such filler (confirmed real: all 17
+  real lines go straight from `degrees` to the quoted message), so it
+  was made editable now; the other three stay explicitly read-only
+  until that filler content is captured into a real field first (real,
+  separate future work -- see below). **The exact same "real ranged
+  domain" shape `ExtractDevice` was just built for, reused directly**:
+  one of the real 17 `angles` lines (`allm7`) wraps across two real
+  physical lines via a trailing `\` continuation, so `MagicAngleCheck`
+  gained the same real `(start_line, end_line)` range (not a single
+  `line_no`), and a new `_parse_drc_angles_with_lines`
+  (`pdklib/magic_tech.py`) reuses the exact same `pending`-accumulator
+  shape `_parse_extract_devices_with_lines` already established --
+  `pdklib/magic_tech_writer.py`'s own generalized `_render_section_patch`
+  (built for `ExtractDevice`) needed zero further changes, just a new
+  `range_groups` entry for `drc`'s own section, proving that
+  generalization was a real, reusable investment and not a one-off.
+  `degrees` is exposed to the generic editor via `degrees_text`. **A
+  real, found-and-fixed gap along the way**: the previous two
+  changelog entries' own docstring updates in
+  `pdklib/magic_tech_writer.py` had drifted stale (still describing
+  "four flat sub-structures" and listing `device` as "still
+  read-only" after it was already made editable) -- corrected while
+  touching this same file, not left to compound further. Verified for
+  real, driven: `tests/test_magic_drc_angles.py` (new) -- all 17 real
+  entries load, range-tracked (16 single-line + 1 real two-line-wrapped,
+  confirmed exact); the still-read-only 192 real `width`/`spacing`/
+  `maxwidth` statements are confirmed completely unaffected throughout;
+  no-edit export of `ihp-sg13g2-drc.tech` stays byte-identical;
+  `ihp-sg13g2.tech`'s own export (where this domain's own bounds
+  correctly come back `0`) stays byte-identical too; editing the real,
+  wrapped `allm7` entry collapses it to one fresh line; in-GUI
+  `degrees_text` edit/New/Delete round-trip correctly; the edit
+  survives `File > Save Edits` and a simulated relaunch; a real
+  write-back lands the edited value in `ihp-sg13g2-drc.tech`
+  specifically. `tests/test_magic_new_tabs.py` updated for the
+  angles-now-in-its-own-editor split. Full suite re-run clean (70/70).
 
 ## Future work
 
@@ -3034,7 +3083,17 @@ models, ...), not just read/display layers. Concretely, still open:
   instead of a single `line_no`, since its own real entries can span
   more than one real physical line via backslash continuation) --
   every real construct this parser recognizes in `extract` is now
-  editable, no read-only content remains in that section.
+  editable, no read-only content remains in that section. `drc`'s own
+  `angles` statements are also now editable (`MagicAngleCheck`, the
+  same real ranged-domain shape `ExtractDevice` established, reused
+  directly with zero further changes to the shared write-back
+  machinery); `width`/`spacing`/`maxwidth` in that same section stay
+  deliberately read-only -- a real, confirmed `mode`/exception-list
+  filler those three routinely carry (`touching_ok`/
+  `touching_illegal`/`surround_ok`/a comma-separated exception layer
+  list) isn't captured into any field yet, so editing one today would
+  silently discard real content; capturing that filler first is real,
+  separate future work before those three can safely follow.
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

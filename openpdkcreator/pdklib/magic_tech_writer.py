@@ -7,14 +7,17 @@ real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
 **Connect**, **cifinput**'s own two flat sub-structures (ignored
 layers, layer hints), **cifoutput**'s own flat, editable-in-place
-``calma`` lines, and **extract**'s own four flat sub-structures,
+``calma`` lines, **extract**'s own five sub-structures --
 ``ExtractMiscStatement`` (``contact``/``devresist``/``antenna``/
 ``disconnect``/``substrate``), ``ExtractPlaneOrder`` (``planeorder``),
-``ExtractResist`` (``resist``), and ``ExtractCapCoefficient`` (the four
-``default*`` directives), the Magic Tech domains with a real form (see
-``gui/magic_tech_view.py``'s own docstring). Every other real section
-(cifinput's own recipe blocks/drc/``device``/everything else
-``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
+``ExtractResist`` (``resist``), ``ExtractCapCoefficient`` (the four
+``default*`` directives, all four flat/single-line), and
+``ExtractDevice`` (``device``, the one real *ranged* one) -- and
+**drc**'s own ``MagicAngleCheck`` (``angles``, also ranged), the Magic
+Tech domains with a real form (see ``gui/magic_tech_view.py``'s own
+docstring). Every other real section (cifinput's own recipe blocks/
+``drc``'s own ``width``/``spacing``/``maxwidth`` statements/everything
+else ``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
 there's no editor for them, so nothing to write back; deliberately
 bounded, not attempted for every remaining real sub-tab at once (see
 README's own Future Work note on the remaining gap).
@@ -110,17 +113,19 @@ header of its own, so both used to be silently filtered out of the
 Technology picker entirely (see ``gui/magic_tech_view.py``'s own
 docstring for the real fallback-naming fix).
 
-**extract's own four flat sub-structures, ``ExtractMiscStatement``,
-``ExtractPlaneOrder``, ``ExtractResist``, and ``ExtractCapCoefficient``,
-are, structurally, the same "spliced in from a separate real file"
-case as cifinput/cifoutput above** -- real content lives in
-``ihp-sg13g2-extract.tech``, included into ``ihp-sg13g2.tech`` --
-**and share one real ``extract``...``end`` section with each other and
-with the one remaining, still-read-only extract content** (``device``
-lines, real ``variants (...)`` corner-scoping lines, comments), the
-same "one section, more than one independently-tracked group" shape
-cifinput's own ignored-layers/layer-hints tables already established:
-all of that untouched content simply never matches
+**extract's own five sub-structures -- ``ExtractMiscStatement``,
+``ExtractPlaneOrder``, ``ExtractResist``, ``ExtractCapCoefficient``,
+and ``ExtractDevice`` -- are, structurally, the same "spliced in from
+a separate real file" case as cifinput/cifoutput above** -- real
+content lives in ``ihp-sg13g2-extract.tech``, included into
+``ihp-sg13g2.tech`` -- **and all five share one real
+``extract``...``end`` section**, the same "one section, more than one
+independently-tracked group" shape cifinput's own ignored-layers/
+layer-hints tables already established: every real line that isn't
+one of these five constructs (cap-coefficient directives aside, the
+only real extract-section content left over is comments and real
+``variants (...)`` corner-scoping lines -- see this module's own
+docstring for exactly what's parsed) simply never matches any of
 ``_parse_extract_misc_line``/``_parse_plane_order_line``/
 ``_parse_resist_line``/``_parse_cap_coefficient_line``, so it falls
 through ``_render_section_patch``'s existing "copy any untracked line
@@ -142,7 +147,20 @@ function uses the same diff-first "reuse the original text verbatim if
 genuinely unchanged" approach ``_render_style_line``/
 ``_render_extract_misc_line`` already established, rather than the
 always-reuse-captured-separators approach the two fixed-token domains
-use.
+use. **``ExtractDevice`` is a real, genuinely different shape from the
+other four**: its own real entries can span more than one real
+physical line (a trailing ``\\`` continuation, confirmed real for 5 of
+the real 50 entries) -- tracked by a real ``(start_line, end_line)``
+range instead of a single ``line_no``, and merged into the same
+combined pass via ``_render_section_patch``'s own *range_groups*
+parameter (see that function's own docstring for exactly how a
+ranged group is merged alongside flat, single-line ones).
+``drc``'s own ``MagicAngleCheck`` (``angles``) is the same real ranged
+shape (one of the real 17 entries, ``allm7``, also wraps this way),
+sharing ``ihp-sg13g2-drc.tech``'s own real ``drc``...``end`` section
+with the still-read-only ``width``/``spacing``/``maxwidth``
+statements -- see ``MagicAngleCheck``'s own docstring
+(``pdklib/magic_tech.py``) for why those three aren't editable yet.
 
 All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
@@ -150,9 +168,10 @@ All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``ihp-sg13g2.tech``; ``cifinput`` 20-1519 in the separate, real
 ``ihp-sg13g2-cifin.tech``; ``cifoutput`` 25-1875 in the separate, real
 ``ihp-sg13g2-cifout.tech``; ``extract`` 23-1282 in the separate, real
-``ihp-sg13g2-extract.tech`` -- all three fragment files, when parsed as
+``ihp-sg13g2-extract.tech``; ``drc`` 23-970 in the separate, real
+``ihp-sg13g2-drc.tech`` -- all four fragment files, when parsed as
 that own real file directly) sit well before their own real file's own
-first real ``include`` line (none, in any of the three fragment files'
+first real ``include`` line (none, in any of the four fragment files'
 own case), so all of them share the exact same real ``safe_through``
 boundary already established for Types alone. If a given domain's own
 section start/end line is ``0`` (not found at a safely-mappable
@@ -420,13 +439,16 @@ def _render_cap_coefficient_line(entry: magic_tech_mod.ExtractCapCoefficient, or
     return f"{indent}{entry.directive}{separator}{rest}"
 
 
-def _join_device_lines(lines: list[str]) -> str:
-    """Real backslash-continuation joining for a device's own real
-    line range -- the same real "strip trailing '\\', join with a
-    single space" shape ``pdklib/magic_tech.py``'s own
-    ``_join_backslash_continuations`` uses, reimplemented locally
-    rather than reaching into that module's own private helper across
-    files."""
+def _join_ranged_lines(lines: list[str]) -> str:
+    """Real backslash-continuation joining for any real, ranged
+    (possibly multi-line) entry's own real line span -- the same real
+    "strip trailing '\\', join with a single space" shape
+    ``pdklib/magic_tech.py``'s own ``_join_backslash_continuations``
+    uses, reimplemented locally rather than reaching into that
+    module's own private helper across files. Shared by every real
+    ranged domain (``ExtractDevice``, ``MagicAngleCheck``'s own
+    ``allm7`` wrap) rather than one copy each, since the real
+    continuation shape itself is identical across all of them."""
 
     pieces = []
     for line in lines:
@@ -451,13 +473,36 @@ def _render_device_range(entry: magic_tech_mod.ExtractDevice, original_lines: li
     follows."""
 
     if original_lines is not None:
-        parts = _join_device_lines(original_lines).split()
+        parts = _join_ranged_lines(original_lines).split()
         if len(parts) >= 4 and parts[0] == "device":
             orig = (parts[1], parts[2], parts[3], tuple(parts[4:]))
             if orig == (entry.devclass, entry.model, entry.type_name, entry.rest):
                 return list(original_lines)
     tokens = [entry.devclass, entry.model, entry.type_name, *entry.rest]
     return [" device " + " ".join(tokens)]
+
+
+_ANGLES_LINE_RE = re.compile(r'^\s*angles\s+(\S+)\s+(\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
+
+
+def _render_angle_range(entry: magic_tech_mod.MagicAngleCheck, original_lines: list[str] | None) -> list[str]:
+    """The only real drc-section domain made editable so far (see
+    ``MagicAngleCheck``'s own docstring for why the other three,
+    ``width``/``spacing``/``maxwidth``, aren't yet) -- and, like
+    ``ExtractDevice``, a real *ranged* domain: one of the real 17
+    ``angles`` lines (``allm7``) wraps across two real physical lines
+    via a trailing ``\\`` continuation. Same real "preserve verbatim if
+    genuinely unchanged, else collapse to one fresh line" approach
+    ``_render_device_range`` already established."""
+
+    if original_lines is not None:
+        joined = _join_ranged_lines(original_lines)
+        match = _ANGLES_LINE_RE.match(joined)
+        if match is not None:
+            layer, degrees, message = match.groups()
+            if (layer, int(degrees), message) == (entry.layer, entry.degrees, entry.message):
+                return list(original_lines)
+    return [f' angles {entry.layer} {entry.degrees} "{entry.message}"']
 
 
 def _render_section_patch(
@@ -579,6 +624,11 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
                 ),
             ],
             [(tech.extract_devices, tech.all_parsed_extract_device_ranges, _render_device_range)],
+        ),
+        (
+            tech.drc_section_start_line, tech.drc_section_end_line,
+            [],
+            [(tech.drc_angle_checks, tech.all_parsed_drc_angle_ranges, _render_angle_range)],
         ),
     ]
     active_sections = sorted(
