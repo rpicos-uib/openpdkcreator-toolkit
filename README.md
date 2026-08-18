@@ -257,13 +257,16 @@ direction from a real CDL `*.PININFO` comment or real Verilog
 same commit-on-switch pattern as everywhere else. **Liberty pins and
 timing arcs** are editable too, via an **Edit Pins/Timing** button next
 to the Liberty listbox (one real `.lib` corner file at a time, since a
-cell's timing legitimately differs per corner) -- a two-level dialog:
-a **Pins** pane (name/direction/capacitance/function) and, for the
-selected pin, a **Timing Arcs** pane
-(related_pin/timing_type/timing_sense/when); the real lookup-table
-sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
-`fall_transition`) stay read-only, unmodeled, same bounded-scope
-precedent as everywhere else. Same `App`-owned caching
+cell's timing legitimately differs per corner) -- a three-level dialog:
+a **Pins** pane (name/direction/capacitance/function), for the
+selected pin a **Timing Arcs** pane
+(related_pin/timing_type/timing_sense/when), and, for the selected
+arc, a real, read-only **Lookup Tables** pane showing its
+`cell_rise`/`cell_fall`/`rise_transition`/`fall_transition` sub-groups
+(index_1/index_2/values, labeled with the cell's own real, declared
+`time_unit` -- never assumed, since real files in this deck genuinely
+differ) -- display only, no New/Delete/editable fields, same
+bounded-scope precedent as everywhere else. Same `App`-owned caching
 (`App.get_parsed_liberty`) as LEF/CDL/SPICE/Verilog, so switching
 families and back never silently discards an in-progress edit. A
 **User Models** listbox (double-click to view the real source file)
@@ -2704,6 +2707,61 @@ editor yet -- see Future Work.
   New/Delete buttons, `DNWELL` genuinely appears on two separate real
   rows, and a live layer-number edit reflects correctly in the row
   immediately. Full suite re-run clean (63/63).
+- **Liberty lookup-table sub-groups (`cell_rise`/`cell_fall`/
+  `rise_transition`/`fall_transition`) -- real, read-only parsing +
+  display, no editor/write-back.** The last genuinely unparsed
+  Liberty construct (pin/timing-arc scalar data was already done):
+  `pdklib/liberty.py`'s `find_cells` extended to recognize these four
+  real group kinds nested inside each real `timing () { ... }` arc,
+  each carrying a real `index_1 ("...");`/`index_2 ("...");`/
+  `values ( \ "...", \ ... \ );` construct -- a genuinely different
+  real shape from anything this parser handled before: a real,
+  possibly multi-line, backslash-continued "keyword ( quoted-CSV-list,
+  ... );" attribute, neither the existing group shape (ends in `{`)
+  nor the existing scalar-attribute shape (`key : value;`). Handled
+  with a small accumulation state (`pending_list`) layered onto the
+  existing brace-depth stack, without disturbing any other real
+  construct's own line-number bookkeeping (`liberty_writer.py`'s own
+  pin/arc write-back is untouched by this). New `LibertyLookupTable`
+  dataclass (`kind`/`template_name`/`index_1`/`index_2`/`values`) on a
+  new `LibertyTimingArc.lookup_tables` field. **Two real shapes
+  confirmed by running this parser across the whole real deck** (157
+  real `.lib` files, 6860 real lookup-table blocks): most real blocks
+  declare their own `index_1`/`index_2` alongside `values`; a real,
+  confirmed 128 (every real dummy-cell block in `sg13g2_io`'s own real
+  `sg13g2_io_dummy.lib`, among others) declare **only** `values`,
+  relying entirely on the referenced table template's own real
+  `index_1`/`index_2` (a separate, real library-level
+  `lu_table_template`/`power_lut_template` group, not cross-referenced
+  or resolved here) -- modeled with `index_1`/`index_2` as `None`-able,
+  `values` as always-present (confirmed: 0 of the 6860 real blocks
+  lack it). **Real unit variance found and handled, not assumed**:
+  `sg13g2_stdcell`'s own real `.lib` files declare
+  `time_unit : "1ns"` / `capacitive_load_unit (1,pf)`, while
+  `sg13g2_io`'s own real `sg13g2_io_dummy.lib` declares `"1ps"` /
+  `(1,ff)` instead -- genuinely different real scales within the same
+  deck. `LibertyCell` gained `time_unit`/`capacitive_load_unit` fields,
+  captured from the enclosing real `library (NAME) { ... }` group (a
+  new `_PAREN_ATTR_RE` for the real `capacitive_load_unit (1,pf);`
+  single-line-parenthesized-attribute shape, distinct from both the
+  group and scalar-attribute shapes already handled). `index_1`/
+  `index_2`'s own real unit is deliberately shown unitless in the GUI
+  (depends on the unresolved template's own `variable_1`/`variable_2`
+  binding -- not guessed); `values`' own real unit is always
+  `time_unit` (guaranteed by the Liberty spec for these four group
+  kinds) and is labeled with the cell's own real, declared value, never
+  a fixed assumption. `gui/liberty_editor.py`'s `LibertyPinEditor`
+  gained a third pane, **Lookup Tables** (for the selected arc) --
+  genuinely read-only: no New/Delete, no editable fields, just a
+  Treeview (kind/template/index sizes) and a text pane showing the raw
+  matrix, unlike every other pane in this editor. Verified for real,
+  driven: `tests/test_liberty_lookup_tables.py` (new) -- both real
+  shapes parse correctly against real files; a real, exhaustive
+  whole-deck scan confirms 0-of-6860 real blocks missing `values`; the
+  real, different per-file units are captured correctly
+  (`sg13g2_stdcell`: `1ns`/`1,pf`, `sg13g2_io_dummy`: `1ps`/`1,ff`); the
+  GUI pane shows the correct real row count and labels the values text
+  with the cell's own real time_unit. Full suite re-run clean (64/64).
 
 ## Future work
 
@@ -2719,13 +2777,7 @@ models, ...), not just read/display layers. Concretely, still open:
   argument counts, nested real layer-boolean expressions, or, for
   `variants`, a real conditional-scoping directive rather than a check
   at all -- so extending the `width`-style pattern to them isn't a safe
-  reuse), and Liberty's own real lookup-table
-  sub-groups (`cell_rise`/`cell_fall`/`rise_transition`/
-  `fall_transition`, each its own nested `index_1`/`index_2`/`values`
-  multi-dimensional data -- deliberately left unparsed even though
-  pin/timing-arc scalar data is now done, same "bounded, not a full
-  parser" precedent as everywhere else) -- no generic parser for either
-  of these exists yet. (Real GDS content -- bbox/shape counts, not full
+  reuse). (Real GDS content -- bbox/shape counts, not full
   geometry -- is done: `pdklib/gds.py`, via `klayout.db`. Real
   `compose`/`connect` sections, and the dominant `width`/`spacing`
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
@@ -2734,8 +2786,13 @@ models, ...), not just read/display layers. Concretely, still open:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --
   direction/capacitance/function per pin, related_pin/timing_type/
-  timing_sense/when per
-  timing arc -- is also done: `pdklib/liberty.py`.)
+  timing_sense/when per timing arc -- is also done:
+  `pdklib/liberty.py`. Liberty's own real lookup-table sub-groups
+  (`cell_rise`/`cell_fall`/`rise_transition`/`fall_transition`, each
+  its own real `index_1`/`index_2`/`values` multi-dimensional data) are
+  now parsed and shown read-only too -- see the dedicated changelog
+  entry below; still no editor/write-back for this domain, same
+  "bounded, not a full parser" precedent as everywhere else.)
 - Wider KLayout DRC-deck coverage: `pdklib/drc.py` now extracts two
   reliable patterns -- `width()`/`space()`/`sep()` and `.enclosed()` --
   -> `.output()` (75 real rules total); the other 86 real,
@@ -2776,9 +2833,11 @@ models, ...), not just read/display layers. Concretely, still open:
   deliberately different, harder shape) -- for the same reason: no
   editor -> no write-back path to build. GDS stays read-only by design
   (real structural info only, no geometry-editing feature exists or is
-  planned this pass); Liberty's own real lookup-table sub-groups stay
-  unmodeled for the same bounded-scope reason as everywhere else, not
-  because a pin/timing-arc editor doesn't exist anymore.
+  planned this pass); Liberty's own real lookup-table sub-groups are
+  now parsed and shown read-only (see the dedicated changelog entry
+  below) but still have no editor/write-back, same bounded-scope
+  reason as everywhere else, not because the pin/timing-arc editor
+  itself doesn't exist.
 - **Magic Tech write-back extended to Planes/Contacts/Aliases** --
   three more of the fifteen real sub-tabs are now editable, alongside
   Types. **A real, confirmed structural fact made this tractable

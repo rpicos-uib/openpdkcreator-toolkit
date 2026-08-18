@@ -1,16 +1,21 @@
-"""A real Liberty pin/timing-arc editor: two stacked list+form panes,
-the same commit-on-switch pattern every editor here uses --
-**Pins** (name/direction/capacitance/function) and, for whichever pin
-is currently selected, its own **Timing Arcs** (related_pin/
-timing_type/timing_sense/when). Deliberately does *not* expose the
-real lookup tables (``cell_rise``/``cell_fall``/...) each arc's own
-real source may carry -- see ``pdklib/liberty.py``'s own docstring for
-why: those stay read-only, the same "bounded, not a full parser"
-precedent every other editor here already follows.
+"""A real Liberty pin/timing-arc editor: three stacked panes, the same
+commit-on-switch pattern every editor here uses -- **Pins**
+(name/direction/capacitance/function), for whichever pin is currently
+selected its own **Timing Arcs** (related_pin/timing_type/
+timing_sense/when), and, for whichever arc is currently selected, its
+own real **Lookup Tables** (``cell_rise``/``cell_fall``/
+``rise_transition``/``fall_transition``, each a real ``index_1``/
+``index_2``/``values`` table). The lookup-table pane is **read-only,
+no New/Delete, no editable fields** -- see ``pdklib/liberty.py``'s own
+docstring for why: display only, the same "bounded, not a full
+parser/editor" precedent every other read-only view in this project
+already follows (GDS bbox/shape-count, LEF PORT rect geometry).
 
 Switching pins commits whatever's pending in *both* the pin form and
 the arc form (a half-edited arc shouldn't survive a pin switch any
-more than a half-edited pin should survive a cell switch).
+more than a half-edited pin should survive a cell switch). Switching
+arcs simply reloads the (read-only) lookup-table pane -- there is no
+form to commit there.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ class LibertyPinEditor(ttk.Frame):
         self._suspend_arc_trace = False
         self._pin_by_iid: dict[str, liberty_mod.LibertyPin] = {}
         self._arc_by_iid: dict[str, liberty_mod.LibertyTimingArc] = {}
+        self._lt_by_iid: dict[str, liberty_mod.LibertyLookupTable] = {}
 
         self._build()
 
@@ -41,6 +47,7 @@ class LibertyPinEditor(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=1)
 
         pin_frame = ttk.LabelFrame(self, text="Pins")
         pin_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
@@ -107,6 +114,23 @@ class LibertyPinEditor(ttk.Frame):
             var.trace_add("write", self._on_arc_field_changed)
             ttk.Entry(arc_form, textvariable=var).grid(row=row, column=1, sticky="ew", pady=2)
             self.arc_vars[field] = var
+
+        lt_frame = ttk.LabelFrame(self, text="Lookup Tables (for the selected arc) -- read-only")
+        lt_frame.grid(row=2, column=0, sticky="nsew", pady=(6, 0))
+        lt_frame.columnconfigure(0, weight=1)
+        lt_frame.columnconfigure(1, weight=1)
+        lt_frame.rowconfigure(0, weight=1)
+
+        lt_columns = ("kind", "template_name", "index_1", "index_2")
+        self.lt_tree = ttk.Treeview(lt_frame, columns=lt_columns, show="headings", selectmode="browse", height=4)
+        for col, label, width in zip(lt_columns, ("Kind", "Template", "Index 1", "Index 2"), (110, 160, 60, 60)):
+            self.lt_tree.heading(col, text=label)
+            self.lt_tree.column(col, width=width, anchor="w")
+        self.lt_tree.grid(row=0, column=0, sticky="nsew", padx=(4, 4), pady=(4, 4))
+        self.lt_tree.bind("<<TreeviewSelect>>", self._on_lt_select)
+
+        self.lt_values_text = tk.Text(lt_frame, height=6, width=50, state="disabled", wrap="none")
+        self.lt_values_text.grid(row=0, column=1, sticky="nsew", padx=(0, 4), pady=(4, 4))
 
     # -- pins -----------------------------------------------------------------
 
@@ -266,6 +290,7 @@ class LibertyPinEditor(ttk.Frame):
             self.arc_vars["timing_sense"].set(arc.timing_sense)
             self.arc_vars["when"].set(arc.when)
         self._suspend_arc_trace = False
+        self._load_lookup_tables_for_arc(arc)
 
     def _commit_arc_form(self):
         arc = self.current_arc
@@ -322,3 +347,60 @@ class LibertyPinEditor(ttk.Frame):
             self._load_arc_into_form(None)
         if self.on_change is not None:
             self.on_change()
+
+    # -- lookup tables (read-only, nested under the current arc) -------------
+
+    @staticmethod
+    def _lt_iid(table: liberty_mod.LibertyLookupTable) -> str:
+        return str(id(table))
+
+    @staticmethod
+    def _lt_row_values(table: liberty_mod.LibertyLookupTable) -> tuple:
+        index_1 = "" if table.index_1 is None else f"{len(table.index_1)} pts"
+        index_2 = "" if table.index_2 is None else f"{len(table.index_2)} pts"
+        return (table.kind, table.template_name, index_1, index_2)
+
+    def _load_lookup_tables_for_arc(self, arc: liberty_mod.LibertyTimingArc | None):
+        for row in self.lt_tree.get_children():
+            self.lt_tree.delete(row)
+        self._lt_by_iid = {}
+        if arc is None or not arc.lookup_tables:
+            self._show_lt_values(None)
+            return
+        for table in arc.lookup_tables:
+            iid = self._lt_iid(table)
+            self._lt_by_iid[iid] = table
+            self.lt_tree.insert("", "end", iid=iid, values=self._lt_row_values(table))
+        first_iid = self._lt_iid(arc.lookup_tables[0])
+        self.lt_tree.selection_set(first_iid)
+        self._show_lt_values(arc.lookup_tables[0])
+
+    def _on_lt_select(self, _event=None):
+        selection = self.lt_tree.selection()
+        table = self._lt_by_iid.get(selection[0]) if selection else None
+        self._show_lt_values(table)
+
+    def _show_lt_values(self, table: liberty_mod.LibertyLookupTable | None):
+        # Real, confirmed unit variance across this deck's own real
+        # .lib files (e.g. sg13g2_stdcell's "1ns"/"(1,pf)" vs.
+        # sg13g2_io_dummy's "1ps"/"(1,ff)") -- bare numbers are shown
+        # with the cell's own real, declared time_unit, never assumed.
+        # index_1/index_2's own real unit depends on which variable the
+        # referenced table template binds it to (variable_1/variable_2,
+        # a separate real group this parser doesn't resolve -- see
+        # pdklib/liberty.py's own docstring), so they're shown unitless
+        # rather than guessed.
+        self.lt_values_text.config(state="normal")
+        self.lt_values_text.delete("1.0", "end")
+        if table is not None:
+            lines = []
+            if table.index_1 is not None:
+                lines.append("index_1 (unit per real template, not resolved): " + ", ".join(str(v) for v in table.index_1))
+            if table.index_2 is not None:
+                lines.append("index_2 (unit per real template, not resolved): " + ", ".join(str(v) for v in table.index_2))
+            time_unit = (self.cell.time_unit if self.cell is not None and self.cell.time_unit else "unit unknown")
+            lines.append(f"values (real time_unit: {time_unit}):")
+            for row in table.values:
+                lines.append("  " + ", ".join(str(v) for v in row))
+            self.lt_values_text.insert("1.0", "\n".join(lines))
+        self.lt_values_text.config(state="disabled")
