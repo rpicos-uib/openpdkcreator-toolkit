@@ -552,10 +552,11 @@ highlighted straight to that cell's real line range within its
     type's own recipe can be built across more than one real,
     textually-separated block sharing the same name (e.g. real
     `nwell` has two real, separate `layer nwell ...` blocks with two
-    different real base layers) -- the same real fact `cifoutput`'s
-    own `CifLayer` already merges for its own real DNWELL, matched the
-    same way here (188 real, unique recipe names across 211 real block
-    occurrences).
+    different real base layers) -- the same real fact already found in
+    `cifoutput`'s own real DNWELL entries (see the dedicated cifoutput
+    write-back changelog entry below for how that domain's own real
+    `calma` lines handle it), matched the same way here (188 real,
+    unique recipe names across 211 real block occurrences).
   - `drc`: the three dominant, cleanly tabular real statement kinds,
     `width`/`spacing`/`maxwidth` -- 192 of the real section's
     statements (65/65 `width`, 101/102 `spacing`, 26/26 `maxwidth`; the
@@ -2641,6 +2642,68 @@ editor yet -- see Future Work.
   real, working list+form editors side by side, and a live wildcard
   edit (`0` -> `*`) reflects correctly in the row immediately. Full
   suite re-run clean (62/62).
+- **Magic Tech write-back extended to cifoutput's own `calma` lines**
+  (`CifOutputLayerMapping`, replacing the old, read-only `CifLayer`) --
+  the eighth editable domain, and a real, deliberate departure from
+  every domain before it. **Investigated before writing any code, not
+  assumed equally hard**: cifoutput's own real `calma LAYER DATATYPE`
+  line never captures the real geometry recipe (`shrink`/`or`/
+  `bloat-all`/...) leading up to it -- this project only ever modeled
+  the *final* GDS layer/datatype, never the recipe -- so a genuinely
+  *new* Magic type has no coherent real write-back target (a `calma`
+  line with no recipe means nothing to Magic). The real, honest scope
+  that leaves: **edit an existing line's own layer/datatype in place,
+  no New/Delete at all** -- `gui/simple_list_editor.py`'s
+  `SimpleListEditor` gained a new `allow_new_delete=False` mode for
+  this (the buttons don't exist, not just disabled), the first time
+  this shared component has needed to support anything other than full
+  CRUD. `CifOutputLayerMapping` itself is also flattened to one real
+  row per real `calma` line, not one row per Magic type name the way
+  the old `CifLayer` was (a real name can appear on more than one row
+  -- confirmed real: `DNWELL`, built across two separate real `layer
+  DNWELL ...` blocks, now shows as two real rows, both editable
+  independently) -- the same "flat, one real line per entry" shape
+  every other editable domain already uses, rather than a name with an
+  inner, merged pairs list. `pdklib/reconcile.py`'s own
+  `_magic_index` (cross-references cifoutput's real GDS mapping
+  against KLayout's own real `.lyp`) was updated for the new flattened
+  shape -- a real, existing consumer of the old grouped-by-name
+  `CifLayer.gds_pairs`, found and fixed before it could silently break.
+  Parsing needed its own dedicated real scanner, not a reuse of
+  `_scan_single_line_section`: a `calma` line's own real Magic type
+  name comes from a *different*, preceding real `layer`/`templayer`
+  line, not the `calma` line itself, so attributing each real entry to
+  the right name needs real state threaded across lines that no other
+  single-line-section domain needs. **A real, confirmed count
+  correction along the way**: the old, grouped-by-name `CifLayer`
+  count (248, one per unique real `layer`/`templayer` name) is not the
+  same real number as the new, flattened count (138, one per real
+  `calma` line that actually exists) -- most real declared names
+  (every real `templayer`, plus some real `layer` blocks) never emit a
+  real GDS output at all, confirmed directly against the real file,
+  not assumed; the GUI/CLI summary's own `cif_layers:` count now
+  reports the more accurate, real number. Structurally the same real
+  "spliced in from a separate file" situation as cifinput (see that
+  changelog entry above) -- `ihp-sg13g2-cifout.tech`, already newly
+  visible in the Technology picker from that same fix, needed no
+  further picker work here. Verified for real, driven:
+  `tests/test_magic_cifoutput.py` (new) -- 138 real rows load (up from
+  the old 248-name count); the New/Delete buttons are confirmed
+  genuinely absent, not just non-functional; `DNWELL`'s own two real
+  rows both edit independently; an in-GUI edit of an existing
+  layer/datatype survives Save Edits and a simulated relaunch; a real
+  `export_magic_types` write-back lands the edited values in
+  `ihp-sg13g2-cifout.tech` specifically, while `ihp-sg13g2.tech`'s own
+  export stays completely unaffected; `reconcile.py`'s own
+  `_magic_index` still works correctly against the new flattened
+  shape. `tests/test_magic_tech_writer.py`'s own byte-identical check
+  passed on the first real run this time -- trailing whitespace was
+  captured explicitly from the start, learning directly from the
+  cifinput bug found earlier in this same session. Verified live via
+  noVNC too: CIF Layers shows a real, working list+form editor with no
+  New/Delete buttons, `DNWELL` genuinely appears on two separate real
+  rows, and a live layer-number edit reflects correctly in the row
+  immediately. Full suite re-run clean (63/63).
 
 ## Future work
 
@@ -2755,19 +2818,26 @@ models, ...), not just read/display layers. Concretely, still open:
   `main.py export-magic-types` write-back afterward contains exactly
   those edited values. **Deliberately still out of scope this pass**
   (documented honestly, not silently dropped): `CifInputRecipe`
-  (cifinput's own real `layer`/`templayer` recipe blocks) and `CifLayer`
-  (cifoutput's own real layer/datatype mapping), plus `drc`/`extract`'s
-  own remaining mini-DSL content -- none of these fit the "one flat
-  entry per line" shape this pass's shared machinery relies on (both
-  `CifInputRecipe`/`CifLayer` specifically merge real content across
-  more than one non-contiguous real block sharing the same name, a
-  genuinely harder write-back shape); each would need its own real
-  editor design, real separate future work. (Styles/Compose/Connect/
-  cifinput's own two flat sub-structures, once also in this list, are
-  done -- see the dedicated changelog entries below; Compose/Connect/
-  cifinput's ignored-layers/layer-hints turned out to be exactly as
-  flat as Planes/Contacts/Aliases once actually read closely, not the
-  harder shape they were originally grouped with.)
+  (cifinput's own real `layer`/`templayer` recipe blocks), plus
+  `drc`/`extract`'s own remaining mini-DSL content -- none of these fit
+  the "one flat entry per line" shape this pass's shared machinery
+  relies on. `CifInputRecipe` is a genuinely harder case even than
+  cifoutput's own now-done `CifOutputLayerMapping` (see the dedicated
+  changelog entry below): real content merges across more than one
+  non-contiguous real block sharing the same name, *and* the current
+  data model doesn't even track which block each real op line came
+  from -- real write-back would need a data-model redesign before any
+  editor work could start, real separate future work. (Styles/Compose/
+  Connect/cifinput's own two flat sub-structures/cifoutput's own
+  `CifOutputLayerMapping`, once also in this list, are done -- see the
+  dedicated changelog entries below; Compose/Connect/cifinput's
+  ignored-layers/layer-hints turned out to be exactly as flat as
+  Planes/Contacts/Aliases once actually read closely, not the harder
+  shape they were originally grouped with; cifoutput's own `calma`
+  lines turned out tractable too, once real editing was deliberately
+  scoped to "in place only, no New/Delete" -- a real `calma` line
+  means nothing without the real geometry recipe leading up to it,
+  which this project doesn't author.)
 - "Pre-pointed" Magic/KLayout launch guidance is back in
   `eda_tools.py`, pointed at real files this project has since
   downloaded and read: Magic launches with IHP's own real, official

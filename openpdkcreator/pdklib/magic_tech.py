@@ -259,14 +259,57 @@ class StyleEntry:
 
 
 @dataclass
-class CifLayer:
-    """One real 'layer NAME ... calma L D' recipe from a cifoutput
-    section -- a real Magic-type-name to GDS-layer/datatype mapping.
-    A name can have more than one real (layer, datatype) pair (e.g.
-    drawing + a second output for the same logical layer)."""
+class CifOutputLayerMapping:
+    """One real 'calma LAYER DATATYPE' line inside a real cifoutput
+    'layer'/'templayer' NAME ... block -- flattened to one row per
+    real GDS layer/datatype pair, not one row per Magic type name: a
+    real name can have more than one real block/pair (e.g. DNWELL,
+    built across two separate real 'layer DNWELL ...' blocks,
+    confirmed real), the same "flat, one real line per entry" shape
+    every other editable Magic Tech domain already uses, rather than
+    one row per name with an inner, merged list. ``name`` itself
+    (declared on the enclosing real ``layer``/``templayer`` line, not
+    this line) stays real, display-only context -- never written back
+    here.
+
+    **Deliberately editable in place only, no New/Delete** (unlike
+    every other editable Magic Tech domain): the real geometry recipe
+    (``shrink``/``or``/``bloat-all``/...) leading up to a real
+    ``calma`` line is deliberately never modeled anywhere in this
+    module (see this module's own docstring) -- a brand-new Magic type
+    needs a real geometry recipe before a new ``calma`` line would mean
+    anything, which this project has no way to author. Editing an
+    *existing* line's own real layer/datatype is still real, useful,
+    and safe, though -- exactly what's offered here."""
 
     name: str
-    gds_pairs: list[tuple[int, int]] = field(default_factory=list)
+    gds_layer: int
+    gds_datatype: int
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``)."""
+
+    @property
+    def gds_layer_text(self) -> str:
+        return str(self.gds_layer)
+
+    @gds_layer_text.setter
+    def gds_layer_text(self, value: str) -> None:
+        try:
+            self.gds_layer = int(value)
+        except ValueError:
+            pass
+
+    @property
+    def gds_datatype_text(self) -> str:
+        return str(self.gds_datatype)
+
+    @gds_datatype_text.setter
+    def gds_datatype_text(self, value: str) -> None:
+        try:
+            self.gds_datatype = int(value)
+        except ValueError:
+            pass
 
 
 @dataclass
@@ -583,7 +626,7 @@ class MagicTechnology:
     contacts: list[ContactEntry] = field(default_factory=list)
     aliases: list[AliasEntry] = field(default_factory=list)
     styles: list[StyleEntry] = field(default_factory=list)
-    cif_layers: list[CifLayer] = field(default_factory=list)
+    cif_layers: list[CifOutputLayerMapping] = field(default_factory=list)
     cifinput_ignored_layers: list[CifInputIgnoredLayer] = field(default_factory=list)
     """Real 'ignore LAYERNAME' statements from the cifinput section."""
     cifinput_layer_hints: list[CifInputLayerHint] = field(default_factory=list)
@@ -714,6 +757,16 @@ class MagicTechnology:
     independently-tracked sub-structures into one real patch pass over
     a shared section, not two separate, mutually-clobbering passes over
     the same real lines."""
+    all_parsed_cif_layer_line_nos: list[int] = field(default_factory=list)
+    cifoutput_section_start_line: int = 0
+    cifoutput_section_end_line: int = 0
+    """Same real bookkeeping, for ``cifoutput``'s own flat, editable-
+    in-place ``calma`` lines (``CifOutputLayerMapping``) -- structurally
+    the same real "spliced in from a separate real file" situation as
+    ``cifinput`` above (``ihp-sg13g2-cifout.tech`` this time), same real
+    resolution: safely, fully mappable when that real file is parsed
+    directly, correctly ``0`` when parsed as part of ``ihp-sg13g2.tech``
+    's own combined view."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -991,30 +1044,63 @@ def _parse_styles_with_lines(lines: list[str], safe_through: int):
     return _scan_single_line_section(lines, "styles", safe_through, _parse_style_line)
 
 
-def _parse_cifoutput_layers(lines: list[str]) -> list[CifLayer]:
-    """Every real 'layer NAME ... calma L D' recipe -- a block starts
-    at a 'layer'/'templayer' line and runs until the next such line
-    (or the section end); every calma statement found inside it is
-    attributed to that block's NAME. Multiple blocks can share the
-    same NAME (real, confirmed: IHP's own DNWELL is built across two
-    separate 'layer DNWELL ...' blocks) -- their calma pairs are
-    merged under one CifLayer."""
+def _parse_cifoutput_layers_with_lines(lines: list[str], safe_through: int):
+    """Every real 'layer NAME ... calma L D' line, one real
+    ``CifOutputLayerMapping`` per real ``calma`` line (not merged by
+    name -- see that dataclass's own docstring for why). A real block
+    starts at a ``layer``/``templayer`` line and runs until the next
+    such line (or the section end); every real ``calma`` line found
+    inside it is attributed to that block's own real NAME. Mirrors
+    ``_scan_single_line_section``'s own real line-tracking/
+    ``safe_through`` discipline, but needs its own real scan (not a
+    reuse) since a ``calma`` line's own real NAME comes from a
+    *different*, preceding real line, not the ``calma`` line itself --
+    genuinely stateful in a way no other single-line-section domain
+    here needs to be. Returns ``(entries, all_line_nos, section_start,
+    section_end)``, the same real shape ``_scan_single_line_section``
+    returns."""
 
-    by_name: dict[str, CifLayer] = {}
+    entries: list[CifOutputLayerMapping] = []
+    all_line_nos: list[int] = []
+    section_start = section_end = 0
+    in_section = False
     current_name: str | None = None
-    for line in lines:
-        start_match = _LAYER_BLOCK_START_RE.match(line)
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+        if not in_section:
+            if stripped == "cifoutput":
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+        start_match = _LAYER_BLOCK_START_RE.match(stripped)
         if start_match:
             current_name = start_match.group(1)
-            by_name.setdefault(current_name, CifLayer(name=current_name))
             continue
         if current_name is None:
             continue
-        calma_match = _CALMA_RE.match(line)
-        if calma_match:
-            pair = (int(calma_match.group(1)), int(calma_match.group(2)))
-            by_name[current_name].gds_pairs.append(pair)
-    return list(by_name.values())
+        calma_match = _CALMA_RE.match(stripped)
+        if calma_match is None:
+            continue
+        safe_line_no = line_no if section_start and line_no <= safe_through else 0
+        if safe_line_no:
+            all_line_nos.append(safe_line_no)
+        entries.append(
+            CifOutputLayerMapping(
+                name=current_name, gds_layer=int(calma_match.group(1)), gds_datatype=int(calma_match.group(2)),
+                line_no=safe_line_no,
+            )
+        )
+
+    return entries, all_line_nos, section_start, section_end
 
 
 def _parse_cifinput_ignore_line(stripped: str) -> CifInputIgnoredLayer | None:
@@ -1279,7 +1365,9 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.styles, tech.all_parsed_style_line_nos, tech.styles_section_start_line, tech.styles_section_end_line = (
         _parse_styles_with_lines(lines, safe_through)
     )
-    tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
+    tech.cif_layers, tech.all_parsed_cif_layer_line_nos, tech.cifoutput_section_start_line, tech.cifoutput_section_end_line = (
+        _parse_cifoutput_layers_with_lines(lines, safe_through)
+    )
     (
         tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos,
         tech.cifinput_section_start_line, tech.cifinput_section_end_line,

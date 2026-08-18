@@ -5,49 +5,65 @@ re-reads the real *original* ``.tech`` file fresh from disk (always
 pristine, since export never writes to ``data/``) and patches only the
 real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
-**Connect**, and **cifinput**'s own two flat sub-structures (ignored
-layers, layer hints), the Magic Tech domains with a real form (see
+**Connect**, **cifinput**'s own two flat sub-structures (ignored
+layers, layer hints), and **cifoutput**'s own flat, editable-in-place
+``calma`` lines, the Magic Tech domains with a real form (see
 ``gui/magic_tech_view.py``'s own docstring). Every other real section
-(cifoutput/cifinput's own recipe blocks/drc/extract/everything
-``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
-there's no editor for them, so nothing to write back; deliberately
-bounded, not attempted for every remaining real sub-tab at once (see
-README's own Future Work note on the remaining gap).
+(cifinput's own recipe blocks/drc/extract/everything ``magic_tech.py``
+doesn't parse) is copied verbatim, untouched -- there's no editor for
+them, so nothing to write back; deliberately bounded, not attempted
+for every remaining real sub-tab at once (see README's own Future Work
+note on the remaining gap).
 
 Each real entry in every flat editable domain occupies exactly one
 real line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT``
 for a plane; ``TYPE LAYER1 LAYER2`` for a contact; ``NAME MEMBERS`` for
 an alias; ``TYPE_NAME STYLE1 STYLE2 ...`` for a style; ``VERB ARG1 ARG2
 ARG3`` for a compose statement; ``TYPES_A TYPES_B`` for a connect rule;
-``ignore NAME``/``calma NAME LAYER DATATYPE`` for cifinput's own two
--- no block structure to navigate, unlike LEF's ``PIN``/``MACRO`` or
-DRC's multi-line ``.output()`` calls), so all of them share one
-generic patch routine, ``_render_section_patch``, parameterized by a
-per-domain line-render function -- rather than near-duplicated copies
-of the same real positional-patch logic.
+``ignore NAME``/``calma NAME LAYER DATATYPE`` for cifinput's own two;
+``calma LAYER DATATYPE`` for cifoutput -- no block structure to
+navigate, unlike LEF's ``PIN``/``MACRO`` or DRC's multi-line
+``.output()`` calls), so all of them share one generic patch routine,
+``_render_section_patch``, parameterized by a per-domain line-render
+function -- rather than near-duplicated copies of the same real
+positional-patch logic.
 ``pdklib/magic_tech.py``'s own ``TypeEntry.line_no``/``PlaneEntry.
 line_no``/``ContactEntry.line_no``/``AliasEntry.line_no``/
 ``StyleEntry.line_no``/``ComposeStatement.line_no``/``ConnectRule.
 line_no``/``CifInputIgnoredLayer.line_no``/``CifInputLayerHint.
-line_no`` (tracked at parse time, only when safely mappable back to
-real file line numbers -- see ``_safe_prefix_line_count``'s own
-docstring) are used exactly the way ``pdklib/lef.py``'s ``LefPin.
-start_line``/``LefMacro.all_parsed_pin_ranges`` are: a deleted entry's
-original line is omitted entirely; a brand-new entry (``line_no ==
-0``) is appended just before its own real section's closing ``end``
-line; an existing entry's line is regenerated fresh from its current
-in-memory fields, preserving only its original indentation/separator
-whitespace -- there's no unmodeled per-entry content to lose in any
-domain here (unlike a LEF pin's real ``PORT``/``ANTENNAMODEL`` data),
-since a real entry line's entire real content is exactly the fields
-this project already models. Styles' own real section additionally
-carries one, real non-entry ``styletype NAME`` header line right after
-its opening keyword -- ``_render_section_patch``'s existing "copy any
-untracked line verbatim" gap logic already handles it for free, since
+line_no``/``CifOutputLayerMapping.line_no`` (tracked at parse time,
+only when safely mappable back to real file line numbers -- see
+``_safe_prefix_line_count``'s own docstring) are used exactly the way
+``pdklib/lef.py``'s ``LefPin.start_line``/``LefMacro.
+all_parsed_pin_ranges`` are: a deleted entry's original line is
+omitted entirely; a brand-new entry (``line_no == 0``) is appended
+just before its own real section's closing ``end`` line; an existing
+entry's line is regenerated fresh from its current in-memory fields,
+preserving only its original indentation/separator whitespace --
+there's no unmodeled per-entry content to lose in any domain here
+(unlike a LEF pin's real ``PORT``/``ANTENNAMODEL`` data), since a real
+entry line's entire real content is exactly the fields this project
+already models. Styles' own real section additionally carries one,
+real non-entry ``styletype NAME`` header line right after its opening
+keyword -- ``_render_section_patch``'s existing "copy any untracked
+line verbatim" gap logic already handles it for free, since
 ``pdklib/magic_tech.py``'s own ``_parse_style_line`` never adds it to
 ``all_line_nos`` in the first place. Compose/Connect need no such
 special case -- both are genuinely flat, no non-entry header line of
-their own.
+their own. cifoutput's own section carries plenty of real non-entry
+content too (``style``/``scalefactor``/``options``/``gridlimit``,
+every real ``layer``/``templayer`` NAME line, and every real geometry
+op -- ``shrink``/``or``/``bloat-all``/...) -- all handled the same
+generic way, since ``_parse_cifoutput_layers_with_lines`` (see that
+module's own docstring) only ever recognizes a real ``calma`` line as
+an entry, everything else falls through as a verbatim gap for free,
+no special-casing needed there either. **cifoutput's own real entries
+are also, deliberately, never created or deleted** -- see
+``CifOutputLayerMapping``'s own docstring for why (a real ``calma``
+line means nothing without the real geometry recipe leading up to it,
+which this project doesn't author) -- so ``render_fn(entry, None)``
+(the "brand-new entry" branch) is real, defensive code here, never
+actually exercised in practice.
 
 **cifinput's own ignored-layers and layer-hints tables share one real
 ``cifinput``...``end`` section with each other** (and with every real
@@ -63,41 +79,43 @@ shared section, each dispatched to its own real render function;
 every other, single-group domain above just wraps its one real tuple
 in a one-element list, unchanged in every other respect.
 
-**cifinput is also, structurally, a genuinely different case from
-every other domain here**: its real content doesn't live in
-``ihp-sg13g2.tech`` at all -- it's spliced in from a separate real
-file, ``ihp-sg13g2-cifin.tech``, via ``include``. When parsed as part
-of ``ihp-sg13g2.tech``'s own combined view, cifinput's real lines sit
-well past that file's own ``safe_through`` boundary (the first real
-``include`` line), so every ``line_no``/section bound here correctly
-comes back ``0`` -- refusing to guess, not a bug -- and this write-back
-correctly leaves it untouched there. ``ihp-sg13g2-cifin.tech`` is also
-independently parseable as its own real file (``find_tech_files`` globs
-it too, same as every other real ``.tech`` file, confirmed to have no
-real ``include`` line of its own), so *that* parse's cifinput content
-**is** safely, fully mappable, and write-back for *that* real
+**cifinput and cifoutput are also, structurally, a genuinely different
+case from every other domain here**: neither one's real content lives
+in ``ihp-sg13g2.tech`` at all -- both are spliced in from their own
+separate real files, ``ihp-sg13g2-cifin.tech``/``ihp-sg13g2-cifout.
+tech``, via ``include``. When parsed as part of ``ihp-sg13g2.tech``'s
+own combined view, both domains' real lines sit well past that file's
+own ``safe_through`` boundary (the first real ``include`` line), so
+every ``line_no``/section bound here correctly comes back ``0`` --
+refusing to guess, not a bug -- and this write-back correctly leaves
+both untouched there. Each fragment file is also independently
+parseable as its own real file (``find_tech_files`` globs both, same
+as every other real ``.tech`` file, confirmed to have no real
+``include`` line of its own), so *that* parse's own content **is**
+safely, fully mappable, and write-back for *that* real
 ``tech.source_path`` patches it correctly, using this exact same
 machinery -- no new "write to a different file than the one being
 viewed" mechanism needed, since each real file is always parsed (and
 written back to) independently already. The only real gap this closed
-was visibility: ``ihp-sg13g2-cifin.tech`` has no real ``tech``/
-``version`` header of its own, so it used to be silently filtered out
-of the Technology picker entirely (see ``gui/magic_tech_view.py``'s
-own docstring for the real fallback-naming fix).
+was visibility: neither fragment file has a real ``tech``/``version``
+header of its own, so both used to be silently filtered out of the
+Technology picker entirely (see ``gui/magic_tech_view.py``'s own
+docstring for the real fallback-naming fix).
 
 All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
 388-529, ``compose`` 535-591, ``connect`` 597-621 in IHP's own real
 ``ihp-sg13g2.tech``; ``cifinput`` 20-1519 in the separate, real
-``ihp-sg13g2-cifin.tech``, when parsed as that file directly) sit well
-before their own real file's own first real ``include`` line (none, in
-``ihp-sg13g2-cifin.tech``'s own case), so all of them share the exact
-same real ``safe_through`` boundary already established for Types
-alone. If a given domain's own section start/end line is ``0`` (not
-found at a safely-mappable position), that one domain's real lines are
-simply left untouched -- refusing to guess is safer than patching the
-wrong real position -- while every other domain still patches
-normally.
+``ihp-sg13g2-cifin.tech``; ``cifoutput`` 25-1875 in the separate, real
+``ihp-sg13g2-cifout.tech`` -- both, when parsed as that own real file
+directly) sit well before their own real file's own first real
+``include`` line (none, in either fragment file's own case), so all of
+them share the exact same real ``safe_through`` boundary already
+established for Types alone. If a given domain's own section
+start/end line is ``0`` (not found at a safely-mappable position),
+that one domain's real lines are simply left untouched -- refusing to
+guess is safer than patching the wrong real position -- while every
+other domain still patches normally.
 """
 
 from __future__ import annotations
@@ -117,6 +135,7 @@ _COMPOSE_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)\s*$")
 _CONNECT_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 _CIFINPUT_IGNORE_LINE_RE = re.compile(r"^(\s*)ignore(\s+)(\S+)(\s*)$")
 _CIFINPUT_HINT_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)(\s*)$")
+_CIFOUTPUT_CALMA_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s*)$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -242,6 +261,29 @@ def _render_cifinput_hint_line(entry: magic_tech_mod.CifInputLayerHint, original
     return f"{indent}calma{sep0}{entry.name}{sep1}{entry.gds_layer}{sep2}{datatype_text}{trailing}"
 
 
+def _render_cifoutput_calma_line(entry: magic_tech_mod.CifOutputLayerMapping, original_line: str | None) -> str:
+    """Fixed two-token shape after the real ``calma`` keyword (layer,
+    datatype) -- ``entry.name`` is deliberately never written here (it
+    lives on a real, different, preceding ``layer``/``templayer`` line
+    this domain doesn't edit -- see ``CifOutputLayerMapping``'s own
+    docstring for why: editable in place only, no New/Delete).
+    ``original_line`` is never actually ``None`` in real, driven use
+    here (this domain has no way to create a brand-new entry, so
+    every real ``line_no`` is always non-zero) -- the fallback still
+    exists for the same defensive-coding reason every other render
+    function here has one, not because it's reachable. Real trailing
+    whitespace preserved explicitly, same real, confirmed case as
+    ``_render_cifinput_hint_line`` (some real ``calma`` lines in
+    ``ihp-sg13g2-cifout.tech`` end with one too)."""
+
+    match = _CIFOUTPUT_CALMA_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else "\t"
+    sep0 = match.group(2) if match else " "
+    sep1 = match.group(4) if match else " "
+    trailing = match.group(6) if match else ""
+    return f"{indent}calma{sep0}{entry.gds_layer}{sep1}{entry.gds_datatype}{trailing}"
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
 ) -> list[str]:
@@ -306,6 +348,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
                 (tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos, _render_cifinput_ignore_line),
                 (tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _render_cifinput_hint_line),
             ],
+        ),
+        (
+            tech.cifoutput_section_start_line, tech.cifoutput_section_end_line,
+            [(tech.cif_layers, tech.all_parsed_cif_layer_line_nos, _render_cifoutput_calma_line)],
         ),
     ]
     active_sections = sorted(

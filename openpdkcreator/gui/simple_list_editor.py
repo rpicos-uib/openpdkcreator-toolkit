@@ -12,6 +12,16 @@ editors (``pdklib/magic_tech.py``'s ``PlaneEntry``/``ContactEntry``/
 Types keeps its own existing, bespoke code unchanged (it has a real
 comma-split aliases *list* field and a boolean obsolete combo, neither
 of which this generic editor attempts to generalize to).
+
+**``allow_new_delete=False``** (new): for a domain editable *only* in
+place, no New/Delete -- introduced for cifoutput's own
+``CifOutputLayerMapping`` (``gui/magic_tech_view.py``), the first real
+Magic Tech domain where a brand-new entry has no coherent real
+write-back target (a real ``calma`` line means nothing without the
+real geometry recipe leading up to it, which this project doesn't
+model or author). Hides the New/Delete buttons entirely rather than
+leaving them present but broken; *new_entry_factory* is unused and may
+be ``None`` in this mode.
 """
 
 from __future__ import annotations
@@ -28,9 +38,10 @@ class SimpleListEditor(ttk.Frame):
         self,
         parent,
         columns: list[tuple[str, str, int]],
-        new_entry_factory: Callable[[], object],
+        new_entry_factory: Callable[[], object] | None,
         entry_label: str = "Entry",
         help_text: str = "",
+        allow_new_delete: bool = True,
     ):
         """*columns*: (field, label, tree_column_width) -- also the
         real form field order, one plain ``ttk.Entry`` per field, in
@@ -52,8 +63,11 @@ class SimpleListEditor(ttk.Frame):
 
         button_row = ttk.Frame(self)
         button_row.grid(row=0, column=0, sticky="ew", pady=(0, 4))
-        ttk.Button(button_row, text=f"New {entry_label}", command=self.new_entry).pack(side="left")
-        ttk.Button(button_row, text=f"Delete {entry_label}", command=self.delete_entry).pack(side="left", padx=(6, 0))
+        if allow_new_delete:
+            ttk.Button(button_row, text=f"New {entry_label}", command=self.new_entry).pack(side="left")
+            ttk.Button(button_row, text=f"Delete {entry_label}", command=self.delete_entry).pack(
+                side="left", padx=(6, 0)
+            )
         self.filter_var = build_filter_row(button_row, self._on_filter_changed)
 
         tree_columns = tuple(field for field, _label, _width in columns)

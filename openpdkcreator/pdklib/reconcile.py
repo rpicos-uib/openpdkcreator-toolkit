@@ -42,11 +42,10 @@ def _lyp_index(layers: list[Layer]) -> dict[GdsKey, list[str]]:
 
 def _magic_index(tech: MagicTechnology) -> dict[GdsKey, list[str]]:
     index: dict[GdsKey, list[str]] = {}
-    for cif_layer in tech.cif_layers:
-        for pair in cif_layer.gds_pairs:
-            names = index.setdefault(pair, [])
-            if cif_layer.name not in names:
-                names.append(cif_layer.name)
+    for mapping in tech.cif_layers:
+        names = index.setdefault((mapping.gds_layer, mapping.gds_datatype), [])
+        if mapping.name not in names:
+            names.append(mapping.name)
     return index
 
 
