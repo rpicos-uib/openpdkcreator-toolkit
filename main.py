@@ -727,8 +727,11 @@ def cmd_export_magic_types(pdk_root: Path) -> int:
     technologies = {}
     for path in magic_tech_mod.find_tech_files(pdk_root):
         tech = magic_tech_mod.parse_tech_file(path)
-        if tech.name:
-            technologies[tech.name] = tech
+        # A nameless fragment file (no real tech/version header) still
+        # gets exported -- its own real cifinput content may now carry
+        # real edits (Library Manager parity: gui/magic_tech_view.py's
+        # own load() applies this exact same fallback).
+        technologies[tech.name or path.stem] = tech
     if not technologies:
         print(f"No real Magic technologies found under {pdk_root}/libs.tech/magic/", file=sys.stderr)
         return 2

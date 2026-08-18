@@ -326,8 +326,11 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     technologies: dict[str, magic_tech_mod.MagicTechnology] = {}
     for path in magic_tech_mod.find_tech_files(pdk_root):
         tech = magic_tech_mod.parse_tech_file(path)
-        if tech.name:
-            technologies[tech.name] = tech
+        # A nameless fragment file (no real tech/version header) is
+        # still included -- its own real cifinput content now has a
+        # real writer too, so this smoking-gun test genuinely exercises
+        # it against every real file, not just the two named ones.
+        technologies[tech.name or path.stem] = tech
     export_magic_types(pdk_root, technologies, dest_root)
 
     netlist_cache = {

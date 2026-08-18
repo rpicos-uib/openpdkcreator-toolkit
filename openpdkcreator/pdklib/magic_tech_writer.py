@@ -4,28 +4,31 @@ write-back serialization (after ``pdklib/lef_writer.py`` and
 re-reads the real *original* ``.tech`` file fresh from disk (always
 pristine, since export never writes to ``data/``) and patches only the
 real lines belonging to a currently-editable domain -- **Types**,
-**Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**, and
-**Connect**, the seven Magic Tech domains with a real form (see
+**Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
+**Connect**, and **cifinput**'s own two flat sub-structures (ignored
+layers, layer hints), the Magic Tech domains with a real form (see
 ``gui/magic_tech_view.py``'s own docstring). Every other real section
-(cifoutput/cifinput/drc/extract/everything ``magic_tech.py`` doesn't
-parse) is copied verbatim, untouched -- there's no editor for them, so
-nothing to write back; deliberately bounded, not attempted for all
-nine remaining real sub-tabs at once (see README's own Future Work
-note on the remaining gap).
+(cifoutput/cifinput's own recipe blocks/drc/extract/everything
+``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
+there's no editor for them, so nothing to write back; deliberately
+bounded, not attempted for every remaining real sub-tab at once (see
+README's own Future Work note on the remaining gap).
 
-Each real entry in all seven editable domains occupies exactly one
+Each real entry in every flat editable domain occupies exactly one
 real line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT``
 for a plane; ``TYPE LAYER1 LAYER2`` for a contact; ``NAME MEMBERS`` for
 an alias; ``TYPE_NAME STYLE1 STYLE2 ...`` for a style; ``VERB ARG1 ARG2
-ARG3`` for a compose statement; ``TYPES_A TYPES_B`` for a connect rule
+ARG3`` for a compose statement; ``TYPES_A TYPES_B`` for a connect rule;
+``ignore NAME``/``calma NAME LAYER DATATYPE`` for cifinput's own two
 -- no block structure to navigate, unlike LEF's ``PIN``/``MACRO`` or
-DRC's multi-line ``.output()`` calls), so all seven share one generic
-patch routine, ``_render_section_patch``, parameterized by a per-domain
-line-render function -- rather than seven near-duplicated copies of
-the same real positional-patch logic.
+DRC's multi-line ``.output()`` calls), so all of them share one
+generic patch routine, ``_render_section_patch``, parameterized by a
+per-domain line-render function -- rather than near-duplicated copies
+of the same real positional-patch logic.
 ``pdklib/magic_tech.py``'s own ``TypeEntry.line_no``/``PlaneEntry.
 line_no``/``ContactEntry.line_no``/``AliasEntry.line_no``/
 ``StyleEntry.line_no``/``ComposeStatement.line_no``/``ConnectRule.
+line_no``/``CifInputIgnoredLayer.line_no``/``CifInputLayerHint.
 line_no`` (tracked at parse time, only when safely mappable back to
 real file line numbers -- see ``_safe_prefix_line_count``'s own
 docstring) are used exactly the way ``pdklib/lef.py``'s ``LefPin.
@@ -34,8 +37,8 @@ original line is omitted entirely; a brand-new entry (``line_no ==
 0``) is appended just before its own real section's closing ``end``
 line; an existing entry's line is regenerated fresh from its current
 in-memory fields, preserving only its original indentation/separator
-whitespace -- there's no unmodeled per-entry content to lose in any of
-the seven (unlike a LEF pin's real ``PORT``/``ANTENNAMODEL`` data),
+whitespace -- there's no unmodeled per-entry content to lose in any
+domain here (unlike a LEF pin's real ``PORT``/``ANTENNAMODEL`` data),
 since a real entry line's entire real content is exactly the fields
 this project already models. Styles' own real section additionally
 carries one, real non-entry ``styletype NAME`` header line right after
@@ -46,16 +49,55 @@ untracked line verbatim" gap logic already handles it for free, since
 special case -- both are genuinely flat, no non-entry header line of
 their own.
 
-All seven real sections (confirmed real, not assumed: ``planes``
-83-98, ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382,
-``styles`` 388-529, ``compose`` 535-591, ``connect`` 597-621 in IHP's
-own real ``ihp-sg13g2.tech``) sit well before the file's own first
-real ``include`` line, so all seven share the exact same real
-``safe_through`` boundary already established for Types alone. If a
-given domain's own section start/end line is ``0`` (not found at a
-safely-mappable position), that one domain's real lines are simply
-left untouched -- refusing to guess is safer than patching the wrong
-real position -- while the other six still patch normally.
+**cifinput's own ignored-layers and layer-hints tables share one real
+``cifinput``...``end`` section with each other** (and with every real
+``layer``/``templayer`` recipe block, still read-only) -- unlike every
+other editable domain above, which each own their own exclusive
+section. Patching them independently, one full section-rewrite per
+sub-structure, would silently discard whichever one ran second (it
+would restart from the real *original* lines and not see the first
+one's own edits). So ``_render_section_patch`` takes a real list of
+*groups* -- ``(entries, all_line_nos, render_fn)`` tuples -- and merges
+every group's own real line numbers into one combined pass over the
+shared section, each dispatched to its own real render function;
+every other, single-group domain above just wraps its one real tuple
+in a one-element list, unchanged in every other respect.
+
+**cifinput is also, structurally, a genuinely different case from
+every other domain here**: its real content doesn't live in
+``ihp-sg13g2.tech`` at all -- it's spliced in from a separate real
+file, ``ihp-sg13g2-cifin.tech``, via ``include``. When parsed as part
+of ``ihp-sg13g2.tech``'s own combined view, cifinput's real lines sit
+well past that file's own ``safe_through`` boundary (the first real
+``include`` line), so every ``line_no``/section bound here correctly
+comes back ``0`` -- refusing to guess, not a bug -- and this write-back
+correctly leaves it untouched there. ``ihp-sg13g2-cifin.tech`` is also
+independently parseable as its own real file (``find_tech_files`` globs
+it too, same as every other real ``.tech`` file, confirmed to have no
+real ``include`` line of its own), so *that* parse's cifinput content
+**is** safely, fully mappable, and write-back for *that* real
+``tech.source_path`` patches it correctly, using this exact same
+machinery -- no new "write to a different file than the one being
+viewed" mechanism needed, since each real file is always parsed (and
+written back to) independently already. The only real gap this closed
+was visibility: ``ihp-sg13g2-cifin.tech`` has no real ``tech``/
+``version`` header of its own, so it used to be silently filtered out
+of the Technology picker entirely (see ``gui/magic_tech_view.py``'s
+own docstring for the real fallback-naming fix).
+
+All real sections (confirmed real, not assumed: ``planes`` 83-98,
+``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
+388-529, ``compose`` 535-591, ``connect`` 597-621 in IHP's own real
+``ihp-sg13g2.tech``; ``cifinput`` 20-1519 in the separate, real
+``ihp-sg13g2-cifin.tech``, when parsed as that file directly) sit well
+before their own real file's own first real ``include`` line (none, in
+``ihp-sg13g2-cifin.tech``'s own case), so all of them share the exact
+same real ``safe_through`` boundary already established for Types
+alone. If a given domain's own section start/end line is ``0`` (not
+found at a safely-mappable position), that one domain's real lines are
+simply left untouched -- refusing to guess is safer than patching the
+wrong real position -- while every other domain still patches
+normally.
 """
 
 from __future__ import annotations
@@ -73,6 +115,8 @@ _ALIAS_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 _STYLE_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 _COMPOSE_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)\s*$")
 _CONNECT_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
+_CIFINPUT_IGNORE_LINE_RE = re.compile(r"^(\s*)ignore(\s+)(\S+)(\s*)$")
+_CIFINPUT_HINT_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)(\s*)$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -169,34 +213,76 @@ def _render_connect_line(entry: magic_tech_mod.ConnectRule, original_line: str |
     return f"{indent}{entry.types_a}{separator}{entry.types_b}"
 
 
+def _render_cifinput_ignore_line(entry: magic_tech_mod.CifInputIgnoredLayer, original_line: str | None) -> str:
+    match = _CIFINPUT_IGNORE_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else " "
+    separator = match.group(2) if match else " "
+    trailing = match.group(4) if match else ""
+    return f"{indent}ignore{separator}{entry.name}{trailing}"
+
+
+def _render_cifinput_hint_line(entry: magic_tech_mod.CifInputLayerHint, original_line: str | None) -> str:
+    """Fixed three-token shape after the real ``calma`` keyword (name,
+    layer, datatype), same real always-reuse-original-separators
+    approach as ``_render_contact_line``/``_render_compose_line`` --
+    safe here too, no variable-length blob to hide extra real spacing
+    inside. A real trailing-whitespace case was found and fixed the
+    same way (some real ``calma`` lines in ``ihp-sg13g2-cifin.tech``
+    end with a real trailing space, e.g. ``calma DIFFFILL 1 22 `` --
+    confirmed real, caught by this project's own no-edit-is-
+    byte-identical check, not assumed correct)."""
+
+    match = _CIFINPUT_HINT_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else " "
+    sep0 = match.group(2) if match else " "
+    sep1 = match.group(4) if match else " "
+    sep2 = match.group(6) if match else " "
+    trailing = match.group(8) if match else ""
+    datatype_text = "*" if entry.gds_datatype is None else str(entry.gds_datatype)
+    return f"{indent}calma{sep0}{entry.name}{sep1}{entry.gds_layer}{sep2}{datatype_text}{trailing}"
+
+
 def _render_section_patch(
-    original_lines: list[str], start_line: int, end_line: int,
-    entries: list, all_line_nos: list[int], render_fn,
+    original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
 ) -> list[str]:
     """One real section's own patched lines, from its own real keyword
     line through its own real closing ``end`` (both inclusive,
-    verbatim) -- shared by all four editable domains, see this
-    module's own docstring."""
+    verbatim) -- shared by every editable domain, see this module's
+    own docstring. *groups*: one ``(entries, all_line_nos, render_fn)``
+    tuple per real, independently-tracked sub-structure sharing this
+    section (almost always exactly one; cifinput's own ignored-layers
+    and layer-hints tables share two) -- merged into one real, combined
+    pass over the shared real lines rather than patched independently,
+    which would silently discard whichever group ran second."""
 
     start_idx = start_line - 1
     end_idx = end_line - 1
-    current_by_line = {entry.line_no: entry for entry in entries if entry.line_no}
+    current_by_line = {}
+    for entries, _group_line_nos, render_fn in groups:
+        for entry in entries:
+            if entry.line_no:
+                current_by_line[entry.line_no] = (entry, render_fn)
+    all_line_nos = sorted({
+        line_no for _entries, group_line_nos, _render_fn in groups for line_no in group_line_nos
+    })
 
     output = [original_lines[start_idx]]  # the section's own keyword line, verbatim
     cursor = start_idx + 1
     for orig_line_no in all_line_nos:
         line_idx = orig_line_no - 1
-        output.extend(original_lines[cursor:line_idx])  # verbatim gap (comments/blank lines)
-        entry = current_by_line.get(orig_line_no)
-        if entry is not None:
+        output.extend(original_lines[cursor:line_idx])  # verbatim gap (comments/blank lines/other groups)
+        hit = current_by_line.get(orig_line_no)
+        if hit is not None:
+            entry, render_fn = hit
             output.append(render_fn(entry, original_lines[line_idx]))
         # else: this real entry was deleted this session -- omit its original line entirely.
         cursor = line_idx + 1
     output.extend(original_lines[cursor:end_idx])
 
-    for entry in entries:
-        if entry.line_no == 0:
-            output.append(render_fn(entry, None))  # an entry added this session
+    for entries, _group_line_nos, render_fn in groups:
+        for entry in entries:
+            if entry.line_no == 0:
+                output.append(render_fn(entry, None))  # an entry added this session
 
     output.append(original_lines[end_idx])  # the section's own 'end' line, verbatim
     return output
@@ -207,13 +293,20 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
     original_lines = original_text.splitlines()
 
     candidate_sections = [
-        (tech.planes_section_start_line, tech.planes_section_end_line, tech.planes, tech.all_parsed_plane_line_nos, _render_plane_line),
-        (tech.types_section_start_line, tech.types_section_end_line, tech.types, tech.all_parsed_type_line_nos, _render_type_line),
-        (tech.contacts_section_start_line, tech.contacts_section_end_line, tech.contacts, tech.all_parsed_contact_line_nos, _render_contact_line),
-        (tech.aliases_section_start_line, tech.aliases_section_end_line, tech.aliases, tech.all_parsed_alias_line_nos, _render_alias_line),
-        (tech.styles_section_start_line, tech.styles_section_end_line, tech.styles, tech.all_parsed_style_line_nos, _render_style_line),
-        (tech.compose_section_start_line, tech.compose_section_end_line, tech.compose, tech.all_parsed_compose_line_nos, _render_compose_line),
-        (tech.connect_section_start_line, tech.connect_section_end_line, tech.connect, tech.all_parsed_connect_line_nos, _render_connect_line),
+        (tech.planes_section_start_line, tech.planes_section_end_line, [(tech.planes, tech.all_parsed_plane_line_nos, _render_plane_line)]),
+        (tech.types_section_start_line, tech.types_section_end_line, [(tech.types, tech.all_parsed_type_line_nos, _render_type_line)]),
+        (tech.contacts_section_start_line, tech.contacts_section_end_line, [(tech.contacts, tech.all_parsed_contact_line_nos, _render_contact_line)]),
+        (tech.aliases_section_start_line, tech.aliases_section_end_line, [(tech.aliases, tech.all_parsed_alias_line_nos, _render_alias_line)]),
+        (tech.styles_section_start_line, tech.styles_section_end_line, [(tech.styles, tech.all_parsed_style_line_nos, _render_style_line)]),
+        (tech.compose_section_start_line, tech.compose_section_end_line, [(tech.compose, tech.all_parsed_compose_line_nos, _render_compose_line)]),
+        (tech.connect_section_start_line, tech.connect_section_end_line, [(tech.connect, tech.all_parsed_connect_line_nos, _render_connect_line)]),
+        (
+            tech.cifinput_section_start_line, tech.cifinput_section_end_line,
+            [
+                (tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos, _render_cifinput_ignore_line),
+                (tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _render_cifinput_hint_line),
+            ],
+        ),
     ]
     active_sections = sorted(
         (s for s in candidate_sections if s[0] and s[1]), key=lambda s: s[0],
@@ -224,10 +317,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
 
     output: list[str] = []
     cursor = 0
-    for start_line, end_line, entries, all_line_nos, render_fn in active_sections:
+    for start_line, end_line, groups in active_sections:
         start_idx = start_line - 1
         output.extend(original_lines[cursor:start_idx])  # verbatim gap before this section
-        output.extend(_render_section_patch(original_lines, start_line, end_line, entries, all_line_nos, render_fn))
+        output.extend(_render_section_patch(original_lines, start_line, end_line, groups))
         cursor = end_line  # end_line - 1 is the 0-indexed 'end' line, already appended; next gap starts right after.
 
     output.extend(original_lines[cursor:])  # everything after the last patched section, verbatim

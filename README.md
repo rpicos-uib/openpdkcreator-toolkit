@@ -2554,6 +2554,93 @@ editor yet -- see Future Work.
   list+form editor identical in shape to Planes/Contacts/Aliases, and
   a live field edit (Compose's own Arg 2) persists correctly across a
   sub-tab switch.
+- **Magic Tech write-back extended to cifinput's own ignored-layers
+  and layer-hints tables** -- and, as a real, necessary consequence,
+  **the Technology picker now shows every real `.tech` file, not just
+  the two with their own real `tech`/`version` header.** A real
+  structural fact drove the whole design here, found before writing
+  any code, not assumed: `cifinput`/`cifoutput` don't live in
+  `ihp-sg13g2.tech` at all -- they're spliced in from two separate
+  real files, `ihp-sg13g2-cifin.tech`/`ihp-sg13g2-cifout.tech`, via
+  `include`, and (confirmed real) neither of those two, nor
+  `ihp-sg13g2-drc.tech`/`ihp-sg13g2-extract.tech`, has its own real
+  `tech`/`version` header -- so `tech.name` comes back empty for all
+  four, and the Technology picker's own `if tech.name:` filter was
+  silently hiding them entirely. Since `pdklib/magic_tech.py`'s own
+  `find_tech_files`/`parse_tech_file` already parse each real `.tech`
+  file completely independently regardless of picker visibility, the
+  real fix turned out to be small: `gui/magic_tech_view.py`'s own
+  `load()` now falls back to the real file's own stem as a display
+  name (`tech.name or path.stem`) instead of skipping a nameless real
+  file, and the same one-line fix was applied to `main.py`'s own
+  `cmd_export_magic_types` and `export.py`'s own `export_full_pdk`
+  smoking-gun test, for CLI/GUI parity and so the smoking-gun test
+  genuinely exercises the new writer path too. This closes what would
+  otherwise have been a real, first-of-its-kind problem for this
+  project -- write-back needing to target a *different* real file than
+  the one being viewed -- for free: `ihp-sg13g2-cifin.tech` (confirmed
+  real: no `include` line of its own) is safely, fully line-mapped
+  when parsed *as that file directly*, the exact same
+  `_safe_prefix_line_count`/`safe_through` machinery every other
+  domain already uses, so `render_tech_file(tech.source_path, tech)`
+  for *that* parse naturally patches the right real file with no new
+  mechanism. When `cifinput` is instead parsed as part of
+  `ihp-sg13g2.tech`'s own combined view, its real lines correctly land
+  past that file's own `safe_through` boundary, so this domain's own
+  `line_no`/section bounds correctly come back `0` there and write-back
+  for *that* file correctly leaves it untouched -- confirmed for real,
+  driven, not just asserted. `CifInputIgnoredLayer` (new) and
+  `CifInputLayerHint` (extended) both gained real `line_no` tracking
+  via two thin wrappers around the existing, unmodified
+  `_scan_single_line_section` scanner, same as every prior domain.
+  **A real, new wrinkle these two share with each other that no prior
+  domain had**: both live inside *one* real `cifinput`...`end` section
+  (alongside the real, still-read-only `layer`/`templayer` recipe
+  blocks) rather than each owning an exclusive section -- patching them
+  independently, one full section-rewrite per sub-structure, would
+  have silently discarded whichever one ran second. `pdklib/
+  magic_tech_writer.py`'s own `_render_section_patch`/`render_tech_file`
+  were generalized to take a real list of *groups* -- multiple,
+  independently-tracked `(entries, all_line_nos, render_fn)` tuples
+  sharing one real section -- merged into one real, combined pass;
+  every other, single-group domain just wraps its own tuple in a
+  one-element list now, unchanged in every other respect. **A second
+  real, new wrinkle**: `CifInputLayerHint.gds_layer`/`gds_datatype` are
+  the first `int`/`int | None`-typed editable fields anywhere in this
+  module (every prior `SimpleListEditor`-backed domain is all-string)
+  -- exposed to the generic editor through new `gds_layer_text`/
+  `gds_datatype_text` properties (the latter also round-tripping the
+  real file's own wildcard `*` convention through `gds_datatype is
+  None`), same real "expose a non-string field as plain string"
+  pattern as `StyleEntry.style_names_text`/`ComposeStatement.arg1`,
+  with invalid mid-edit text simply ignored (keeps the last real,
+  valid value) rather than raising out of a Tk trace callback. **A
+  real, found-not-assumed formatting bug along the way**: some real
+  `calma NAME LAYER DATATYPE` lines in `ihp-sg13g2-cifin.tech` carry a
+  real trailing space (e.g. `calma DIFFFILL 1 22 `) -- an initial
+  regex that didn't capture it silently dropped it even on a
+  completely unedited line, caught immediately by this project's own
+  no-edit-must-be-byte-identical check against the real file, fixed by
+  capturing and preserving the real trailing whitespace explicitly.
+  Verified for real, driven: `tests/test_magic_cifinput.py` (new) --
+  the Technology picker now lists all 6 real `.tech` files (previously
+  2); `ihp-sg13g2-cifin`'s own 23 real ignored layers and 133 real
+  layer hints load correctly; in-GUI edit (including the real
+  int/wildcard round-trips)/New/Delete for both; edits survive Save
+  Edits and a simulated relaunch, keyed by the real fragment file's
+  own name; a real `export_magic_types` write-back lands the edited
+  values in `ihp-sg13g2-cifin.tech` specifically, while
+  `ihp-sg13g2.tech`'s own export -- confirmed byte-identical to the
+  real original -- is completely unaffected; the same real
+  fallback-naming logic `main.py`'s own `export-magic-types` uses
+  finds the fragment too. `tests/test_magic_tech_writer.py` and
+  `main.py export-magic-types`'s own live run both re-confirm all 6
+  real `.tech` files (up from 2) still export byte-identical with zero
+  edits. Verified live via noVNC too: the Technology dropdown lists
+  all 6 real files, `ihp-sg13g2-cifin`'s own CIF Input tab shows two
+  real, working list+form editors side by side, and a live wildcard
+  edit (`0` -> `*`) reflects correctly in the row immediately. Full
+  suite re-run clean (62/62).
 
 ## Future work
 
@@ -2667,13 +2754,18 @@ models, ...), not just read/display layers. Concretely, still open:
   survives `File > Save Edits` and a simulated relaunch, and a real
   `main.py export-magic-types` write-back afterward contains exactly
   those edited values. **Deliberately still out of scope this pass**
-  (documented honestly, not silently dropped): the genuinely harder
-  mini-DSL sections (`cifoutput`/`cifinput`/`drc`/`extract`, nine real
-  sub-tabs combined) -- none of these fit the "one flat entry per line"
-  shape this pass's shared machinery relies on; each would need its
-  own real editor design, real separate future work. (Styles/Compose/
-  Connect, once also in this list, are done -- see the dedicated
-  changelog entries below; Compose/Connect turned out to be exactly as
+  (documented honestly, not silently dropped): `CifInputRecipe`
+  (cifinput's own real `layer`/`templayer` recipe blocks) and `CifLayer`
+  (cifoutput's own real layer/datatype mapping), plus `drc`/`extract`'s
+  own remaining mini-DSL content -- none of these fit the "one flat
+  entry per line" shape this pass's shared machinery relies on (both
+  `CifInputRecipe`/`CifLayer` specifically merge real content across
+  more than one non-contiguous real block sharing the same name, a
+  genuinely harder write-back shape); each would need its own real
+  editor design, real separate future work. (Styles/Compose/Connect/
+  cifinput's own two flat sub-structures, once also in this list, are
+  done -- see the dedicated changelog entries below; Compose/Connect/
+  cifinput's ignored-layers/layer-hints turned out to be exactly as
   flat as Planes/Contacts/Aliases once actually read closely, not the
   harder shape they were originally grouped with.)
 - "Pre-pointed" Magic/KLayout launch guidance is back in

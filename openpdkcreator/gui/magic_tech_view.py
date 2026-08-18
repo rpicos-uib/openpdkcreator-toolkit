@@ -1,9 +1,24 @@
 """Magic Tech tab: real, parsed Magic ``.tech`` data
-(``openpdkcreator/pdklib/magic_tech.py``), one real technology at a time
-(``ihp-sg13g2`` and ``ihp-sg13g2-GDS`` for IHP -- the two genuinely
-separate technologies; the fragment files ``include``d into
-``ihp-sg13g2.tech`` have no own header/name and are skipped in the
-picker since they were never meant to be viewed standalone).
+(``openpdkcreator/pdklib/magic_tech.py``), one real technology at a time.
+
+**The Technology picker now shows every real ``.tech`` file found**,
+not just the two with their own real ``tech``/``version`` header
+(``ihp-sg13g2``/``ihp-sg13g2-GDS`` for IHP). The other four
+(``ihp-sg13g2-cifin``/``-cifout``/``-drc``/``-extract``) are real
+fragment files, ``include``d into ``ihp-sg13g2.tech`` and never meant
+to carry their own header -- ``tech.name`` genuinely comes back empty
+for them, so ``load()`` falls back to the real file's own stem as a
+display name instead (``tech.name or path.stem``), rather than
+inventing a fake real name on the parsed model itself. This used to
+filter them out of the picker entirely; now they're real, independently
+selectable/editable technologies in their own right, since
+``pdklib/magic_tech.py``'s own ``parse_tech_file`` already parses each
+real ``.tech`` file completely on its own regardless of picker
+visibility -- confirmed real, not assumed: none of the four fragments
+has an ``include`` line of its own, so each one's *own* real content is
+safely, fully line-mapped when parsed as that file directly (see
+``pdklib/magic_tech_writer.py``'s own docstring for exactly why this
+matters for write-back).
 
 A sub-`Notebook` per real, tabular data domain -- planes/types/
 contacts/aliases/styles/compose/connect/CIF layers/**CIF Input**/
@@ -12,35 +27,52 @@ Coefficients**/**Extract Devices**/**Extract Misc** (real
 ``cifinput``/``drc``/``extract`` section content -- see
 ``pdklib/magic_tech.py``'s own docstring for exactly what's extracted
 from each and why). **Types**/**Planes**/**Contacts**/**Aliases**/
-**Styles**/**Compose**/**Connect** are editable -- Types keeps its
-own hand-written list + form pane (a real comma-split aliases list, a
-boolean obsolete combo); the other six share one generic, reusable
-`simple_list_editor.SimpleListEditor` instead (flat, plain-string-field
-dataclasses, a clean fit for one shared implementation rather than six
-hand-copies of the same commit-on-switch pattern ``LayersView``/
-``RulesView``/``LefView`` already use) -- Styles' own real `type_name
--> list[style_names]` list field and Compose's own fixed `args`
-3-tuple are each exposed to this string-only editor through a real
-Python property (``StyleEntry.style_names_text``/``ComposeStatement.
-arg1``/``arg2``/``arg3``, getters/setters over the real underlying
-field), the same real "expose a non-string field as a plain string for
-the generic editor" shape ``AliasEntry.members_raw`` already uses
-directly (that one just never needed splitting back into anything more
-structured). Compose/Connect turned out to be exactly as flat as
-Planes/Contacts/Aliases once actually read closely -- a fixed 4-token
-line and a fixed 2-token line respectively, both sitting safely before
-the file's own first real ``include`` line -- despite initially looking
-like they belonged with the harder mini-DSL sections. Every other
-domain stays read-only for now (each would need its own real editor
-design -- the genuinely harder mini-DSL sections aren't a clean fit
-for either existing editor shape; see README's own Future Work).
-Editing is in-memory, same as DRC Rules/LEF pins, with native
-write-back into the real ``.tech`` file via ``pdklib/magic_tech_writer.py``
-(``File > Export Edited Magic Types``/``main.py export-magic-types`` --
-despite the menu/command label, this now writes back all seven
-editable domains at once, not just Types). "View File" opens the real,
-underlying ``.tech`` file directly (``file_view_dialog.view_file_dialog``),
-which *can* be edited, as raw text.
+**Styles**/**Compose**/**Connect**/**CIF Input**'s own two flat
+sub-panes (ignored layers, layer hints) are editable -- Types keeps
+its own hand-written list + form pane (a real comma-split aliases
+list, a boolean obsolete combo); every other one shares one generic,
+reusable `simple_list_editor.SimpleListEditor` instead (flat,
+plain-string-field dataclasses, a clean fit for one shared
+implementation rather than a hand-copy per domain of the same
+commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
+already use) -- a non-string real field is always exposed to this
+string-only editor through a real Python property, never edited
+directly: Styles' own real `type_name -> list[style_names]` list field
+(``StyleEntry.style_names_text``), Compose's own fixed `args` 3-tuple
+(``ComposeStatement.arg1``/``arg2``/``arg3``), and CIF Input's own real
+`int`/`int | None` fields -- the first ``int``-typed editable fields
+anywhere in this module (``CifInputLayerHint.gds_layer_text``/
+``gds_datatype_text``, the latter also round-tripping the file's own
+real wildcard ``*`` convention) -- all the same real "expose a
+non-string field as a plain string for the generic editor" shape
+``AliasEntry.members_raw`` already uses directly (that one just never
+needed converting back into anything more structured). Compose/Connect
+turned out to be exactly as flat as Planes/Contacts/Aliases once
+actually read closely -- a fixed 4-token line and a fixed 2-token line
+respectively -- despite initially looking like they belonged with the
+harder mini-DSL sections; CIF Input's own ignored-layers/layer-hints
+tables are just as flat individually, but real-world messier in two
+ways neither of those was: they share one real section with each other
+(and with the real, still-read-only ``layer``/``templayer`` recipe
+blocks -- see ``pdklib/magic_tech_writer.py``'s own docstring for how
+write-back handles a shared section), and they don't even live in the
+same real file as most of what's editable above (see this docstring's
+own opening paragraph). ``CifInputRecipe`` (the real recipe blocks
+themselves) and ``CifLayer`` (cifoutput's own real layer/datatype
+mapping) both stay read-only for now -- both merge real content across
+more than one, non-contiguous real block sharing the same name, a
+genuinely harder write-back shape none of the flat domains above have
+needed to solve. Every other domain also stays read-only (each would
+need its own real editor design -- the genuinely harder mini-DSL
+sections aren't a clean fit for either existing editor shape; see
+README's own Future Work). Editing is in-memory, same as DRC Rules/LEF
+pins, with native write-back into the real ``.tech`` file via
+``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic Types``/
+``main.py export-magic-types`` -- despite the menu/command label, this
+now writes back every editable domain at once, not just Types). "View
+File" opens the real, underlying ``.tech`` file directly
+(``file_view_dialog.view_file_dialog``), which *can* be edited, as raw
+text.
 """
 
 from __future__ import annotations
@@ -180,29 +212,44 @@ class MagicTechView(ttk.Frame):
         self.extract_misc_tree = self._make_tab(notebook, "Extract Misc", columns, (110, 500))
 
     def _build_cifinput_tab(self, notebook: ttk.Notebook):
+        """Real, editable list+form panes for cifinput's own two flat
+        sub-structures, side by side -- unlike every other
+        ``SimpleListEditor`` use in this file, these two share one
+        real ``cifinput``...``end`` section (with each other, and with
+        every real, still-read-only ``layer``/``templayer`` recipe
+        block) rather than each owning an exclusive section; see
+        ``pdklib/magic_tech_writer.py``'s own docstring for how
+        write-back handles that. Real recipe content (``CifInputRecipe``)
+        stays read-only, in its own separate ``CIF Input Recipes`` tab,
+        unchanged."""
+
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="CIF Input")
         frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(1, weight=2)
-        frame.rowconfigure(1, weight=1)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(0, weight=1)
 
-        ttk.Label(frame, text="Ignored layers (real, on CIF/GDS read):").grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
+        ignore_frame = ttk.Frame(frame)
+        ignore_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        self.cifinput_ignore_editor = SimpleListEditor(
+            ignore_frame, [("name", "Ignored Layer", 200)],
+            lambda: magic_tech_mod.CifInputIgnoredLayer(name="NEWLAYER"),
+            entry_label="Ignored Layer",
+            help_text="Real cifinput 'ignore LAYERNAME' -- skipped entirely on CIF/GDS read.",
         )
-        self.cifinput_ignore_tree = ttk.Treeview(frame, columns=("layer",), show="headings")
-        self.cifinput_ignore_tree.heading("layer", text="Layer")
-        self.cifinput_ignore_tree.column("layer", width=200, anchor="w")
-        self.cifinput_ignore_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+        self.cifinput_ignore_editor.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Layer hints (real, standalone 'calma NAME L D' table):").grid(
-            row=0, column=1, sticky="w"
+        hints_frame = ttk.Frame(frame)
+        hints_frame.grid(row=0, column=1, sticky="nsew")
+        self.cifinput_hints_editor = SimpleListEditor(
+            hints_frame,
+            [("name", "Name", 160), ("gds_layer_text", "GDS Layer", 90), ("gds_datatype_text", "GDS Datatype", 90)],
+            lambda: magic_tech_mod.CifInputLayerHint(name="NEWLAYER", gds_layer=0, gds_datatype=0),
+            entry_label="Layer Hint",
+            help_text="Real cifinput 'calma NAME LAYER DATATYPE' -- standalone (not nested in a recipe). "
+                       "Datatype '*' means any.",
         )
-        hint_columns = ("name", "gds_layer", "gds_datatype")
-        self.cifinput_hints_tree = ttk.Treeview(frame, columns=hint_columns, show="headings")
-        for col, width in zip(hint_columns, (200, 90, 90)):
-            self.cifinput_hints_tree.heading(col, text=col.replace("_", " ").title())
-            self.cifinput_hints_tree.column(col, width=width, anchor="w")
-        self.cifinput_hints_tree.grid(row=1, column=1, sticky="nsew")
+        self.cifinput_hints_editor.pack(fill="both", expand=True)
 
     def _make_tab(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -332,6 +379,8 @@ class MagicTechView(ttk.Frame):
         self.styles_editor.commit_pending_edits()
         self.compose_editor.commit_pending_edits()
         self.connect_editor.commit_pending_edits()
+        self.cifinput_ignore_editor.commit_pending_edits()
+        self.cifinput_hints_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -354,14 +403,30 @@ class MagicTechView(ttk.Frame):
     def collect_connect_by_tech(self) -> dict[str, list[magic_tech_mod.ConnectRule]]:
         return {name: tech.connect for name, tech in self.technologies.items()}
 
+    def collect_cifinput_ignored_layers_by_tech(self) -> dict[str, list[magic_tech_mod.CifInputIgnoredLayer]]:
+        return {name: tech.cifinput_ignored_layers for name, tech in self.technologies.items()}
+
+    def collect_cifinput_layer_hints_by_tech(self) -> dict[str, list[magic_tech_mod.CifInputLayerHint]]:
+        return {name: tech.cifinput_layer_hints for name, tech in self.technologies.items()}
+
     # -- data ---------------------------------------------------------------
 
     def load(self):
         self.technologies = {}
         for path in magic_tech_mod.find_tech_files(self.pdk_root):
             tech = magic_tech_mod.parse_tech_file(path)
-            if tech.name:
-                self.technologies[tech.name] = tech
+            # A real fragment file (ihp-sg13g2-cifin.tech/-cifout.tech/
+            # -drc.tech/-extract.tech) has no own tech/version header,
+            # so tech.name comes back empty -- falls back to the real
+            # file's own stem so it's still selectable (previously
+            # silently skipped entirely), rather than inventing a fake
+            # tech.name on the parsed model itself. This is what makes
+            # cifinput's own real ignored-layers/layer-hints tables
+            # editable at all: their real write-back target is that
+            # fragment file directly, not ihp-sg13g2.tech (see
+            # pdklib/magic_tech_writer.py's own docstring).
+            display_name = tech.name or path.stem
+            self.technologies[display_name] = tech
 
         names = sorted(self.technologies)
         self.tech_combo["values"] = names
@@ -380,9 +445,11 @@ class MagicTechView(ttk.Frame):
         self.styles_editor.commit_pending_edits()
         self.compose_editor.commit_pending_edits()
         self.connect_editor.commit_pending_edits()
+        self.cifinput_ignore_editor.commit_pending_edits()
+        self.cifinput_hints_editor.commit_pending_edits()
         for tree in (
             self.cif_tree,
-            self.cifinput_ignore_tree, self.cifinput_hints_tree, self.cifinput_recipes_tree,
+            self.cifinput_recipes_tree,
             self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
             self.extract_coeff_tree, self.extract_devices_tree, self.extract_misc_tree,
@@ -399,6 +466,8 @@ class MagicTechView(ttk.Frame):
             self.styles_editor.set_entries(None)
             self.compose_editor.set_entries(None)
             self.connect_editor.set_entries(None)
+            self.cifinput_ignore_editor.set_entries(None)
+            self.cifinput_hints_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -410,14 +479,11 @@ class MagicTechView(ttk.Frame):
         self.styles_editor.set_entries(tech.styles)
         self.compose_editor.set_entries(tech.compose)
         self.connect_editor.set_entries(tech.connect)
+        self.cifinput_ignore_editor.set_entries(tech.cifinput_ignored_layers)
+        self.cifinput_hints_editor.set_entries(tech.cifinput_layer_hints)
         for cif_layer in tech.cif_layers:
             pairs = ", ".join(f"{layer}/{datatype}" for layer, datatype in cif_layer.gds_pairs)
             self.cif_tree.insert("", "end", values=(cif_layer.name, pairs))
-        for layer_name in tech.cifinput_ignored_layers:
-            self.cifinput_ignore_tree.insert("", "end", values=(layer_name,))
-        for hint in tech.cifinput_layer_hints:
-            datatype = "*" if hint.gds_datatype is None else hint.gds_datatype
-            self.cifinput_hints_tree.insert("", "end", values=(hint.name, hint.gds_layer, datatype))
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(

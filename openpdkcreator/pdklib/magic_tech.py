@@ -270,6 +270,22 @@ class CifLayer:
 
 
 @dataclass
+class CifInputIgnoredLayer:
+    """One real 'ignore LAYERNAME' statement from the cifinput section
+    -- a real Magic-type-name to skip entirely on CIF/GDS read. Flat
+    and standalone the same real way ``CifInputLayerHint`` below is
+    (confirmed real: never nested inside a 'layer'/'templayer' recipe
+    block -- ``_parse_cifinput_recipes``'s own docstring already
+    excludes real 'ignore' content from being swept into whichever
+    recipe happened to be open)."""
+
+    name: str
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``)."""
+
+
+@dataclass
 class CifInputLayerHint:
     """One real 'calma NAME L D' statement from the cifinput section --
     unlike cifoutput's own per-recipe CifLayer, this real statement's
@@ -287,6 +303,50 @@ class CifInputLayerHint:
     """``None`` for a real wildcard datatype (the file's own literal
     ``*``, confirmed real -- e.g. ``calma BOUND 189 *`` -- meaning "any
     datatype", not a parsing gap)."""
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``)."""
+
+    @property
+    def gds_layer_text(self) -> str:
+        """A plain-string view of the real ``gds_layer`` int -- the
+        first real ``int``-typed editable field anywhere in this
+        module (every other ``SimpleListEditor``-backed domain so far
+        is all-string). ``SimpleListEditor`` only ever writes a plain
+        string via ``setattr`` -- without this property, editing this
+        field even once would silently replace the real int with a
+        string. A non-numeric mid-edit value is ignored (keeps the
+        last real, valid int) rather than raising out of a Tk trace
+        callback."""
+
+        return str(self.gds_layer)
+
+    @gds_layer_text.setter
+    def gds_layer_text(self, value: str) -> None:
+        try:
+            self.gds_layer = int(value)
+        except ValueError:
+            pass
+
+    @property
+    def gds_datatype_text(self) -> str:
+        """Same real reasoning as ``gds_layer_text``, plus the real
+        wildcard convention: the file's own literal ``*`` round-trips
+        through this property as the literal string ``"*"``, matching
+        ``gds_datatype``'s own real ``None`` meaning exactly."""
+
+        return "*" if self.gds_datatype is None else str(self.gds_datatype)
+
+    @gds_datatype_text.setter
+    def gds_datatype_text(self, value: str) -> None:
+        stripped = value.strip()
+        if stripped == "*":
+            self.gds_datatype = None
+            return
+        try:
+            self.gds_datatype = int(stripped)
+        except ValueError:
+            pass
 
 
 @dataclass
@@ -524,7 +584,7 @@ class MagicTechnology:
     aliases: list[AliasEntry] = field(default_factory=list)
     styles: list[StyleEntry] = field(default_factory=list)
     cif_layers: list[CifLayer] = field(default_factory=list)
-    cifinput_ignored_layers: list[str] = field(default_factory=list)
+    cifinput_ignored_layers: list[CifInputIgnoredLayer] = field(default_factory=list)
     """Real 'ignore LAYERNAME' statements from the cifinput section."""
     cifinput_layer_hints: list[CifInputLayerHint] = field(default_factory=list)
     """Real, standalone 'calma NAME L D' statements from the cifinput
@@ -621,6 +681,39 @@ class MagicTechnology:
     already relies on. Both are flat, one-real-line-per-entry sections
     (``verb arg1 arg2 arg3`` / ``types_a types_b``) -- no special-case
     gap logic needed the way ``styles`` needs for its own header line."""
+    all_parsed_cifinput_ignore_line_nos: list[int] = field(default_factory=list)
+    all_parsed_cifinput_hint_line_nos: list[int] = field(default_factory=list)
+    cifinput_section_start_line: int = 0
+    cifinput_section_end_line: int = 0
+    """Real bookkeeping for ``cifinput``'s own two flat sub-structures
+    (ignored layers, layer hints) -- **a real structural difference
+    from every other editable domain above**: ``cifinput`` doesn't live
+    in ``ihp-sg13g2.tech`` itself, it's spliced in from a separate real
+    file, ``ihp-sg13g2-cifin.tech``, via ``include``. When parsed *as
+    part of* ``ihp-sg13g2.tech``'s own combined view, its real lines
+    sit well past that file's own ``safe_through`` boundary (the first
+    real ``include`` line), so ``line_no``/these section bounds
+    correctly come back ``0`` there -- refusing to guess, not a bug --
+    and write-back for that parse correctly leaves this domain
+    untouched. ``ihp-sg13g2-cifin.tech`` is also independently
+    parseable as its own real file, though (``find_tech_files`` globs
+    it too, same as every other real ``.tech`` file) -- confirmed to
+    have no real ``include`` line of its own, so *that* parse's own
+    ``cifinput`` content **is** safely, fully mappable, using the exact
+    same machinery. The only real gap this closes is visibility:
+    ``ihp-sg13g2-cifin.tech`` has no real ``tech``/``version`` header
+    of its own, so it used to be silently filtered out of the
+    Technology picker entirely; ``gui/magic_tech_view.py`` now falls
+    back to the real file's own stem as a display name so it (and
+    every other nameless fragment) shows up and can be selected,
+    without inventing a fake real ``tech.name``. Both sub-structures
+    share these same section bounds (one real ``cifinput``...``end``
+    block, confirmed real: neither is nested inside a ``layer``/
+    ``templayer`` recipe block) -- ``pdklib/magic_tech_writer.py``'s
+    own ``render_tech_file`` was generalized to combine multiple,
+    independently-tracked sub-structures into one real patch pass over
+    a shared section, not two separate, mutually-clobbering passes over
+    the same real lines."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -924,28 +1017,30 @@ def _parse_cifoutput_layers(lines: list[str]) -> list[CifLayer]:
     return list(by_name.values())
 
 
-def _parse_cifinput_ignored_layers(lines: list[str]) -> list[str]:
-    names = []
-    for line in lines:
-        match = _CIFINPUT_IGNORE_RE.match(line)
-        if match:
-            names.append(match.group(1))
-    return names
+def _parse_cifinput_ignore_line(stripped: str) -> CifInputIgnoredLayer | None:
+    match = _CIFINPUT_IGNORE_RE.match(stripped)
+    if not match:
+        return None
+    return CifInputIgnoredLayer(name=match.group(1))
 
 
-def _parse_cifinput_layer_hints(lines: list[str]) -> list[CifInputLayerHint]:
-    hints = []
-    for line in lines:
-        match = _CIFINPUT_CALMA_RE.match(line)
-        if match:
-            datatype_raw = match.group(3)
-            hints.append(
-                CifInputLayerHint(
-                    name=match.group(1), gds_layer=int(match.group(2)),
-                    gds_datatype=None if datatype_raw == "*" else int(datatype_raw),
-                )
-            )
-    return hints
+def _parse_cifinput_ignored_layers_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "cifinput", safe_through, _parse_cifinput_ignore_line)
+
+
+def _parse_cifinput_hint_line(stripped: str) -> CifInputLayerHint | None:
+    match = _CIFINPUT_CALMA_RE.match(stripped)
+    if not match:
+        return None
+    datatype_raw = match.group(3)
+    return CifInputLayerHint(
+        name=match.group(1), gds_layer=int(match.group(2)),
+        gds_datatype=None if datatype_raw == "*" else int(datatype_raw),
+    )
+
+
+def _parse_cifinput_hints_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "cifinput", safe_through, _parse_cifinput_hint_line)
 
 
 def _parse_cifinput_recipes(lines: list[str]) -> list[CifInputRecipe]:
@@ -1185,8 +1280,17 @@ def parse_tech_file(path: Path) -> MagicTechnology:
         _parse_styles_with_lines(lines, safe_through)
     )
     tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
-    tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))
-    tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))
+    (
+        tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos,
+        tech.cifinput_section_start_line, tech.cifinput_section_end_line,
+    ) = _parse_cifinput_ignored_layers_with_lines(lines, safe_through)
+    tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _cifinput_start2, _cifinput_end2 = (
+        _parse_cifinput_hints_with_lines(lines, safe_through)
+    )
+    # _cifinput_start2/_cifinput_end2 are the exact same real section
+    # bounds as above (one shared cifinput...end block) -- discarded,
+    # not asserted equal, matching this module's own "don't guess, but
+    # don't over-verify either" discipline elsewhere.
     tech.cifinput_recipes = _parse_cifinput_recipes(sections.get("cifinput", []))
     tech.compose, tech.all_parsed_compose_line_nos, tech.compose_section_start_line, tech.compose_section_end_line = (
         _parse_compose_with_lines(lines, safe_through)
