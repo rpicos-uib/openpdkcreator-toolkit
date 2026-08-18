@@ -1,5 +1,6 @@
-# Real, third-party IHP PDK data -- fetched locally via ihp/fetch.py,
-# never committed. See docs/ihp_vs_open_pdks.md and README.md.
+# Real, third-party IHP PDK data -- fetched locally via
+# pdklib/fetch.py, never committed. See docs/ihp_vs_open_pdks.md and
+# README.md.
 data/
 
 # This user's own saved edits (DRC Rules/Magic Types/LEF pins) -- see
@@ -28,3 +29,8 @@ __pycache__/
 # shareable content, same reasoning as data/saves/export/ above.
 shell_env/
 openMemristorPDK/
+
+# Real, generated ngspice/xschem simulation output (e.g. a netlist
+# exported from a real .sch) -- derived, not this project's own
+# original code, same reasoning as data/saves/export/ above.
+simulations/
