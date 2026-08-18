@@ -738,6 +738,7 @@ class App(ttk.Frame):
             magic_extract_plane_order=self.magic_tech_view.collect_extract_plane_order_by_tech(),
             magic_extract_resist=self.magic_tech_view.collect_extract_resist_by_tech(),
             magic_extract_cap_coefficients=self.magic_tech_view.collect_extract_cap_coefficients_by_tech(),
+            magic_extract_devices=self.magic_tech_view.collect_extract_devices_by_tech(),
             layers=self._layers_by_lyp_path(),
         )
         self.status.set(f"Saved edits to {path}")
@@ -1180,6 +1181,10 @@ class App(ttk.Frame):
                 tech = self.magic_tech_view.technologies.get(tech_name)
                 if tech is not None:
                     tech.extract_cap_coefficients = coefficients
+            for tech_name, devices in saved.magic_extract_devices.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.extract_devices = devices
             self.magic_tech_view._refresh_all()
             self.apply_saved_lef_pin_overrides(saved.lef_pins)
             self.lef_view._refresh_all()

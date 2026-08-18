@@ -2943,6 +2943,65 @@ editor yet -- see Future Work.
   the edited value in `ihp-sg13g2-extract.tech` specifically, leaving
   `ihp-sg13g2.tech`'s own export byte-identical. Full suite re-run
   clean (68/68).
+- **Magic Tech write-back extended to extract's own `ExtractDevice`
+  lines** (real `device <class> <model> <type> ...` statements) -- the
+  thirteenth editable domain, the fifth and final real group sharing
+  the `extract` section, and **the one genuinely harder shape among
+  them**: this is the first (and only) real extract-section construct
+  whose own real entries can span more than one real physical line (a
+  trailing `\` continuation -- confirmed real for 5 of the real 50
+  entries, every real `msubcircuit` MOSFET), so it couldn't reuse
+  `_scan_single_line_section`'s own one-physical-line-per-entry
+  assumption every other domain in this section relies on. Every real
+  extract-section construct this parser recognizes is now editable --
+  this section has no remaining read-only content of its own.
+  **Investigated and modeled before writing any write-back code**:
+  `ExtractDevice` gained a real `(start_line, end_line)` *range*
+  instead of a single `line_no`, mirroring `pdklib/lef.py`'s own
+  `LefPin.start_line`/`LefMacro.all_parsed_pin_ranges` real
+  range-tracking precedent rather than inventing a new shape; a new
+  `_parse_extract_devices_with_lines` (`pdklib/magic_tech.py`)
+  accumulates a pending real device's own text across however many
+  real physical lines it spans, the same real `pending` accumulator
+  shape `find_cells` already uses for Liberty's own multi-line
+  `values ( ...)` construct. **`pdklib/magic_tech_writer.py`'s own
+  shared `_render_section_patch` was generalized to merge a real
+  *ranged* group into the same combined pass** alongside the section's
+  four existing flat, single-line groups -- a real, deliberate
+  generalization, not a special-cased bolt-on: a flat group's own
+  single line is treated as a trivial `(line, line)` range, so both
+  kinds sort and gap-fill together in one real, unified pass; every
+  other domain's own call site is unaffected (an empty `range_groups`
+  default). If a real, unchanged multi-line entry's own fields are
+  genuinely unedited, its own original wrapping and tab indentation
+  are preserved completely verbatim across however many real lines it
+  spans; a real, deliberate edit collapses it to one freshly formatted
+  line instead -- no attempt is made to reproduce the original
+  author's own real line-wrapping choice, the same "don't guess
+  further" real formatting discipline every other regenerated line in
+  this module already follows. `ExtractDevice.rest` (everything after
+  `type_name`, a mix of real terminal-layer references and `key=value`
+  parameters) is exposed to the generic editor via `rest_text`. **A
+  real, confirmed structural fact corrected along the way**: a real
+  `type_name` *can* repeat too (e.g. `pfet`/`nfet`/`hvpfet`/`hvnfet`
+  each appear as both a real `msubcircuit` and a real `mosfet` entry)
+  -- a different real reason than a PVT corner (two distinct real
+  device classes modeling the same real type), handled identically:
+  every real occurrence is its own independent, individually-ranged
+  entry. Verified for real, driven: `tests/test_magic_extract_devices.py`
+  (new) -- all 50 real entries load, range-tracked (45 single-line + 5
+  real two-line-wrapped, confirmed exact); a real, wrapped entry's own
+  fields join correctly across its two real physical lines; no-edit
+  export of `ihp-sg13g2-extract.tech` stays byte-identical now that a
+  ranged group shares the section's own patch pass;
+  `ihp-sg13g2.tech`'s own export (where this domain's own bounds
+  correctly come back `0`) stays byte-identical too; editing a real,
+  wrapped entry collapses it to one fresh line while every *other* real
+  wrapped entry keeps its own genuine two-line wrap untouched; in-GUI
+  `rest_text` edit/New/Delete round-trip correctly; the edit survives
+  `File > Save Edits` and a simulated relaunch; a real write-back lands
+  the edited value in `ihp-sg13g2-extract.tech` specifically. Full
+  suite re-run clean (69/69).
 
 ## Future work
 
@@ -2965,13 +3024,17 @@ models, ...), not just read/display layers. Concretely, still open:
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
   `extract`'s own `contact`/`devresist`/`antenna`/`disconnect`/
   `substrate` statements, its own `planeorder` lines, its own `resist`
-  lines, and its own `default*` cap-coefficient lines are now editable
-  with real write-back too (see the dedicated changelog entries
-  above) -- editable despite unknown argument semantics, same "don't
-  guess further, edit raw and positional" discipline
-  `ComposeStatement` already established. `device` alone stays
-  read-only in this same section (real backslash-continued lines make
-  it genuinely less uniform than these four domains' own flat shape).
+  lines, its own `default*` cap-coefficient lines, and its own
+  `device` lines are now editable with real write-back too (see the
+  dedicated changelog entries above) -- editable despite unknown
+  argument semantics, same "don't guess further, edit raw and
+  positional" discipline `ComposeStatement` already established.
+  `device` needed a real, deliberate generalization of the shared
+  write-back machinery first (a real `(start_line, end_line)` range
+  instead of a single `line_no`, since its own real entries can span
+  more than one real physical line via backslash continuation) --
+  every real construct this parser recognizes in `extract` is now
+  editable, no read-only content remains in that section.
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

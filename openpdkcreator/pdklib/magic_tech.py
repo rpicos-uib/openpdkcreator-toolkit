@@ -677,15 +677,40 @@ class ExtractDevice:
     entries); everything after is kept raw and positional (a mix of
     real terminal-layer references and 'key=value' parameter mappings)
     -- same 'don't guess further semantics' discipline as
-    ``ExtractCapCoefficient``. Real lines can wrap across multiple
-    physical lines with a trailing '\\' -- joined first via
-    ``_join_backslash_continuations``, the same helper the ``drc``
-    section's own real wrapped statements already use."""
+    ``ExtractCapCoefficient``. **Real lines can wrap across multiple
+    physical lines with a trailing '\\'** (5 of the real 50 entries do,
+    confirmed real, not assumed -- every real MOSFET ``msubcircuit``
+    entry) -- a genuinely different real shape from every other
+    editable ``extract``-section domain, none of which ever wrap. Kept
+    as a real, source-mapped *range* (``start_line``/``end_line``),
+    not a single ``line_no`` the way every flat, one-physical-line
+    domain here uses, mirroring ``pdklib/lef.py``'s own
+    ``LefPin.start_line``/``LefMacro.all_parsed_pin_ranges`` real
+    range-tracking precedent rather than inventing a new shape."""
 
     devclass: str
     model: str
     type_name: str
     rest: tuple[str, ...]
+    start_line: int = 0
+    end_line: int = 0
+    """The real, 1-indexed line range this entry's own real source
+    spans (both inclusive) -- a single-line real entry has
+    ``start_line == end_line``; a real, backslash-wrapped one spans
+    more than one. ``0`` when not safely mappable back to real file
+    line numbers (see ``_safe_prefix_line_count``), same as every
+    other domain's own ``line_no``."""
+
+    @property
+    def rest_text(self) -> str:
+        """A plain-string view of ``rest`` -- same real reason
+        ``ExtractMiscStatement.args_text`` exists."""
+
+        return " ".join(self.rest)
+
+    @rest_text.setter
+    def rest_text(self, value: str) -> None:
+        self.rest = tuple(value.split())
 
 
 @dataclass
@@ -894,41 +919,57 @@ class MagicTechnology:
     all_parsed_extract_plane_order_line_nos: list[int] = field(default_factory=list)
     all_parsed_extract_resist_line_nos: list[int] = field(default_factory=list)
     all_parsed_extract_cap_coefficient_line_nos: list[int] = field(default_factory=list)
+    all_parsed_extract_device_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real device's own ``(start_line, end_line)`` range as
+    originally parsed, in real file order -- the range-based analogue
+    of ``all_parsed_extract_misc_line_nos``/etc. above, mirroring
+    ``pdklib/lef.py``'s own ``LefMacro.all_parsed_pin_ranges``: used by
+    ``pdklib/magic_tech_writer.py`` to tell a real deleted device apart
+    from a comment/blank-line gap, the same way the flat domains' own
+    ``all_line_nos`` lists are, generalized from a single line to a
+    real, possibly multi-line span."""
     extract_section_start_line: int = 0
     extract_section_end_line: int = 0
-    """Real bookkeeping for the ``extract`` section's own four flat,
+    """Real bookkeeping for the ``extract`` section's own five
     editable sub-structures, ``ExtractMiscStatement`` (``contact``/
     ``devresist``/``antenna``/``disconnect``/``substrate``),
     ``ExtractPlaneOrder`` (``planeorder``), ``ExtractResist``
-    (``resist``), and ``ExtractCapCoefficient`` (the four
-    ``default*`` directives) -- **structurally the same real "spliced
-    in from a separate real file" situation as cifinput/cifoutput
-    above**: the real ``extract`` section doesn't live in
-    ``ihp-sg13g2.tech`` itself, it's spliced in from
+    (``resist``), ``ExtractCapCoefficient`` (the four ``default*``
+    directives), and ``ExtractDevice`` (``device``) -- **structurally
+    the same real "spliced in from a separate real file" situation as
+    cifinput/cifoutput above**: the real ``extract`` section doesn't
+    live in ``ihp-sg13g2.tech`` itself, it's spliced in from
     ``ihp-sg13g2-extract.tech`` via ``include`` (confirmed real: that
     fragment file has no real ``include`` line of its own, so its own
     content is safely, fully mappable when parsed directly -- same
     resolution as cifinput/cifoutput, no new mechanism needed). All
-    four sub-structures share these same section bounds (one real
+    five sub-structures share these same section bounds (one real
     ``extract``...``end`` block) the same way cifinput's own
     ignored-layers/layer-hints tables already share one section -- see
     ``pdklib/magic_tech_writer.py``'s own docstring for how write-back
-    handles a section with more than one independently-tracked group.
-    The only real extract-section construct this parser also
-    recognizes but still leaves read-only is ``device`` -- see this
-    module's own docstring for why (real backslash-continued lines
-    make it genuinely less uniform than these four domains' own flat,
-    single-line shape). ``resist`` and ``ExtractCapCoefficient``'s own
-    ``default*`` directives can each repeat once per real
-    ``variants (...)`` corner block with a different value each time
-    (confirmed real: IHP's own ``hvndiffres/active`` and
-    ``defaultsidewall allpoly active`` both appear three times) --
-    modeled the same way ``ExtractMiscStatement``'s own repeated
-    ``contact`` rows already are, as independent, individually-tracked
-    rows, no attempt to resolve which corner a given row belongs to;
-    ``planeorder`` alone is confirmed real to sit before the section's
-    own first real ``variants (...)`` line, so it never has this real
-    per-corner repeat."""
+    handles a section with more than one independently-tracked group,
+    now generalized further to also merge a real *ranged* group
+    (``ExtractDevice``) into that same combined pass. Every real
+    extract-section construct this parser recognizes is now editable
+    -- this section has no remaining read-only real content of its own
+    (see this module's own docstring for exactly what's extracted).
+    ``resist`` and ``ExtractCapCoefficient``'s own ``default*``
+    directives can each repeat once per real ``variants (...)`` corner
+    block with a different value each time (confirmed real: IHP's own
+    ``hvndiffres/active`` and ``defaultsidewall allpoly active`` both
+    appear three times) -- modeled the same way ``ExtractMiscStatement``'s
+    own repeated ``contact`` rows already are, as independent,
+    individually-tracked rows, no attempt to resolve which corner a
+    given row belongs to; ``planeorder`` alone is confirmed real to sit
+    before the section's own first real ``variants (...)`` line, so it
+    never repeats this way. ``device``'s own real ``type_name`` *can*
+    repeat too (confirmed real: e.g. ``pfet``/``nfet``/``hvpfet``/
+    ``hvnfet`` each appear as both a real ``msubcircuit`` and a real
+    ``mosfet`` entry) -- a different real reason than a PVT corner
+    (two distinct real device classes modeling the same real type),
+    handled the exact same way regardless: every real occurrence is
+    its own independent, individually-ranged entry, same as
+    ``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -1482,19 +1523,78 @@ def _parse_extract_cap_coefficients_with_lines(lines: list[str], safe_through: i
     return _scan_single_line_section(lines, "extract", safe_through, _parse_cap_coefficient_line)
 
 
-def _parse_extract_devices(lines: list[str]) -> list[ExtractDevice]:
-    entries = []
-    for line in _join_backslash_continuations(lines):
-        stripped = line.strip()
-        if not stripped.startswith("device "):
+def _parse_device_text(joined: str) -> ExtractDevice | None:
+    parts = joined.split()
+    if len(parts) < 4 or parts[0] != "device":
+        return None
+    return ExtractDevice(devclass=parts[1], model=parts[2], type_name=parts[3], rest=tuple(parts[4:]))
+
+
+def _parse_extract_devices_with_lines(lines: list[str], safe_through: int):
+    """Real, range-tracked scan for ``device`` -- the one real
+    extract-section construct that spans more than one real physical
+    line (a trailing ``\\`` continuation), so it can't reuse
+    ``_scan_single_line_section``'s own one-line-per-entry assumption.
+    Accumulates a pending real device's own text across however many
+    real physical lines it spans (the same real ``pending`` accumulator
+    shape ``find_cells`` uses for Liberty's own multi-line ``values (
+    ...)`` construct), tracking the real ``(start_line, end_line)``
+    range instead of a single ``line_no``. Returns (entries,
+    all_ranges, section_start, section_end) -- the range-based analogue
+    of ``_scan_single_line_section``'s own return shape."""
+
+    entries: list[ExtractDevice] = []
+    all_ranges: list[tuple[int, int]] = []
+    section_start = section_end = 0
+    in_section = False
+    pending: dict | None = None  # {"start": line_no, "text": str}
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+
+        if pending is not None:
+            piece = stripped[:-1].rstrip() if stripped.endswith("\\") else stripped
+            pending["text"] += " " + piece
+            if not stripped.endswith("\\"):
+                entry = _parse_device_text(pending["text"])
+                safe_start = pending["start"] if pending["start"] and line_no <= safe_through else 0
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+                pending = None
             continue
-        parts = stripped.split()
-        if len(parts) < 4:
+
+        if not in_section:
+            if stripped == "extract":
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
             continue
-        entries.append(
-            ExtractDevice(devclass=parts[1], model=parts[2], type_name=parts[3], rest=tuple(parts[4:]))
-        )
-    return entries
+        if stripped == "end":
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        if stripped.startswith("device "):
+            safe_start = line_no if section_start and line_no <= safe_through else 0
+            if stripped.endswith("\\"):
+                pending = {"start": safe_start, "text": stripped[:-1].rstrip()}
+            else:
+                entry = _parse_device_text(stripped)
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+
+    return entries, all_ranges, section_start, section_end
 
 
 _EXTRACT_MISC_KEYWORDS = ("contact", "devresist", "antenna", "disconnect", "substrate")
@@ -1585,7 +1685,6 @@ def parse_tech_file(path: Path) -> MagicTechnology:
         _parse_connect_with_lines(lines, safe_through)
     )
     tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
-    tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
     (
         tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
         tech.extract_section_start_line, tech.extract_section_end_line,
@@ -1599,11 +1698,14 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.extract_cap_coefficients, tech.all_parsed_extract_cap_coefficient_line_nos, _extract_start4, _extract_end4 = (
         _parse_extract_cap_coefficients_with_lines(lines, safe_through)
     )
-    # _extract_start2/_extract_end2/_extract_start3/_extract_end3/
-    # _extract_start4/_extract_end4 are the exact same real section
-    # bounds as above (one shared extract...end block) -- discarded,
-    # not asserted equal, same "don't guess, but don't over-verify
-    # either" discipline cifinput's own two sub-structures already use.
+    tech.extract_devices, tech.all_parsed_extract_device_ranges, _extract_start5, _extract_end5 = (
+        _parse_extract_devices_with_lines(lines, safe_through)
+    )
+    # _extract_start2/_extract_end2/.../_extract_start5/_extract_end5
+    # are the exact same real section bounds as above (one shared
+    # extract...end block) -- discarded, not asserted equal, same
+    # "don't guess, but don't over-verify either" discipline cifinput's
+    # own two sub-structures already use.
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)

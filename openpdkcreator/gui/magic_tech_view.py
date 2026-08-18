@@ -29,9 +29,11 @@ see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
 flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
-Misc**/**Extract Coefficients**/**Extract**'s own **Plane order** and
-**Sheet resistance** sub-panes are editable -- Types keeps its own
-hand-written list + form pane (a real
+Misc**/**Extract Coefficients**/**Extract Devices**/**Extract**'s own
+**Plane order** and **Sheet resistance** sub-panes are editable --
+every real ``extract``-section construct this module recognizes is now
+editable, no read-only sub-tab remains in that domain. Types keeps its
+own hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
 instead (flat, plain-string-field dataclasses, a clean fit for one
@@ -118,11 +120,27 @@ tuple), exposed to this generic editor through two properties,
 ``args_text``/``values_text`` -- the same "expose a non-string field
 as a plain string" pattern, just applied twice to one entry. A real
 `default*` entry can also repeat once per real ``variants(...)``
-corner block, the same real fact ``resist``/``contact`` share. Every
-other remaining domain stays read-only (each would
-need its own real editor design -- the genuinely harder mini-DSL
-sections aren't a clean fit for any existing editor shape; see
-README's own Future Work). Editing is in-memory, same as
+corner block, the same real fact ``resist``/``contact`` share.
+**Extract Devices** (``ExtractDevice`` -- real
+``device <class> <model> <type> ...`` statements) is the fifth and
+last real group sharing that section, and the only one whose own real
+entries can span more than one real physical line (a trailing ``\\``
+continuation -- confirmed real for 5 of the real 50 entries, every
+real ``msubcircuit`` MOSFET): tracked by a real ``(start_line,
+end_line)`` range rather than a single ``line_no``, mirroring
+``pdklib/lef.py``'s own ``LefMacro.all_parsed_pin_ranges`` real
+range-tracking precedent, and its own trailing ``rest`` tuple is
+exposed via ``rest_text``. An unchanged, real multi-line entry's own
+original wrapping/indentation is preserved completely verbatim; a
+real, deliberate edit collapses it to one freshly formatted line
+rather than attempting to reproduce the original author's own real
+line-wrapping choice. Every real ``extract``-section construct this
+parser recognizes is now editable -- this domain has no remaining
+read-only sub-tab of its own. Every other remaining domain across the
+rest of Magic Tech stays read-only (each would need its own real
+editor design -- the genuinely harder mini-DSL sections aren't a clean
+fit for any existing editor shape; see README's own Future Work).
+Editing is in-memory, same as
 DRC Rules/LEF pins, with native write-back into the real ``.tech``
 file via ``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
@@ -248,7 +266,17 @@ class MagicTechView(ttk.Frame):
                       "A real entry can repeat once per real variants(...) corner block -- each row here is "
                       "its own independently-editable real line, not resolved to a specific corner.",
         )
-        self._build_extract_devices_tab(sub)
+        self.extract_devices_editor = self._build_simple_editor(
+            sub, "Extract Devices",
+            [("devclass", "Devclass", 110), ("model", "Model", 160), ("type_name", "Type", 110),
+             ("rest_text", "Rest", 400)],
+            lambda: magic_tech_mod.ExtractDevice(devclass="mosfet", model="None", type_name="newtype", rest=()),
+            entry_label="Device",
+            help_text="Real extract-section 'device <class> <model> <type> ...' statement. Argument semantics "
+                      "past the first three tokens aren't asserted -- edited raw and positional. A real entry "
+                      "can span more than one real physical line (a trailing '\\' continuation) -- editing it "
+                      "collapses it to one fresh line, the original multi-line wrap isn't reproduced.",
+        )
         self.extract_misc_editor = self._build_simple_editor(
             sub, "Extract Misc", [("directive", "Directive", 110), ("args_text", "Args", 500)],
             lambda: magic_tech_mod.ExtractMiscStatement(directive="contact", args=()),
@@ -290,10 +318,6 @@ class MagicTechView(ttk.Frame):
             help_text="Real extract-section 'planeorder NAME ORDER' line.",
         )
         self.extract_plane_order_editor.pack(fill="both", expand=True)
-
-    def _build_extract_devices_tab(self, notebook: ttk.Notebook):
-        columns = ("devclass", "model", "type_name", "rest")
-        self.extract_devices_tree = self._make_tab(notebook, "Extract Devices", columns, (110, 160, 110, 400))
 
     def _build_cifinput_tab(self, notebook: ttk.Notebook):
         """Real, editable list+form panes for cifinput's own two flat
@@ -473,6 +497,7 @@ class MagicTechView(ttk.Frame):
         self.extract_plane_order_editor.commit_pending_edits()
         self.extract_resist_editor.commit_pending_edits()
         self.extract_coeff_editor.commit_pending_edits()
+        self.extract_devices_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -515,6 +540,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_extract_cap_coefficients_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractCapCoefficient]]:
         return {name: tech.extract_cap_coefficients for name, tech in self.technologies.items()}
+
+    def collect_extract_devices_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractDevice]]:
+        return {name: tech.extract_devices for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -559,10 +587,10 @@ class MagicTechView(ttk.Frame):
         self.extract_plane_order_editor.commit_pending_edits()
         self.extract_resist_editor.commit_pending_edits()
         self.extract_coeff_editor.commit_pending_edits()
+        self.extract_devices_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
-            self.extract_devices_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -583,6 +611,7 @@ class MagicTechView(ttk.Frame):
             self.extract_plane_order_editor.set_entries(None)
             self.extract_resist_editor.set_entries(None)
             self.extract_coeff_editor.set_entries(None)
+            self.extract_devices_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -601,6 +630,7 @@ class MagicTechView(ttk.Frame):
         self.extract_plane_order_editor.set_entries(tech.extract_plane_order)
         self.extract_resist_editor.set_entries(tech.extract_resist)
         self.extract_coeff_editor.set_entries(tech.extract_cap_coefficients)
+        self.extract_devices_editor.set_entries(tech.extract_devices)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -623,10 +653,6 @@ class MagicTechView(ttk.Frame):
             self.drc_tree.insert(
                 "", "end",
                 values=("angles", angle_check.layer, f"{angle_check.degrees}°", "", angle_check.message),
-            )
-        for device in tech.extract_devices:
-            self.extract_devices_tree.insert(
-                "", "end", values=(device.devclass, device.model, device.type_name, " ".join(device.rest)),
             )
 
         summary = (

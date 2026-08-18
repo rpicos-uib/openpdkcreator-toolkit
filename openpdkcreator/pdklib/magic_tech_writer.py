@@ -420,18 +420,70 @@ def _render_cap_coefficient_line(entry: magic_tech_mod.ExtractCapCoefficient, or
     return f"{indent}{entry.directive}{separator}{rest}"
 
 
+def _join_device_lines(lines: list[str]) -> str:
+    """Real backslash-continuation joining for a device's own real
+    line range -- the same real "strip trailing '\\', join with a
+    single space" shape ``pdklib/magic_tech.py``'s own
+    ``_join_backslash_continuations`` uses, reimplemented locally
+    rather than reaching into that module's own private helper across
+    files."""
+
+    pieces = []
+    for line in lines:
+        stripped = line.strip()
+        pieces.append(stripped[:-1].rstrip() if stripped.endswith("\\") else stripped)
+    return " ".join(pieces)
+
+
+def _render_device_range(entry: magic_tech_mod.ExtractDevice, original_lines: list[str] | None) -> list[str]:
+    """The one real extract-section domain whose own real entries can
+    span more than one real physical line (a trailing ``\\``
+    continuation, confirmed real for 5 of the real 50 entries -- every
+    real ``msubcircuit`` MOSFET). If the real, parsed
+    ``devclass``/``model``/``type_name``/``rest`` are genuinely
+    unchanged from the original range, that range's own real lines
+    (wrapping, tab indentation, and all) are preserved completely
+    verbatim; a real, deliberate edit collapses to one freshly
+    formatted line -- no attempt is made to re-wrap edited content back
+    across multiple real lines the way the original author chose to,
+    the same "don't guess further" real formatting discipline every
+    other regenerated (not preserved) line in this module already
+    follows."""
+
+    if original_lines is not None:
+        parts = _join_device_lines(original_lines).split()
+        if len(parts) >= 4 and parts[0] == "device":
+            orig = (parts[1], parts[2], parts[3], tuple(parts[4:]))
+            if orig == (entry.devclass, entry.model, entry.type_name, entry.rest):
+                return list(original_lines)
+    tokens = [entry.devclass, entry.model, entry.type_name, *entry.rest]
+    return [" device " + " ".join(tokens)]
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
+    range_groups: list[tuple[list, list[tuple[int, int]], object]] = (),
 ) -> list[str]:
     """One real section's own patched lines, from its own real keyword
     line through its own real closing ``end`` (both inclusive,
     verbatim) -- shared by every editable domain, see this module's
     own docstring. *groups*: one ``(entries, all_line_nos, render_fn)``
-    tuple per real, independently-tracked sub-structure sharing this
-    section (almost always exactly one; cifinput's own ignored-layers
-    and layer-hints tables share two) -- merged into one real, combined
-    pass over the shared real lines rather than patched independently,
-    which would silently discard whichever group ran second."""
+    tuple per real, independently-tracked, single-physical-line
+    sub-structure sharing this section (almost always exactly one;
+    cifinput's own ignored-layers and layer-hints tables share two) --
+    merged into one real, combined pass over the shared real lines
+    rather than patched independently, which would silently discard
+    whichever group ran second. *range_groups*: the same real idea,
+    generalized for a sub-structure whose own real entries can span
+    more than one real physical line (``ExtractDevice``'s own real
+    backslash-continued lines) -- one ``(entries, all_ranges,
+    render_fn)`` tuple per such group, *all_ranges* a list of real
+    ``(start_line, end_line)`` tuples (both inclusive) rather than
+    single line numbers; *render_fn* here takes ``(entry,
+    original_lines_slice_or_None)`` and returns a real list of lines,
+    not a single line, since an unchanged multi-line real entry's own
+    original wrapping/indentation is preserved verbatim across however
+    many real lines it spans."""
 
     start_idx = start_line - 1
     end_idx = end_line - 1
@@ -440,27 +492,51 @@ def _render_section_patch(
         for entry in entries:
             if entry.line_no:
                 current_by_line[entry.line_no] = (entry, render_fn)
-    all_line_nos = sorted({
-        line_no for _entries, group_line_nos, _render_fn in groups for line_no in group_line_nos
-    })
+    current_by_start: dict[int, tuple] = {}
+    original_end_by_start: dict[int, int] = {}
+    for entries, group_ranges, render_fn in range_groups:
+        for entry in entries:
+            if entry.start_line:
+                current_by_start[entry.start_line] = (entry, render_fn)
+        for start, end in group_ranges:
+            original_end_by_start[start] = end
+
+    # One real, merged, sorted list of (start, end, is_range) blocks --
+    # a flat group's own single line is just a (line, line) block, so
+    # both kinds sort and gap-fill together in one combined pass.
+    blocks = sorted(
+        [(line_no, line_no, False) for _entries, group_line_nos, _render_fn in groups for line_no in group_line_nos]
+        + [(start, end, True) for start, end in original_end_by_start.items()]
+    )
 
     output = [original_lines[start_idx]]  # the section's own keyword line, verbatim
     cursor = start_idx + 1
-    for orig_line_no in all_line_nos:
-        line_idx = orig_line_no - 1
-        output.extend(original_lines[cursor:line_idx])  # verbatim gap (comments/blank lines/other groups)
-        hit = current_by_line.get(orig_line_no)
-        if hit is not None:
-            entry, render_fn = hit
-            output.append(render_fn(entry, original_lines[line_idx]))
-        # else: this real entry was deleted this session -- omit its original line entirely.
-        cursor = line_idx + 1
+    for block_start, block_end, is_range in blocks:
+        start_i, end_i = block_start - 1, block_end - 1
+        output.extend(original_lines[cursor:start_i])  # verbatim gap (comments/blank lines/other groups)
+        if is_range:
+            hit = current_by_start.get(block_start)
+            if hit is not None:
+                entry, render_fn = hit
+                output.extend(render_fn(entry, original_lines[start_i : end_i + 1]))
+            # else: this real entry was deleted this session -- omit its original range entirely.
+        else:
+            hit = current_by_line.get(block_start)
+            if hit is not None:
+                entry, render_fn = hit
+                output.append(render_fn(entry, original_lines[start_i]))
+            # else: this real entry was deleted this session -- omit its original line entirely.
+        cursor = end_i + 1
     output.extend(original_lines[cursor:end_idx])
 
     for entries, _group_line_nos, render_fn in groups:
         for entry in entries:
             if entry.line_no == 0:
                 output.append(render_fn(entry, None))  # an entry added this session
+    for entries, _group_ranges, render_fn in range_groups:
+        for entry in entries:
+            if entry.start_line == 0:
+                output.extend(render_fn(entry, None))  # an entry added this session
 
     output.append(original_lines[end_idx])  # the section's own 'end' line, verbatim
     return output
@@ -471,23 +547,25 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
     original_lines = original_text.splitlines()
 
     candidate_sections = [
-        (tech.planes_section_start_line, tech.planes_section_end_line, [(tech.planes, tech.all_parsed_plane_line_nos, _render_plane_line)]),
-        (tech.types_section_start_line, tech.types_section_end_line, [(tech.types, tech.all_parsed_type_line_nos, _render_type_line)]),
-        (tech.contacts_section_start_line, tech.contacts_section_end_line, [(tech.contacts, tech.all_parsed_contact_line_nos, _render_contact_line)]),
-        (tech.aliases_section_start_line, tech.aliases_section_end_line, [(tech.aliases, tech.all_parsed_alias_line_nos, _render_alias_line)]),
-        (tech.styles_section_start_line, tech.styles_section_end_line, [(tech.styles, tech.all_parsed_style_line_nos, _render_style_line)]),
-        (tech.compose_section_start_line, tech.compose_section_end_line, [(tech.compose, tech.all_parsed_compose_line_nos, _render_compose_line)]),
-        (tech.connect_section_start_line, tech.connect_section_end_line, [(tech.connect, tech.all_parsed_connect_line_nos, _render_connect_line)]),
+        (tech.planes_section_start_line, tech.planes_section_end_line, [(tech.planes, tech.all_parsed_plane_line_nos, _render_plane_line)], []),
+        (tech.types_section_start_line, tech.types_section_end_line, [(tech.types, tech.all_parsed_type_line_nos, _render_type_line)], []),
+        (tech.contacts_section_start_line, tech.contacts_section_end_line, [(tech.contacts, tech.all_parsed_contact_line_nos, _render_contact_line)], []),
+        (tech.aliases_section_start_line, tech.aliases_section_end_line, [(tech.aliases, tech.all_parsed_alias_line_nos, _render_alias_line)], []),
+        (tech.styles_section_start_line, tech.styles_section_end_line, [(tech.styles, tech.all_parsed_style_line_nos, _render_style_line)], []),
+        (tech.compose_section_start_line, tech.compose_section_end_line, [(tech.compose, tech.all_parsed_compose_line_nos, _render_compose_line)], []),
+        (tech.connect_section_start_line, tech.connect_section_end_line, [(tech.connect, tech.all_parsed_connect_line_nos, _render_connect_line)], []),
         (
             tech.cifinput_section_start_line, tech.cifinput_section_end_line,
             [
                 (tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos, _render_cifinput_ignore_line),
                 (tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _render_cifinput_hint_line),
             ],
+            [],
         ),
         (
             tech.cifoutput_section_start_line, tech.cifoutput_section_end_line,
             [(tech.cif_layers, tech.all_parsed_cif_layer_line_nos, _render_cifoutput_calma_line)],
+            [],
         ),
         (
             tech.extract_section_start_line, tech.extract_section_end_line,
@@ -500,6 +578,7 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
                     _render_cap_coefficient_line,
                 ),
             ],
+            [(tech.extract_devices, tech.all_parsed_extract_device_ranges, _render_device_range)],
         ),
     ]
     active_sections = sorted(
@@ -511,10 +590,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
 
     output: list[str] = []
     cursor = 0
-    for start_line, end_line, groups in active_sections:
+    for start_line, end_line, groups, range_groups in active_sections:
         start_idx = start_line - 1
         output.extend(original_lines[cursor:start_idx])  # verbatim gap before this section
-        output.extend(_render_section_patch(original_lines, start_line, end_line, groups))
+        output.extend(_render_section_patch(original_lines, start_line, end_line, groups, range_groups))
         cursor = end_line  # end_line - 1 is the 0-indexed 'end' line, already appended; next gap starts right after.
 
     output.extend(original_lines[cursor:])  # everything after the last patched section, verbatim
