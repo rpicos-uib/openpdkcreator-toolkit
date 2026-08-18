@@ -1,5 +1,5 @@
 """Simulation tab: real, parsed ngspice ``.lib`` model cards
-(``openpdkcreator/ihp/spice_models.py``) -- a file picker over all 32
+(``openpdkcreator/pdklib/spice_models.py``) -- a file picker over all 32
 real, downloaded ``libs.tech/ngspice/models/*.lib`` files, since
 there's no small, fixed set of "the real ones" to enumerate (mirroring
 ``lef_view.py``'s own file-picker shape for the same reason).
@@ -21,7 +21,7 @@ The file picker mirrors ``lef_view.py``'s own **Edit File**/**Create
 File** toggle (``gui/file_picker_utils.py``): typing a real, existing
 relative path opens it (``file_view_dialog.view_file_dialog``); typing
 one that doesn't exist yet writes a real, minimal, valid empty ``.lib``
-skeleton (``ihp/spice_models.py``'s own ``create_new_lib_file``), then
+skeleton (``pdklib/spice_models.py``'s own ``create_new_lib_file``), then
 reloads and selects it.
 """
 
@@ -31,7 +31,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from ..ihp import spice_models as spice_models_mod
+from ..pdklib import spice_models as spice_models_mod
 from .file_picker_utils import handle_action, update_action_button
 
 
@@ -116,7 +116,7 @@ class SpiceModelsView(ttk.Frame):
 
         path = self.lib_files.get(self.file_var.get())
         if path is None:
-            self.summary_var.set("No ngspice .lib data loaded -- has ihp/fetch.py been run?")
+            self.summary_var.set("No ngspice .lib data loaded -- has pdklib/fetch.py been run?")
             self.current = None
             return
 

@@ -1,5 +1,5 @@
 """Simulation tab: real, parsed xschem data
-(``openpdkcreator/ihp/xschem.py``/``ihp/xschem_sch.py``) -- two major
+(``openpdkcreator/pdklib/xschem.py``/``pdklib/xschem_sch.py``) -- two major
 sub-tabs, each with its own file picker (mirroring
 ``lef_view.py``/``spice_models_view.py``'s own file-picker shape --
 no small, fixed set of "the real ones" here either, in either domain):
@@ -40,7 +40,7 @@ immediately reflected in the matching table (Pins/Instances/Wires) and
 in a real write-back export, with no separate "commit" step.
 
 Real write-back for everything above -- geometry included -- via
-``ihp/xschem_writer.py``/``ihp/xschem_sch_writer.py`` (``File >
+``pdklib/xschem_writer.py``/``pdklib/xschem_sch_writer.py`` (``File >
 Export Edited xschem Symbols``/``Schematics``, ``main.py
 export-xschem-sym``/``export-xschem-sch``), including the real,
 narrow class of Schematics entries/files that writer safely refuses
@@ -56,8 +56,8 @@ Each file picker's own combobox is now editable, not a closed real-
 file list: typing a real, existing relative path and its own button
 reads **Edit File** (opens ``file_view_dialog.view_file_dialog``);
 typing one that doesn't exist yet reads **Create File** (writes a
-real, minimal, valid starting file via ``ihp/xschem.py``'s own
-``create_new_sym_file``/``ihp/xschem_sch.py``'s own
+real, minimal, valid starting file via ``pdklib/xschem.py``'s own
+``create_new_sym_file``/``pdklib/xschem_sch.py``'s own
 ``create_new_sch_file``, then reloads and selects it) -- see
 ``gui/file_picker_utils.py``'s own docstring.
 """
@@ -68,8 +68,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from ..ihp import xschem as xschem_mod
-from ..ihp import xschem_sch as xschem_sch_mod
+from ..pdklib import xschem as xschem_mod
+from ..pdklib import xschem_sch as xschem_sch_mod
 from . import geometry_adapters
 from .file_picker_utils import handle_action, update_action_button
 from .geometry_canvas import GeometryCanvas
@@ -218,7 +218,7 @@ class _SymbolsPane(ttk.Frame):
 
         path = self.sym_files.get(self.file_var.get())
         if path is None:
-            self.summary_var.set("No xschem .sym data loaded -- has ihp/fetch.py been run?")
+            self.summary_var.set("No xschem .sym data loaded -- has pdklib/fetch.py been run?")
             self.current = None
             self.pins_editor.set_ports(None)
             self.canvas_view.set_scene(geometry_adapters.Scene())
@@ -487,7 +487,7 @@ class _SchematicsPane(ttk.Frame):
 
         path = self.sch_files.get(self.file_var.get())
         if path is None:
-            self.summary_var.set("No xschem .sch data loaded -- has ihp/fetch.py been run?")
+            self.summary_var.set("No xschem .sch data loaded -- has pdklib/fetch.py been run?")
             self.current = None
             self._load_instance_into_form(None)
             self._load_wire_into_form(None)

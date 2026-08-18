@@ -1,11 +1,11 @@
 """Real DRC Rule write-back -- patches the two real files a KLayout
 DRC-deck rule's editable fields actually live in, mirroring
-``ihp/lef_writer.py``'s own surgical, non-destructive discipline:
+``pdklib/lef_writer.py``'s own surgical, non-destructive discipline:
 
 - ``rule_id``/``description`` live inside the real ``.drc`` Ruby
   script's own ``result_var.output("ID", "description")`` call.
 - ``value`` lives in the real JSON config file's ``drc_rules['KEY']``
-  entry (``ihp/drc.py``'s own extraction already established this
+  entry (``pdklib/drc.py``'s own extraction already established this
   split: the ``.drc`` script never contains a literal numeric
   threshold, only a variable traced back to a JSON lookup via
   ``.um``).
@@ -18,20 +18,20 @@ everything else (surrounding Ruby code, other rules' own ``.output()``
 calls, comments, formatting, every other real JSON entry) stays
 byte-for-byte untouched. ``_locate`` re-derives which real JSON key (if
 any) backs a rule's value, and the exact real ``.output()`` regex
-match, by re-running ``ihp/drc.py``'s own extraction regexes directly
+match, by re-running ``pdklib/drc.py``'s own extraction regexes directly
 against the target line -- not a second, independently-drifting
 implementation of the same fact.
 
 **A real, common wrinkle handled deliberately, not glossed over**: 61
 of IHP's own real ``.output()`` calls have a real ``"<section> : ...
-"`` prefix before the description ``ihp/drc.py`` actually keeps as
+"`` prefix before the description ``pdklib/drc.py`` actually keeps as
 ``DesignRule.description`` (it splits on the real, first ``" : "`` and
 keeps only the suffix). A rule with such a prefix has to have it
 preserved verbatim on write-back -- reconstructing the description from
 ``rule.description`` alone would silently discard that real prefix
 text for over a third of IHP's own real rules.
 
-Rules with real, resolvable provenance (extracted by ``ihp/drc.py``)
+Rules with real, resolvable provenance (extracted by ``pdklib/drc.py``)
 patch back into their own real, original file this way. A
 hand-authored **New Rule** has no such position to patch -- it instead
 gets *generated*, not patched, into a separate, entirely tool-owned
@@ -76,7 +76,7 @@ def _locate(text: str, check_line: int, output_line: int) -> tuple[str | None, r
     """Re-derives the real JSON key (if any) backing this check's
     value, and the real ``.output()`` regex ``Match``, from *text*
     alone (the same real ``.drc`` file's fresh content) -- mirroring
-    ``ihp/drc.py``'s own extraction logic exactly (its own compiled
+    ``pdklib/drc.py``'s own extraction logic exactly (its own compiled
     regexes, imported not duplicated)."""
 
     value_var_to_key: dict[str, str] = {}
@@ -92,7 +92,7 @@ def _locate(text: str, check_line: int, output_line: int) -> tuple[str | None, r
             break
     if value_var is None:
         # Not a width()/space()/sep() result -- check the other real
-        # pattern ihp/drc.py extracts from, .enclosed(outer, value.um,
+        # pattern pdklib/drc.py extracts from, .enclosed(outer, value.um,
         # ...), before giving up on a real JSON key.
         for match in drc_mod._ENCLOSURE_CALL_RE.finditer(text):
             line_no = text.count("\n", 0, match.start()) + 1
@@ -240,7 +240,7 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
 
     Six real ``check_type``s map to a real, single-method KLayout DRC
     shape this project knows how to emit: ``min_width``/``min_spacing``/
-    ``min_enclosure`` (the original three, also the three ``ihp/
+    ``min_enclosure`` (the original three, also the three ``pdklib/
     drc.py``'s own extractor already recognizes coming the other way)
     plus ``min_area``/``min_overlap``/``max_length``, added later --
     grounded in real, local ground truth, not external documentation
@@ -257,7 +257,7 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
     closed**: unlike the original three, these three don't feed
     straight into ``.output()`` anywhere in the real deck the simple
     way ``width()``/``space()``/``enclosed()`` do (confirmed by
-    grepping for it) -- ``ihp/drc.py``'s own extractor still only
+    grepping for it) -- ``pdklib/drc.py``'s own extractor still only
     recognizes the original three coming the other way, so a
     min_area/min_overlap/max_length rule generated here does not yet
     round-trip back through re-extraction the way the original three

@@ -36,7 +36,7 @@ def handle_action(
     parent_widget: tk.Widget, root: Path, file_var: tk.StringVar,
     create_fn: Callable[[Path], None], on_created: Callable[[], None],
 ) -> None:
-    """*create_fn*: one of the real ``ihp/*.py`` ``create_new_*``
+    """*create_fn*: one of the real ``pdklib/*.py`` ``create_new_*``
     functions, called with the real, full target path -- writes real,
     valid starting content or raises. *on_created*: called after a
     real file is successfully created, so the caller can reload its

@@ -2,10 +2,10 @@ import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
 
-from openpdkcreator.ihp import netlist as nl
-from openpdkcreator.ihp import netlist_writer as nlw
-from openpdkcreator.ihp import verilog as vl
-from openpdkcreator.ihp import verilog_writer as vlw
+from openpdkcreator.pdklib import netlist as nl
+from openpdkcreator.pdklib import netlist_writer as nlw
+from openpdkcreator.pdklib import verilog as vl
+from openpdkcreator.pdklib import verilog_writer as vlw
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 

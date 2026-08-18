@@ -1,6 +1,6 @@
 """By Cell tab: a hierarchical, cell-centric view -- for one real cell
 (matched by name across every real view directory under a real
-``libs.ref/<family>/``, via ``openpdkcreator/ihp/cells.py``), see which
+``libs.ref/<family>/``, via ``openpdkcreator/pdklib/cells.py``), see which
 views actually exist (LEF footprint, CDL/SPICE netlist, Verilog
 behavioral model, Liberty timing, GDS layout) and jump straight to
 that cell's own real block inside each one -- rather than hunting
@@ -19,7 +19,7 @@ real ones -- a ``✓`` marks a real view, a ``+`` a project-authored one
 registered via the Library Manager with no real ``libs.ref/``
 counterpart (only for a cell already known from some real view; a
 wholly new, registered-only cell stays the Library Manager's own job,
-not this tab's -- see ``ihp/cells.py``'s own docstring).
+not this tab's -- see ``pdklib/cells.py``'s own docstring).
 
 Defaults to only real, top-level cells (ones with a real LEF macro --
 the physically instantiable ones); a real netlist can contain many more
@@ -38,14 +38,14 @@ domain still deliberately read-only, see README's Future Work. The
 ``pin_editor.PinEditor``, the same widget the **LEF** tab's own "LEF
 Macros" sub-tab uses -- and, critically, the exact same in-memory
 ``LefMacro`` object: both tabs parse through ``App.get_parsed_lef``,
-a single shared, App-owned cache (``ihp/cells.py``'s own
+a single shared, App-owned cache (``pdklib/cells.py``'s own
 ``build_cell_index`` takes an injectable ``get_lef`` hook for exactly
 this), so a pin edited here is immediately visible on the LEF tab too,
 and vice versa -- not two independently-drifting copies of the same
 real pin list.
 
 **GDS**: real, not just a presence flag, when ``klayout.db`` is
-importable (``ihp/gds.py``, lazily imported) -- a real bounding box
+importable (``pdklib/gds.py``, lazily imported) -- a real bounding box
 and per-layer shape count for the selected cell's own real GDS
 structure, shown as a plain text line (not a raw file View, since GDS
 is binary) below the View buttons. Degrades honestly, not silently, if
@@ -53,7 +53,7 @@ is binary) below the View buttons. Degrades honestly, not silently, if
 parsed" rather than pretending there's nothing there.
 
 **CDL/SPICE/Verilog ports** are also real, structured-editable data
-(``ihp/netlist.py``'s ``NetlistPort``/``ihp/verilog.py``'s
+(``pdklib/netlist.py``'s ``NetlistPort``/``pdklib/verilog.py``'s
 ``VerilogPort`` -- real per-port direction from a real CDL
 ``*.PININFO`` comment or real Verilog ``input``/``output``/``inout``
 declarations, honestly blank where the real source has none, e.g.
@@ -72,7 +72,7 @@ Timing** button below the Liberty corner-file list -- real per-pin
 direction/capacitance/function and, for a selected pin, its own real
 timing arcs (related_pin/timing_type/timing_sense/when), *not* the
 real lookup tables (``cell_rise``/``cell_fall``/...) those arcs may
-carry -- see ``ihp/liberty.py``'s own docstring for why those stay
+carry -- see ``pdklib/liberty.py``'s own docstring for why those stay
 read-only. Operates on whichever real corner file is selected in the
 listbox (or the first one, if none is), through the same kind of
 shared cache (``App.get_parsed_liberty``) as every other By Cell
@@ -86,10 +86,10 @@ from pathlib import Path
 from tkinter import ttk
 
 from .. import export as export_mod
-from ..ihp import cells as cells_mod
-from ..ihp import library_index as li_mod
-from ..ihp import netlist as netlist_mod
-from ..ihp import verilog as verilog_mod
+from ..pdklib import cells as cells_mod
+from ..pdklib import library_index as li_mod
+from ..pdklib import netlist as netlist_mod
+from ..pdklib import verilog as verilog_mod
 from .file_view_dialog import view_file_dialog
 from .liberty_dialog import edit_liberty_dialog
 from .list_filter import build_filter_row, matches
@@ -289,7 +289,7 @@ class CellHubView(ttk.Frame):
             self.cells_tree.delete(row)
         family = self.family_var.get()
         if not family:
-            self.summary_var.set("No families found -- has ihp/fetch.py been run?")
+            self.summary_var.set("No families found -- has pdklib/fetch.py been run?")
             self.cell_index = {}
             self._show_cell(None)
             return

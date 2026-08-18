@@ -4,7 +4,7 @@ import tkinter as tk
 from pathlib import Path
 
 from openpdkcreator.gui.app import App
-from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.pdklib import layers as layers_mod
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 

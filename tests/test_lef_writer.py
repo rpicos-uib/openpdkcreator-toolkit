@@ -3,8 +3,8 @@ sys.path.insert(0, "/foss/designs")
 import dataclasses
 from pathlib import Path
 
-from openpdkcreator.ihp import lef as lef_mod
-from openpdkcreator.ihp import lef_writer
+from openpdkcreator.pdklib import lef as lef_mod
+from openpdkcreator.pdklib import lef_writer
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 STDCELL = PDK_ROOT / "libs.ref/sg13g2_stdcell/lef/sg13g2_stdcell.lef"

@@ -2,8 +2,8 @@ import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
 
-from openpdkcreator.ihp import magic_tech as mt
-from openpdkcreator.ihp import magic_tech_writer as mtw
+from openpdkcreator.pdklib import magic_tech as mt
+from openpdkcreator.pdklib import magic_tech_writer as mtw
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 

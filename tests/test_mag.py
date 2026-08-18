@@ -4,7 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from openpdkcreator.ihp import mag as mag_mod
+from openpdkcreator.pdklib import mag as mag_mod
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 TECH_MAGICRC = PDK_ROOT / "libs.tech/magic/ihp-sg13g2.magicrc"

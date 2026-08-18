@@ -1,5 +1,5 @@
 """Library Manager tab -- a Cadence-style Libraries | Cells | Views
-browser over ``ihp/library_index.py``'s own merged real+registered
+browser over ``pdklib/library_index.py``'s own merged real+registered
 index (no separate logic here; this view only calls that module and
 ``eda_tools.py``'s own launch mechanism -- see both modules' own
 docstrings for the real design decisions and the real, source-verified
@@ -46,12 +46,12 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   ``cell_hub_view.py``'s own existing precedent.
 
 **Create** only appears for the seven view kinds with real
-create-from-scratch support (``ihp/library_index.py``'s own
+create-from-scratch support (``pdklib/library_index.py``'s own
 ``CREATABLE_VIEW_KINDS`` -- xschem Symbol/Schematic, Qucs-S
 Symbol/Component, Verilog, Verilog-A, Magic Layout); every other kind
 still gets a real **Add...** button. A created Magic Layout is
 deliberately *not* meant to be edited in this Python GUI -- it writes
-a real, minimal, empty ``.mag`` skeleton (``ihp/mag.py``'s own
+a real, minimal, empty ``.mag`` skeleton (``pdklib/mag.py``'s own
 ``create_new_mag_file``, grounded in Magic's own official file-format
 manual and verified live against the real installed Magic binary),
 then **Open in Magic** is where the real drawing happens; Magic's own
@@ -60,12 +60,12 @@ defaults to ``<project_root>/libraries/<library>/<cell>.<ext>`` (a
 real, tracked, but entirely optional convention -- nothing elsewhere
 requires it). A created **Verilog**/**Verilog-A** view instead defaults
 into the already-established ``user_models/{verilog,veriloga}/``
-convention (``ihp/user_models.py``) -- real, project-authored model
+convention (``pdklib/user_models.py``) -- real, project-authored model
 content, giving it free integration with By Cell's own "User Models"
 column and OSDI-snippet generation. Either way, if the cell being
 created for already has another real/registered view with known real
 pins (LEF, then an xschem symbol, then an existing Verilog/Verilog-A
-module of the same name -- ``ihp/library_index.py``'s own
+module of the same name -- ``pdklib/library_index.py``'s own
 ``infer_ports_for_cell``), the new module/port declaration is
 pre-populated with those real pins instead of an empty template.
 
@@ -73,14 +73,14 @@ pre-populated with those real pins instead of an empty template.
 -- including the six with no real create-from-scratch support -- and
 the file can live anywhere on disk, not just under ``libraries/``.
 This is the whole reason this tab tracks real file *locations*
-(``ihp/library_index.py``) instead of enforcing a fixed directory
+(``pdklib/library_index.py``) instead of enforcing a fixed directory
 convention: a hand-authored LEF, or a file some other tool already
 wrote elsewhere, is just as trackable as something this app created
 itself.
 
 **Automatic tracking**: every real refresh of the Cells pane also
 scans that library's own default ``libraries/<library>/`` directory
-for real files this app didn't itself register yet (``ihp/
+for real files this app didn't itself register yet (``pdklib/
 library_index.py``'s own ``auto_register_new_files``, content-sniffed
 to disambiguate xschem vs. Qucs-S ``.sym`` files -- both share the same
 real extension) and registers them immediately -- so a file some other
@@ -89,7 +89,7 @@ here without an explicit **Add...** click.
 
 **Import from LibMan Project.../Export to LibMan Project...**: real,
 native, bidirectional support for IHP-GmbH's own real LibMan tool's
-own real ``.projects`` file format (``ihp/libman_project.py`` -- a
+own real ``.projects`` file format (``pdklib/libman_project.py`` -- a
 real, bounded parser/writer verified against LibMan's own real,
 fetched C++ source and a real, committed ground-truth fixture for this
 same SG13G2 PDK; see that module's own docstring for the exact
@@ -102,7 +102,7 @@ no LibMan counterpart and is silently skipped (counted, not hidden, in
 the real status-bar summary afterward). Import registers every real
 ``define()`` whose own real path resolves to a real, existing file on
 this machine -- as a normal, openable view kind when this project
-already understands the real file's own extension (``ihp/
+already understands the real file's own extension (``pdklib/
 library_index.py``'s own ``infer_view_kind``, the same real,
 content-sniffed function **Automatic tracking** above already uses),
 or as the new, honestly tracked-but-unopenable **LibMan CORE View**
@@ -120,15 +120,15 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .. import eda_tools
 from .. import export as export_mod
-from ..ihp import libman_project as libman_mod
-from ..ihp import library_index as li_mod
-from ..ihp import mag as mag_mod
-from ..ihp import magic_tech as magic_tech_mod
-from ..ihp import qucs_sym as qucs_sym_mod
-from ..ihp import user_models as user_models_mod
-from ..ihp import verilog as verilog_mod
-from ..ihp import xschem as xschem_mod
-from ..ihp import xschem_sch as xschem_sch_mod
+from ..pdklib import libman_project as libman_mod
+from ..pdklib import library_index as li_mod
+from ..pdklib import mag as mag_mod
+from ..pdklib import magic_tech as magic_tech_mod
+from ..pdklib import qucs_sym as qucs_sym_mod
+from ..pdklib import user_models as user_models_mod
+from ..pdklib import verilog as verilog_mod
+from ..pdklib import xschem as xschem_mod
+from ..pdklib import xschem_sch as xschem_sch_mod
 from .file_view_dialog import view_file_dialog
 from .tooltip import add_help_icon
 
@@ -261,7 +261,7 @@ class LibraryManagerView(ttk.Frame):
             "(define(\"lib\",\"path\"); lines) -- NOT its separate, much heavier Cap'n Proto "
             "'CORE' binary geometry format, which needs LibMan's own converter tools to read. "
             "LibMan is under active development with no version marker in its own file format; "
-            "this is pinned to a specific, real, fetched commit -- see ihp/libman_project.py.",
+            "this is pinned to a specific, real, fetched commit -- see pdklib/libman_project.py.",
         ).pack(side="left", padx=(4, 0))
 
         body = ttk.PanedWindow(self, orient="horizontal")
@@ -548,7 +548,7 @@ class LibraryManagerView(ttk.Frame):
         ext = _EXT_FOR_VIEW_KIND[view_kind]
         # Verilog/Verilog-A views created here default into the
         # already-established ``user_models/`` convention
-        # (``ihp/user_models.py``), not ``libraries/<library>/`` --
+        # (``pdklib/user_models.py``), not ``libraries/<library>/`` --
         # this is real, project-authored model content, and landing it
         # there gives it free integration with By Cell's own "User
         # Models" column and the OSDI-snippet generation, both of which
@@ -556,7 +556,7 @@ class LibraryManagerView(ttk.Frame):
         # ``register_entry`` below still tags it with the current
         # library regardless -- registration is just a grouping label,
         # decoupled from physical file location, matching this whole
-        # index's own real design (see ``ihp/library_index.py``'s own
+        # index's own real design (see ``pdklib/library_index.py``'s own
         # docstring).
         if view_kind == "verilog":
             root = user_models_mod.user_models_root(self.project_root) / user_models_mod.VERILOG_DIRNAME
@@ -621,7 +621,7 @@ class LibraryManagerView(ttk.Frame):
         with no real create-from-scratch support), and the file can
         live anywhere on disk, not just under ``libraries/``. This is
         the whole point of tracking real file *locations* rather than
-        enforcing a fixed directory convention -- see ``ihp/
+        enforcing a fixed directory convention -- see ``pdklib/
         library_index.py``'s own docstring."""
 
         if self.current_library is None or self.current_cell is None:
@@ -705,7 +705,7 @@ class LibraryManagerView(ttk.Frame):
 
     _LIBMAN_EXPORTABLE_KINDS = ("gds", "xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component")
     """Real view kinds LibMan's own real Import doc lists as real,
-    convertible source formats (GDS/Xschem/Qucs -- see ``ihp/
+    convertible source formats (GDS/Xschem/Qucs -- see ``pdklib/
     libman_project.py``'s own docstring for the real, fetched source).
     Every other real kind here (LEF/CDL/SPICE/Verilog/Liberty/Magic
     Layout) has no real LibMan counterpart, so exporting them would

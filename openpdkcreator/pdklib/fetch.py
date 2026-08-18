@@ -14,8 +14,8 @@ out. This directory is ``.gitignore``d -- never committed to this
 project's own git history (see README.md and
 docs/ihp_vs_open_pdks.md for why).
 
-    python3 -m openpdkcreator.ihp.fetch
-    python3 -m openpdkcreator.ihp.fetch --dest /some/other/path
+    python3 -m openpdkcreator.pdklib.fetch
+    python3 -m openpdkcreator.pdklib.fetch --dest /some/other/path
 """
 
 from __future__ import annotations

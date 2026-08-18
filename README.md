@@ -8,6 +8,14 @@ target -- a real, complete PDK instead of a toy example, so every
 parser/editor here is proven against real, messy, full-scale data from
 day one. It will eventually point at other real PDKs too; keep that in
 mind before adding anything that only makes sense for IHP specifically.
+The internal parsing/writing package used to be named `ihp/` for
+exactly that reason -- a naming leftover from when this only targeted
+one real PDK -- and has since been renamed to **`pdklib/`**
+(`openpdkcreator.pdklib`); every real reference throughout this
+README/codebase was updated along with it. Real, external references
+to the actual IHP PDK/company itself (`ihp-sg13g2`, `IHP-GmbH`, the
+real, downloaded deck) are unaffected -- only this project's own
+internal module namespace changed.
 
 A separate, independent project from
 [`OpenPDKCreator`](https://github.com/rpicos-uib/OpenPDKCreator) (the
@@ -118,9 +126,9 @@ A real, honest gap is surfaced both as a legend color and per node.
 Qucs-S Symbols/Components all support creating a brand-new file from
 inside this GUI today** -- each domain's own file picker/toolbar
 gained a **New .lyp File...**/**New .tech File...**/**New DRC
-Deck...**/**Create File** action (`ihp/layers.py`'s
-`create_new_lyp_file`, `ihp/magic_tech.py`'s `create_new_tech_file`,
-`ihp/drc.py`'s `create_new_drc_deck`, `ihp/lef.py`'s
+Deck...**/**Create File** action (`pdklib/layers.py`'s
+`create_new_lyp_file`, `pdklib/magic_tech.py`'s `create_new_tech_file`,
+`pdklib/drc.py`'s `create_new_drc_deck`, `pdklib/lef.py`'s
 `create_new_lef_file`, plus xschem/Qucs-S's own already-existing ones)
 that writes a real, minimal, valid skeleton -- an empty
 `<layer-properties>` root, a `tech`/`version` header plus empty
@@ -132,7 +140,7 @@ against a skeleton the same as against a real, downloaded file.
 **LEF** now also supports a whole new **MACRO**, not just a valid empty
 *library*: the LEF Macros sub-tab's own **New Macro...** action adds a
 real, brand-new, empty macro (pins added afterward through the same
-**New Pin** flow an existing macro already uses); `ihp/lef_writer.py`'s
+**New Pin** flow an existing macro already uses); `pdklib/lef_writer.py`'s
 `render_lef_file` renders it as a whole, freshly-generated block,
 appended after every real, existing macro on export (`ORIGIN`/`SITE`
 still aren't modeled -- real, separate future work). **DRC Rules' New
@@ -141,7 +149,7 @@ Rule is deliberately partial**: a hand-authored rule is genuinely exportable
 `custom_rules.drc`, not just metadata -- but only for the three
 `check_type`s with a real, single-method shape this project knows how
 to emit (`min_width`/`min_spacing`/`min_enclosure`, the same three
-`ihp/drc.py`'s own extractor already recognizes coming the other way);
+`pdklib/drc.py`'s own extractor already recognizes coming the other way);
 every other `check_type`, or a rule referencing a layer name with no
 matching real `Layer`/GDS layer-datatype, still can't be written back
 -- reported by rule ID and reason in the status line, never silently
@@ -152,7 +160,7 @@ template/reference PDK, or written in an external editor) before this
 tool can load and edit it; nothing here pretends otherwise. A
 from-scratch memristor PDK genuinely starts smallest at **User
 Models** (write a `.va` compact model, drop it under
-`user_models/veriloga/` -- no template needed, and `ihp/cells.py`'s
+`user_models/veriloga/` -- no template needed, and `pdklib/cells.py`'s
 own By Cell aggregation picks it up automatically by name) and the
 xschem/Qucs-S symbol editors (draw a device symbol from nothing), then
 grows outward through the newly-creatable Layers/Magic Tech/DRC
@@ -234,7 +242,7 @@ here, so authoring a brand-new cell's model doesn't require first
 faking a real view for it.
 
 **Library Manager** is a Cadence-style Libraries | Cells | Views
-browser (`ihp/library_index.py`/`gui/library_manager_view.py`),
+browser (`pdklib/library_index.py`/`gui/library_manager_view.py`),
 spanning every real domain at once, not just `libs.ref/`'s own six
 (unlike **By Cell**, it also shows xschem Symbols/Schematics and
 Qucs-S Symbols/Components). **A real design decision, not a default**:
@@ -269,7 +277,7 @@ this caught). **If the cell being created for
 already has another known view with real pins** -- LEF first (the most
 authoritative real physical source), then an xschem symbol, then an
 existing Verilog/Verilog-A module of the same name
-(`ihp/library_index.py`'s own `infer_ports_for_cell`) -- the new
+(`pdklib/library_index.py`'s own `infer_ports_for_cell`) -- the new
 module's own port declaration is pre-populated with those real pins
 (direction normalized from either real vocabulary -- LEF's uppercase
 `INPUT`/`OUTPUT`/`INOUT`, xschem's lowercase `in`/`out`/`inout` -- down
@@ -373,7 +381,7 @@ whatever's already on PATH -- a thin GUI wrapper around
 code of its own, so the CLI and GUI stay in lock-step).
 
 **Settings > Environment** generates a real, sourceable bash script
-(`ihp/shell_env.py`) for running this PDK's tools directly from a
+(`pdklib/shell_env.py`) for running this PDK's tools directly from a
 terminal, outside this GUI entirely -- `export PDK_ROOT=...`/`export
 PDK=...` (the real convention IHP's own `xschemrc`/README files
 already use, confirmed by reading them directly, not assumed) plus
@@ -410,18 +418,18 @@ highlighted straight to that cell's real line range within its
 
 ## What's real here (first increment)
 
-- **`openpdkcreator/ihp/fetch.py`** -- a real, depth-1, sparse-checkout
+- **`openpdkcreator/pdklib/fetch.py`** -- a real, depth-1, sparse-checkout
   clone of `ihp-sg13g2/{libs.doc,libs.qa,libs.ref,libs.tech}` (~734 MB),
   deliberately excluding IHP's own git submodules (separate third-party
   repos for digital synthesis / EM-solver integration, unrelated to PDK
   structure). Lands in `data/` -- **gitignored, never committed**; IHP's
   data stays local-only, this repo versions only original tooling code.
-- **`openpdkcreator/ihp/inventory.py`** -- an honest, per-tool file
+- **`openpdkcreator/pdklib/inventory.py`** -- an honest, per-tool file
   census (file count, total size, extension breakdown) across all 15
   real `libs.tech/<tool>/` subdirectories and every real
   `libs.ref/<family>/<view>/` directory. No attempt at parsing any
   tool's proprietary format -- that's real, separate future work.
-- **`openpdkcreator/ihp/layers.py`** -- real KLayout `.lyp` parsing
+- **`openpdkcreator/pdklib/layers.py`** -- real KLayout `.lyp` parsing
   (adapted from OpenPDKCreator's own, already-verified
   `import_open_pdks.py`), confirmed against IHP's real, downloaded
   `sg13g2.lyp`: 377 real layers, byte-accurate name/GDS-layer/GDS-
@@ -430,13 +438,13 @@ highlighted straight to that cell's real line range within its
   `ElementTree` to a real, text-based, line-tracking parser
   (`find_layer_blocks`) so each real `<properties>` block's own real
   source line range could be tracked -- stdlib `ElementTree` doesn't
-  expose line numbers -- needed for `ihp/layers_writer.py`'s own real
+  expose line numbers -- needed for `pdklib/layers_writer.py`'s own real
   write-back. Confirmed real and fully uniform before switching, not
   assumed: all 377 real blocks are exactly 16 real lines each, same
   14-tag field order; the new parser tracks real nesting depth so it
   still finds the correct real block boundaries rather than assuming
   no nesting exists.
-- **`openpdkcreator/ihp/layers_writer.py`** -- real, surgical
+- **`openpdkcreator/pdklib/layers_writer.py`** -- real, surgical
   write-back for Layers, the same discipline as every other writer
   here: only four of a real layer's fields have any real `.lyp`
   counterpart at all (`name`, `gds_layer`/`gds_datatype` together as
@@ -444,7 +452,7 @@ highlighted straight to that cell's real line range within its
   every other editable field (`purpose`/`plane`/`stack_order`/
   `streamout_allowed`/`notes`/`status`) is this project's own metadata
   with no real `.lyp` counterpart, so it stays `project_io.py`-only,
-  never written back, the same precedent `ihp/drc_writer.py` already
+  never written back, the same precedent `pdklib/drc_writer.py` already
   established for `DesignRule`'s own project-only fields. A real,
   found-before-shipping bug: the first version of `_render_new_layer_block`
   (for a brand-new layer added via **New Layer**) never emitted
@@ -478,13 +486,13 @@ highlighted straight to that cell's real line range within its
   module's own docstring for exactly what's pre-configured and what
   isn't. A new `LaunchGuidance.requires_path` field makes
   `resolve_launch` fall back to a bare, unconfigured launch if the
-  real file isn't there (`ihp/fetch.py` hasn't run, or a non-default
+  real file isn't there (`pdklib/fetch.py` hasn't run, or a non-default
   `--dest`), rather than launching with a flag pointed at nothing.
 - **`docs/ihp_vs_open_pdks.md`** -- a real, sourced comparison of IHP's
   actual structure against the canonical open_pdks specification
   (confirmed via open_pdks' own README: IHP genuinely follows it), with
   one real naming divergence documented, not glossed over.
-- **`openpdkcreator/ihp/magic_tech.py`** -- a real (if deliberately
+- **`openpdkcreator/pdklib/magic_tech.py`** -- a real (if deliberately
   partial) Magic `.tech` parser, hand-verified against IHP's real,
   downloaded files: the cleanly tabular sections
   (`tech`/`version`/`planes`/`types`/`contact`/`aliases`/`styles`/
@@ -565,9 +573,9 @@ highlighted straight to that cell's real line range within its
   `plowing`/`plot` are honestly reported as not-parsed-this-pass, never
   silently dropped (`MagicTechnology.unparsed_sections`,
   `MagicTechnology.drc_skipped`).
-- **`openpdkcreator/ihp/reconcile.py`** -- cross-references the Magic
+- **`openpdkcreator/pdklib/reconcile.py`** -- cross-references the Magic
   `cifoutput` GDS mapping above against the KLayout `.lyp` layers
-  (`ihp/layers.py`), both real, independent descriptions of the same
+  (`pdklib/layers.py`), both real, independent descriptions of the same
   fabricated GDS stream. Real result against IHP's actual data:
   100/377 (GDS layer, datatype) pairs recognized by both; the 277
   `.lyp`-only pairs are all annotation/QA datatypes (`.label`, `.net`,
@@ -604,7 +612,7 @@ highlighted straight to that cell's real line range within its
   name/aliases/obsolete commits
   immediately and survives a technology switch, and a spot-checked real
   DRC row (`Act.a`) shows the correct converted `0.15` micron value.
-- **`openpdkcreator/ihp/lef.py`** -- a real (if deliberately partial)
+- **`openpdkcreator/pdklib/lef.py`** -- a real (if deliberately partial)
   LEF parser, hand-verified against all 32 of IHP's real, downloaded
   `.lef` files (a tech LEF, `sg13g2_stdcell.lef`/`sg13g2_io.lef`, and
   28 real SRAM hard-macro LEFs). Fully parses tech-LEF `LAYER`s (type/
@@ -633,9 +641,9 @@ highlighted straight to that cell's real line range within its
   domain). Also tracks each real
   `MACRO`/`PIN` block's own real, 1-indexed source line range
   (`start_line`/`end_line`) -- added specifically for
-  `ihp/lef_writer.py`'s own write-back, which needs to locate exactly
+  `pdklib/lef_writer.py`'s own write-back, which needs to locate exactly
   where a real pin's text lives to patch it in place.
-- **`openpdkcreator/ihp/spice_models.py`** -- a real, bounded ngspice
+- **`openpdkcreator/pdklib/spice_models.py`** -- a real, bounded ngspice
   `.lib` model-card parser, the first concrete piece of the
   **Simulation** GUI group (see Future Work): real
   `.model NAME TYPE (key=value ...)`/`.model NAME TYPE key=value ...`
@@ -643,7 +651,7 @@ highlighted straight to that cell's real line range within its
   real keyword case varies file to file, matched case-insensitively
   like every other keyword-driven parser here) and real
   `.subckt NAME port1 port2 ... / .ends` blocks (the same bounded
-  shape `ihp/netlist.py`'s own CDL/SPICE `.SUBCKT` extraction already
+  shape `pdklib/netlist.py`'s own CDL/SPICE `.SUBCKT` extraction already
   uses). Real parameter values are kept as raw strings, not converted
   to float -- some real BSIM/PSP model cards use a quoted formula
   expression as a value (e.g. `vfbo = '-0.94312*sg13g2_lv_nmos_vfbo'`),
@@ -683,14 +691,14 @@ highlighted straight to that cell's real line range within its
   for
   ngspice model data. Verified for real, driven: switching files
   reloads both trees with the correct real row counts.
-- **`openpdkcreator/ihp/xschem.py`** -- a real, bounded xschem `.sym`
+- **`openpdkcreator/pdklib/xschem.py`** -- a real, bounded xschem `.sym`
   symbol parser, hand-verified against all 202 real, downloaded
   symbols. A real symbol is a flat sequence of top-level `TAG
   {content}` primitives; the real device-attribute block (`K { ... }`)
   and real pin list (`B ... {name=... dir=...}` primitives) are
   extracted in full, the symbol's own real drawing geometry
   (line/arc/text primitives) deliberately not parsed or rendered --
-  the same "structure yes, graphics no" scope as `ihp/lef.py`'s own
+  the same "structure yes, graphics no" scope as `pdklib/lef.py`'s own
   PORT rect-count-only precedent. Two real structural complications
   found and handled, not assumed: a real block's own matching closing
   `}` needs a quote-aware, brace-depth-aware scan, not a naive
@@ -707,7 +715,7 @@ highlighted straight to that cell's real line range within its
   every other real `K`-field varies per device kind (confirmed:
   `cap_cmim.sym` and `sg13g2_a21o_1.sym` share almost no field names)
   and is kept raw, the same "don't guess further semantics" discipline
-  `ihp/magic_tech.py`'s own `ComposeStatement` uses. Verified for real:
+  `pdklib/magic_tech.py`'s own `ComposeStatement` uses. Verified for real:
   374 real pins extracted across all 202 real symbols (378 real `B`
   lines minus the 4 real non-pin decorative boxes), field-by-field
   spot-checked against the source text for a simple two-pin symbol, a
@@ -762,7 +770,7 @@ highlighted straight to that cell's real line range within its
   round trip confirmed the write is byte-exact (a prepended marker
   line, the rest of the file untouched) -- the real, fetched `data/`
   itself was never touched by this verification.
-- **`openpdkcreator/ihp/drc.py`** -- real KLayout DRC-deck rule
+- **`openpdkcreator/pdklib/drc.py`** -- real KLayout DRC-deck rule
   extraction, adapted from OpenPDKCreator's own `import_open_pdks.py`
   (that logic already proved itself against a real *subset* of this
   exact IHP deck -- this module points the same, unmodified pattern at
@@ -781,7 +789,7 @@ highlighted straight to that cell's real line range within its
   lines), and **86** composite/derived constructs (down from 94)
   honestly reported as not-auto-extracted, never dropped silently. A
   real gap found and fixed while adding this:
-  `ihp/drc_writer.py`'s own `_locate` (which re-derives a rule's real
+  `pdklib/drc_writer.py`'s own `_locate` (which re-derives a rule's real
   JSON key on write-back) only re-ran the width/space/sep regex, so a
   newly-extracted enclosure rule's edited `value` silently failed to
   reach the real JSON file -- caught immediately by a real, driven
@@ -807,12 +815,12 @@ highlighted straight to that cell's real line range within its
   one real addition: a **View Source** button opening the exact real
   `.drc` file (and line) a selected rule was extracted from, via each
   rule's own `source_provenance`. Rules start real (61 of them, loaded
-  from `ihp/drc.py` at startup), not blank, then editable the same way
+  from `pdklib/drc.py` at startup), not blank, then editable the same way
   a hand-authored rule would be. Verified for real, driven against the
   actual data: correct row/form population, New/Delete both work,
   **View Source** opens the exact real file and highlights the right
   lines, and the live diagram/`layer_colors()` both render correctly.
-- **`openpdkcreator/ihp/netlist.py`/`verilog.py`** -- real cell/module
+- **`openpdkcreator/pdklib/netlist.py`/`verilog.py`** -- real cell/module
   boundary detectors (`.subckt`/`.ends` for CDL/SPICE, case-insensitive
   -- CDL's real files use `.SUBCKT`/`.ENDS`, SPICE's use lowercase, the
   same lesson as `lef.py`'s `Via`/`ViaRULE` finding; `module`/
@@ -842,7 +850,7 @@ highlighted straight to that cell's real line range within its
   grep ground truth exactly (4060/4060 across all 28 real SRAM CDL
   files); the real SRAM top-level macro's Verilog module is now found,
   with correct real bus port widths (e.g. `A_ADDR`: `input [9:0]`).
-- **`openpdkcreator/ihp/liberty.py`** -- a real, stack-based state
+- **`openpdkcreator/pdklib/liberty.py`** -- a real, stack-based state
   machine (same technique as `lef.py`) tracking arbitrary named-group
   nesting depth, extended beyond real `cell (NAME) { ... }` boundary
   detection into real, bounded pin/timing-arc extraction: a pin's
@@ -873,7 +881,7 @@ highlighted straight to that cell's real line range within its
   (`start_line`/`end_line`, plus `all_parsed_pin_ranges`/
   `all_parsed_arc_ranges`, immutable original-position lists mirroring
   `lef.py`'s own `LefMacro.all_parsed_pin_ranges`) feed
-  `ihp/liberty_writer.py`'s write-back. Verified for real: all 97 real
+  `pdklib/liberty_writer.py`'s write-back. Verified for real: all 97 real
   `.lib` files parse cleanly with 0 errors -- 700 real cells, 5422 real
   pins, 3977 real timing arcs total.
 - **`openpdkcreator/gui/liberty_editor.py`**/**`liberty_dialog.py`** --
@@ -881,7 +889,7 @@ highlighted straight to that cell's real line range within its
   two-level, commit-on-switch editor (Pins pane, and a nested Timing
   Arcs pane for whichever pin is selected); switching pins flushes any
   pending arc edit too, not just the pin's own fields.
-- **`openpdkcreator/ihp/liberty_writer.py`** -- real, surgical,
+- **`openpdkcreator/pdklib/liberty_writer.py`** -- real, surgical,
   position-targeted write-back for Liberty pin/timing-arc data,
   following the same discipline as every other writer here: re-reads
   the pristine original file fresh from disk at write time, patches
@@ -904,7 +912,7 @@ highlighted straight to that cell's real line range within its
   pin, a deleted pin, a new timing arc, a deleted timing arc, and a
   real SRAM bus-nested pin edit (confirming the unspaced/unquoted
   convention survives a real edit, not just a no-op).
-- **`openpdkcreator/ihp/gds.py`** -- real, bounded GDS structural
+- **`openpdkcreator/pdklib/gds.py`** -- real, bounded GDS structural
   extraction, via KLayout's own real Python API (`klayout.db`) --
   lazily imported (`_import_klayout_db`, `KLayoutUnavailable`), so
   every other command here (`inventory`/`lef`/`drc`/`cells`, none of
@@ -923,7 +931,7 @@ highlighted straight to that cell's real line range within its
   bbox `(-0.24, -0.22, 3.6, 4.17)` µm / 72 real shapes across 9 real
   layers; `sg13g2_io.gds` (69 MB) parses in under 0.1s -- no real
   performance concern even for the largest real file.
-- **`openpdkcreator/ihp/cells.py`** -- aggregates one real cell's views
+- **`openpdkcreator/pdklib/cells.py`** -- aggregates one real cell's views
   across `libs.ref/<family>/*/` into one `CellViews` record, handling
   a real, confirmed structural fact: IHP's own families use *two*
   different real per-view file organizations for the same view kind --
@@ -938,7 +946,7 @@ highlighted straight to that cell's real line range within its
   sub-elements are included (bitcells, sense amps, ... -- only 28 of
   which are the real, top-level hard macros), confirming the default
   "top-level only" filter is the right call, not arbitrary. GDS is
-  real content (`gds_cell`, via `ihp/gds.py`) when `klayout.db` is
+  real content (`gds_cell`, via `pdklib/gds.py`) when `klayout.db` is
   importable, degrading to a presence-only flag (`gds_present`,
   distinguished from `None` vs. "genuinely nothing to find" via
   `KLayoutUnavailable`) when it isn't, never a silent gap; `sg13g2_pr`
@@ -952,7 +960,7 @@ highlighted straight to that cell's real line range within its
   cell's real line range (`file_view_dialog.view_file_dialog`'s
   `focus_start_line`/`focus_end_line` parameters), and, for a selected
   cell with a real LEF macro, a **Pins** pane (`PinEditor`, shared with
-  the LEF tab) editing that macro's real pins directly. `ihp/cells.py`'s
+  the LEF tab) editing that macro's real pins directly. `pdklib/cells.py`'s
   `build_cell_index` takes an injectable `get_lef` hook so this tab
   parses through `App.get_parsed_lef` -- the exact same cache/objects
   the LEF tab uses, not an independent parse -- confirmed for real: a
@@ -963,7 +971,7 @@ highlighted straight to that cell's real line range within its
   `sg13g2_sram` with "show all" on) shows a plain "nothing to edit
   here" note in the Pins pane's place, confirmed not to crash. Also
   shows a real GDS structural summary line (bbox size + shape/layer
-  counts, via `ihp/gds.py`) for the selected cell when `klayout.db` is
+  counts, via `pdklib/gds.py`) for the selected cell when `klayout.db` is
   importable -- a plain text line, not a raw file **View** (GDS is
   binary), degrading to an honest "present, but not parsed" note
   rather than silently showing nothing when it isn't. Verified for
@@ -973,7 +981,7 @@ highlighted straight to that cell's real line range within its
   **View** buttons both land on and highlight the exact real
   `sg13g2_and2_1` block inside their much larger combined files, a real
   pin edit made here survives a save + simulated relaunch, and
-  `sg13g2_a21o_1`'s real GDS summary line matches `ihp/gds.py`'s own
+  `sg13g2_a21o_1`'s real GDS summary line matches `pdklib/gds.py`'s own
   directly-verified numbers exactly. **Edit ... Ports** buttons next
   to the CDL/SPICE/Verilog **View** buttons open a small modal
   (`port_dialog.edit_ports_dialog`) hosting `port_editor.PortEditor` --
@@ -986,7 +994,7 @@ highlighted straight to that cell's real line range within its
   (identity-checked), not a silent re-parse that would have discarded
   the edit -- the exact bug class already found and fixed for LEF pins
   earlier this project.
-- **`openpdkcreator/ihp/user_models.py`** / **`gui/user_models_view.py`**
+- **`openpdkcreator/pdklib/user_models.py`** / **`gui/user_models_view.py`**
   -- user-defined Verilog/Verilog-A model support, plus two ways to
   link one to the rest of the PDK. Real files live under
   `user_models/verilog/*.v` and `user_models/veriloga/*.va` (a small,
@@ -995,12 +1003,12 @@ highlighted straight to that cell's real line range within its
   derived edit of third-party PDK data). Verilog-A's real
   `module NAME(port, ...); ... endmodule` header/port syntax is
   identical to plain digital Verilog's (confirmed against IHP's own
-  real `libs.tech/verilog-a/mosvar/mosvar.va`), so `ihp/verilog.py`'s
+  real `libs.tech/verilog-a/mosvar/mosvar.va`), so `pdklib/verilog.py`'s
   existing `find_modules` parser is reused directly for both `.v` and
   `.va` -- no new parser needed. Two linking mechanisms: (1) automatic
   -- a module named the same as a real cell attaches to it with no
   configuration, the same name-matching convention every other view in
-  `ihp/cells.py`'s `build_cell_index` already uses; (2) explicit --
+  `pdklib/cells.py`'s `build_cell_index` already uses; (2) explicit --
   a `UserModelLink(module_name, file_relpath, cell_name)` record,
   persisted in `user_models/links.yaml` (also git-tracked), set from
   the **Simulation > User Models** tab's own Cell name field + **Save
@@ -1040,7 +1048,7 @@ highlighted straight to that cell's real line range within its
   similar but not identical -- only Verilog has a real bus width) via
   a `port_factory` callback for New Port, rather than two near-
   identical widgets.
-- **`openpdkcreator/ihp/netlist_writer.py`/`verilog_writer.py`** --
+- **`openpdkcreator/pdklib/netlist_writer.py`/`verilog_writer.py`** --
   real, open_pdks-format write-back for CDL/SPICE/Verilog ports.
   Unlike the other writers, there's no
   single stable per-entry line/range to patch in place cleanly (a real
@@ -1062,7 +1070,7 @@ highlighted straight to that cell's real line range within its
   none, a Verilog direction edit, and a real bus-width edit on the
   real multi-line-header SRAM module -- each confirmed to leave every
   *other* real cell/module in the file unchanged.
-- **`openpdkcreator/ihp/text_utils.py`** -- one real, shared fix for
+- **`openpdkcreator/pdklib/text_utils.py`** -- one real, shared fix for
   all five writers above: `join_preserving_trailing_newline`. **A
   third real bug, found by `main.py export-full`'s own smoking-gun
   round-trip test at full-PDK scale, not by any single writer's own
@@ -1083,7 +1091,7 @@ highlighted straight to that cell's real line range within its
   the real, downloaded `.tech`/`.lef`/`.drc` files, not a write-back
   into them. `File > Save Edits` (`Ctrl+S`) writes `saves/<pdk
   name>.yaml` (gitignored, alongside but independent from `data/` --
-  `ihp/fetch.py` can delete/re-create `data/` wholesale, and these are
+  `pdklib/fetch.py` can delete/re-create `data/` wholesale, and these are
   the user's own authored edits, kept safe from that). A save, once it
   exists, takes precedence over the real just-extracted starting
   values for these domains on the next launch; `File > Reload from
@@ -1118,12 +1126,12 @@ highlighted straight to that cell's real line range within its
   this tool's own repo root, where `saves/` lives) and **Source PDK**
   (read-only **Original PDK name**/**Original PDK location** -- the
   real `pdk_root.name`/path, plus the real upstream URL it was fetched
-  from, `ihp/fetch.py`'s own `REPO_URL`). Renaming the project updates
+  from, `pdklib/fetch.py`'s own `REPO_URL`). Renaming the project updates
   the window title live and persists through `project_io.py`. Verified
   for real: the four values are confirmed genuinely distinct strings on
   a real, downloaded PDK (not accidentally the same path/name reused
   twice), and a rename survives a save + simulated relaunch.
-- **`openpdkcreator/ihp/lef_writer.py`** / **`openpdkcreator/export.py`**
+- **`openpdkcreator/pdklib/lef_writer.py`** / **`openpdkcreator/export.py`**
   -- real, open_pdks-format write-back for LEF pins, the first concrete
   piece of native write-back serialization (see Future Work). Never
   overwrites the real, downloaded source file -- `export.py` always
@@ -1133,7 +1141,7 @@ highlighted straight to that cell's real line range within its
   real LEF construct (port `RECT` *coordinates* -- only a count is
   tracked -- `PROPERTY`, `FOREIGN`, ...), so `lef_writer.py` re-reads
   the real *original* file fresh from disk and, using each pin's real
-  source line range (`ihp/lef.py`'s new `start_line`/`end_line`), keeps
+  source line range (`pdklib/lef.py`'s new `start_line`/`end_line`), keeps
   every real interior line of an existing pin verbatim, substituting
   only its `DIRECTION`/`USE` lines and its own name in the
   `PIN`/`END` header/trailer -- **a real bug found and fixed while
@@ -1166,9 +1174,9 @@ highlighted straight to that cell's real line range within its
   exported file, and confirmed the edit is there -- and confirmed a
   real `.lef` file never parsed this session is correctly *not*
   exported (nothing to write for a file with no possible edits).
-- **`openpdkcreator/ihp/drc_writer.py`** -- real, open_pdks-format
+- **`openpdkcreator/pdklib/drc_writer.py`** -- real, open_pdks-format
   write-back for DRC Rules, extending native write-back serialization
-  beyond LEF pins. `ihp/drc.py`'s own extraction already established
+  beyond LEF pins. `pdklib/drc.py`'s own extraction already established
   a real, two-file split -- a rule's `rule_id`/`description` live in
   its real `.drc` Ruby script's own `result_var.output("ID",
   "description")` call; its `value` lives in the one real JSON config
@@ -1178,14 +1186,14 @@ highlighted straight to that cell's real line range within its
   never conflating the two. **Surgical, character-offset-based
   patching**: `_locate` re-derives which real JSON key (if any) backs
   a rule's value, and the exact real `.output()` regex match, by
-  re-running `ihp/drc.py`'s own extraction regexes directly (imported,
+  re-running `pdklib/drc.py`'s own extraction regexes directly (imported,
   not duplicated) against the rule's own real `source_provenance` --
   then only the exact substrings the id/description occupy are
   replaced, leaving everything else (surrounding Ruby code, other
   rules, comments, formatting) untouched. **A real, common wrinkle
   handled deliberately**: 61 of IHP's own real `.output()` calls have
   a real `"<section> : ..."` prefix before the description
-  `DesignRule.description` actually keeps (`ihp/drc.py` splits on the
+  `DesignRule.description` actually keeps (`pdklib/drc.py` splits on the
   first real `" : "`) -- write-back reconstructs the original prefix
   verbatim and splices only the (possibly-edited) suffix back in,
   rather than silently discarding that real prefix text for over a
@@ -1216,12 +1224,12 @@ highlighted straight to that cell's real line range within its
   and any hand-authored rules skipped. Verified for real, driven:
   edited a rule's value via the real DRC Rules form, exported, and
   confirmed the real JSON config reflects it.
-- **`openpdkcreator/ihp/magic_tech_writer.py`** -- real, open_pdks-format
+- **`openpdkcreator/pdklib/magic_tech_writer.py`** -- real, open_pdks-format
   write-back for Magic Types, the third and final currently-editable
   domain (after LEF pins and DRC Rules). Each real type occupies
   exactly one real line (`[-]plane name,alias1,alias2` -- no block
   structure to navigate, unlike LEF's `PIN`/`MACRO` or DRC's multi-line
-  `.output()` calls), so `ihp/magic_tech.py` gained the same real
+  `.output()` calls), so `pdklib/magic_tech.py` gained the same real
   source-line tracking LEF already has (`TypeEntry.line_no`,
   `MagicTechnology.all_parsed_type_line_nos`), used exactly the same
   way: a deleted type's original line is omitted, a brand-new type is
@@ -1301,7 +1309,7 @@ highlighted straight to that cell's real line range within its
   `export-full`) with any in-memory pin/timing-arc edits patched in.
 - **`main.py export-layers`** / **File > Export Edited Layers**
   (`app.py`) -- exports the one real `.lyp` file this project ever has
-  loaded at once (`ihp/layers_writer.py`), with any in-memory
+  loaded at once (`pdklib/layers_writer.py`), with any in-memory
   name/GDS-layer/GDS-datatype/color edits patched in.
 
 Native write-back serialization is now complete for every currently
@@ -1380,9 +1388,9 @@ editor yet -- see Future Work.
   three of the four real gaps the **PDK Wizard** tab surfaced (see its
   own README section above for exactly what remains -- LEF partially,
   DRC Rules not at all):
-  - `ihp/layers.py`'s `create_new_lyp_file` writes a minimal, valid,
+  - `pdklib/layers.py`'s `create_new_lyp_file` writes a minimal, valid,
     empty `<?xml...?><layer-properties></layer-properties>` skeleton.
-    Required a real fix to `ihp/layers_writer.py`'s own
+    Required a real fix to `pdklib/layers_writer.py`'s own
     `render_lyp_file`, not just a new writer function: with zero real
     `<properties>` blocks to anchor after, its existing logic
     (designed only for "add a layer among existing ones") dumped a
@@ -1390,7 +1398,7 @@ editor yet -- see Future Work.
     declaration -- found by tracing the code, not by a failing test,
     before it ever shipped. Fixed by anchoring new blocks just before
     the real closing `</layer-properties>` tag in that one case.
-  - `ihp/magic_tech.py`'s `create_new_tech_file` writes a real `tech`/
+  - `pdklib/magic_tech.py`'s `create_new_tech_file` writes a real `tech`/
     `version` header (using the file's own stem as the real technology
     name) plus empty `planes`/`types`/`contact`/`aliases` sections --
     no writer fix needed here: `_scan_single_line_section` already sets
@@ -1398,11 +1406,11 @@ editor yet -- see Future Work.
     entries inside, and `magic_tech_writer.py`'s own
     `_render_section_patch` already anchors a brand-new entry just
     before its own section's real closing `end` line.
-  - `ihp/lef.py`'s `create_new_lef_file` writes a real `VERSION 5.7 ;`/
+  - `pdklib/lef.py`'s `create_new_lef_file` writes a real `VERSION 5.7 ;`/
     `BUSBITCHARS`/`DIVIDERCHAR` header, zero macros (confirmed real:
     IHP's own real `.lef` files never carry a trailing `END LIBRARY`
     either -- they just end after the last macro's own `END <name>`
-    line). Deliberately partial, not overclaimed: `ihp/lef_writer.py`
+    line). Deliberately partial, not overclaimed: `pdklib/lef_writer.py`
     already explicitly refuses to write back a whole new macro with no
     real source position, and there's no **New Macro** action either,
     so this alone unblocks *loading* a brand-new family's `.lef`, not
@@ -1437,7 +1445,7 @@ editor yet -- see Future Work.
 - **Generate real DRC rules, and export/import them** -- closes the
   remaining, most-genuinely-hard gap of the four the **PDK Wizard**
   surfaced (see its own README section above):
-  - `ihp/drc.py`'s `create_new_drc_deck` writes a real, minimal, valid,
+  - `pdklib/drc.py`'s `create_new_drc_deck` writes a real, minimal, valid,
     empty deck (a real `custom_rules.drc` skeleton under
     `libs.tech/klayout/tech/drc/`) -- **New DRC Deck...** in the DRC
     Rules tab, mirroring Layers/Magic Tech/LEF's own pattern. No JSON
@@ -1447,7 +1455,7 @@ editor yet -- see Future Work.
     own real files use -- that indirection is a real IHP convention,
     not a KLayout requirement, and skipping it avoids inventing a
     second, empty JSON file with nothing real in it yet.
-  - **The actual "generate" step** -- `ihp/drc_writer.py`'s new
+  - **The actual "generate" step** -- `pdklib/drc_writer.py`'s new
     `render_new_rule_block`: a hand-authored rule (**New Rule**,
     already a full, real form -- rule_id/description/check_type/up to
     3 layer pickers/value, nothing new needed there) becomes real,
@@ -1498,12 +1506,12 @@ editor yet -- see Future Work.
     now sets `self.drc_root`/re-extracts directly rather than assuming
     `load()` reached that point, avoiding a real `AttributeError` on
     the status-line message.
-- **Library Manager** (`ihp/library_index.py`/`gui/
+- **Library Manager** (`pdklib/library_index.py`/`gui/
   library_manager_view.py`) -- see its own GUI-structure section above
   for the full design (index-based, not directory-convention-based;
   the real, per-tool "open a specific file" research). Additional
   detail worth recording here:
-  - `ihp/cells.py`'s `CellViews`/`build_cell_index` gained four new
+  - `pdklib/cells.py`'s `CellViews`/`build_cell_index` gained four new
     fields (xschem Symbol/Schematic, Qucs-S Symbol/Component), matched
     by cell **name** across every real subdirectory under
     `libs.tech/xschem/` and the flat `libs.tech/qucs-s/symbols/` --
@@ -1544,8 +1552,8 @@ editor yet -- see Future Work.
     design choice (track library locations, don't enforce a directory
     convention) this session was steered toward.
 - **Verilog/Verilog-A editors for the Library Manager**
-  (`ihp/verilog.py`'s new `create_new_verilog_file`/
-  `create_new_veriloga_file`, `ihp/library_index.py`'s new
+  (`pdklib/verilog.py`'s new `create_new_verilog_file`/
+  `create_new_veriloga_file`, `pdklib/library_index.py`'s new
   `infer_ports_for_cell`) -- **Create** for these two now writes a
   real, minimal, valid skeleton pre-populated with a cell's own already
   -known real pins (not an empty template) whenever one exists.
@@ -1613,7 +1621,7 @@ editor yet -- see Future Work.
     Macros sub-tab), closing the one remaining "no in-GUI create"
     domain among Layers/Magic Tech/DRC Rules/LEF -- pins are added to
     it afterward through the same **New Pin** flow an existing macro
-    already uses. `ihp/lef_writer.py`'s `render_lef_file` renders a
+    already uses. `pdklib/lef_writer.py`'s `render_lef_file` renders a
     brand-new macro (`start_line == 0`) as a whole, freshly-generated
     `MACRO ... END` block, appended after every real, existing macro on
     export -- verified round-tripping correctly through a real,
@@ -1674,7 +1682,7 @@ editor yet -- see Future Work.
   closing one of the three domains the "Create-from-scratch flows for
   Liberty/CDL-SPICE/ngspice Models" Future Work item named (Liberty/
   CDL-SPICE remain -- see that item's own updated note for why they're
-  a bigger lift: neither has a dedicated tab at all yet). `ihp/
+  a bigger lift: neither has a dedicated tab at all yet). `pdklib/
   spice_models.py`'s new `create_new_lib_file` writes a real, minimal,
   genuinely empty `.lib` skeleton -- just a bare comment line; real
   ngspice `.lib` grammar has no mandatory header the way LEF/Magic Tech
@@ -1726,7 +1734,7 @@ editor yet -- see Future Work.
   checkpaint >>` section share one identical shape; real pin labels use
   `flabel` (not the manual's own `rlabel`), each followed by its own
   `port N direction` line.
-  - `ihp/mag.py` (new): `parse_mag_file` (bounded -- section names +
+  - `pdklib/mag.py` (new): `parse_mag_file` (bounded -- section names +
     real rect counts, `use`/label/property counts, `magscale`, not full
     geometry, same "bounded, not a full parser" precedent as everywhere
     else here) and `create_new_mag_file` (a real, minimal, valid
@@ -1737,7 +1745,7 @@ editor yet -- see Future Work.
     upstream precedent exists for where hand-drawn `.mag` files would
     live in this PDK).
   - **Magic Layout** is now Library Manager's seventh creatable view
-    kind (`ihp/library_index.py`'s `CREATABLE_VIEW_KINDS`) -- **Create**
+    kind (`pdklib/library_index.py`'s `CREATABLE_VIEW_KINDS`) -- **Create**
     writes a real, minimal skeleton declaring the PDK's own real, active
     Magic technology name; **Open in Magic** writes a real,
     self-contained one-line-load Tcl script (`cd <dir>; load <cell>`,
@@ -1804,7 +1812,7 @@ editor yet -- see Future Work.
   and is the one selected on startup.
 - **Real bug found and fixed: Layers' own Stack Order always showed
   `0`, and Move Up/Down silently did nothing about it.** `import_layers`
-  (`ihp/layers.py`) never set `stack_order` at all, so every real,
+  (`pdklib/layers.py`) never set `stack_order` at all, so every real,
   freshly-imported layer sat at the `models.Layer` dataclass's own
   default (`0`) -- confirmed live against the real IHP deck, all 377
   real layers. That part alone was arguably an honest, already-
@@ -1824,7 +1832,7 @@ editor yet -- see Future Work.
   append time -- contiguous `0..n-1` for whatever's actually kept, even
   if some real block were skipped for missing `name`/`source`) --
   `stack_order` has no real `.lyp` write-back counterpart either way
-  (`ihp/layers_writer.py`'s own docstring), so this is purely an
+  (`pdklib/layers_writer.py`'s own docstring), so this is purely an
   import-time default, still a human-adjustable starting point via Move
   Up/Down, not a claim of verified physical stack order. Verified for
   real, driven: `tests/test_layers_stack_order.py` (new) -- all 377
@@ -1949,12 +1957,12 @@ editor yet -- see Future Work.
   never stored) specifically *because* the existing `purpose` field
   was real, stored, project metadata that every imported layer's own
   `import_layers` set to a fixed `"drawing"`, disconnected from its
-  real name -- a deliberate design note in `ihp/layers.py`'s own
+  real name -- a deliberate design note in `pdklib/layers.py`'s own
   docstring even argued this split was correct, since the real name's
   own 51 distinct trailing segments would never fit the old, small,
   fixed 6-value `PURPOSES` enum (`drawing`/`pin`/`label`/`marker`/
   `fill`/`exclude`). Corrected instead of left as two parallel
-  concepts: `ihp/layers.py` gained a new `purpose_from_name` (the same
+  concepts: `pdklib/layers.py` gained a new `purpose_from_name` (the same
   real derivation, now the *authoritative* one) and `import_layers`
   now sets each real layer's own real, stored `purpose` from it
   directly, reversing that earlier note. The GUI's own Purpose
@@ -2022,7 +2030,7 @@ editor yet -- see Future Work.
   `include("other.projects");` statements) -- the one actually
   analogous to this project's own `library_index.yaml`, and genuinely
   tractable to implement for real.
-  - **`ihp/libman_project.py`** (new): a real, bounded parser/writer
+  - **`pdklib/libman_project.py`** (new): a real, bounded parser/writer
     ported statement-for-statement from LibMan's own real, fetched
     `src/libfileparser.cpp` -- real `#`-comment stripping (respected
     inside string literals), real top-level-`;`-terminated statement
@@ -2134,7 +2142,7 @@ editor yet -- see Future Work.
   - **A real, honest gap, not silently closed**: unlike the original
     three, none of these three feed straight into `.output()` anywhere
     in the real deck the simple way `width()`/`space()`/`enclosed()` do
-    (confirmed by grepping for it) -- `ihp/drc.py`'s own extractor
+    (confirmed by grepping for it) -- `pdklib/drc.py`'s own extractor
     still only recognizes the original three coming the other way, so
     a min_area/min_overlap/max_length rule generated here does not yet
     round-trip back through re-extraction. Extending the extractor for
@@ -2147,6 +2155,32 @@ editor yet -- see Future Work.
     GDS (real rectangles on two real layers) -- exit code 0, and a
     real report database containing every one of the five real rule
     categories tested. Full suite re-run clean (56/56).
+- **The internal `ihp/` package was renamed to `pdklib/`**, per direct
+  user feedback: "I don't like having 'ihp' as an internal name" --
+  a real, valid point given this README's own stated mission
+  ("generally -- not specific to any one process... keep that in mind
+  before adding anything that only makes sense for IHP specifically"),
+  which the internal module namespace itself had been quietly
+  contradicting since the very first commit. Every real
+  `openpdkcreator.ihp`/`from ..ihp import`/`from .ihp import`
+  reference (142 real matches) and every real `ihp/<file>.py` doc
+  reference (163 real matches, spanning every `.py` file plus this
+  README, `docs/ihp_vs_open_pdks.md`, and `user_models/README.md`) was
+  updated -- a plain, unambiguous, word-boundary-safe pattern
+  (confirmed empirically, not assumed: every real `ihp/` match in this
+  codebase is immediately followed by a `.py` filename, never anything
+  else) meant no real, external reference to the actual IHP PDK/
+  company was at risk of being caught by the same sweep. **Explicitly,
+  deliberately left untouched, by scope, not oversight**: real,
+  external references to the real IHP entity itself (`ihp-sg13g2`,
+  `IHP-GmbH`, `data/ihp-sg13g2/` -- real, downloaded, gitignored PDK
+  content), and the entirely separate `openMemristorPDK` project (its
+  own independent git repository, not this one -- see this README's
+  own "Copy-vs-share" bullet for why the two stay independent). `git
+  mv` preserved file history for the whole directory. Verified for
+  real, driven: full suite re-run clean (56/56) after the rename;
+  `main.py`'s own CLI (`magic-tech`) and a fresh `App()` build both
+  confirmed working live in the container, not just import-checked.
 
 ## Future work
 
@@ -2169,17 +2203,17 @@ models, ...), not just read/display layers. Concretely, still open:
   pin/timing-arc scalar data is now done, same "bounded, not a full
   parser" precedent as everywhere else) -- no generic parser for either
   of these exists yet. (Real GDS content -- bbox/shape counts, not full
-  geometry -- is done: `ihp/gds.py`, via `klayout.db`. Real
+  geometry -- is done: `pdklib/gds.py`, via `klayout.db`. Real
   `compose`/`connect` sections, and the dominant `width`/`spacing`
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
-  `ihp/lef.py`, displayed read-only in the LEF tab's own **Vias**
+  `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --
   direction/capacitance/function per pin, related_pin/timing_type/
   timing_sense/when per
-  timing arc -- is also done: `ihp/liberty.py`.)
-- Wider KLayout DRC-deck coverage: `ihp/drc.py` now extracts two
+  timing arc -- is also done: `pdklib/liberty.py`.)
+- Wider KLayout DRC-deck coverage: `pdklib/drc.py` now extracts two
   reliable patterns -- `width()`/`space()`/`sep()` and `.enclosed()` --
   -> `.output()` (75 real rules total); the other 86 real,
   honestly-skipped constructs are multi-step composite/derived checks
@@ -2196,17 +2230,17 @@ models, ...), not just read/display layers. Concretely, still open:
   silently attach the wrong value to a rule, unlike an honestly-skipped
   one.
 - Native write-back serialization: **done for every currently
-  structured-editable domain** -- LEF pins (`ihp/lef_writer.py`,
-  verified against all 32 real files), DRC Rules (`ihp/drc_writer.py`,
+  structured-editable domain** -- LEF pins (`pdklib/lef_writer.py`,
+  verified against all 32 real files), DRC Rules (`pdklib/drc_writer.py`,
   verified against all 27 real files with an extracted rule), Magic
-  Types/Planes/Contacts/Aliases (`ihp/magic_tech_writer.py`, verified
+  Types/Planes/Contacts/Aliases (`pdklib/magic_tech_writer.py`, verified
   against both real technologies' `.tech` files -- see the dedicated
   bullet below for Planes/Contacts/Aliases), CDL/SPICE/Verilog ports
-  (`ihp/netlist_writer.py`/`ihp/verilog_writer.py`, verified against
+  (`pdklib/netlist_writer.py`/`pdklib/verilog_writer.py`, verified against
   all 30 real `.cdl` + 1 real `.spice` + 35 real `.v` files), Liberty
-  pin/timing-arc data (`ihp/liberty_writer.py`, verified against all
+  pin/timing-arc data (`pdklib/liberty_writer.py`, verified against all
   97 real `.lib` files, 700 real cells), and Layers
-  (`ihp/layers_writer.py`, verified against the real 377-layer
+  (`pdklib/layers_writer.py`, verified against the real 377-layer
   `sg13g2.lyp`) -- every one byte-identical with no edits, plus real,
   driven edit round-trips, and independently re-verified faithful
   across the *entire* real PDK at once via `main.py export-full`'s own
@@ -2233,11 +2267,11 @@ models, ...), not just read/display layers. Concretely, still open:
   real `safe_through` boundary already established for Types alone,
   needing no new per-domain complexity. `PlaneEntry`/`ContactEntry`/
   `AliasEntry` each gained a real `line_no` field, populated by one
-  new, shared `_scan_single_line_section` helper (`ihp/magic_tech.py`)
+  new, shared `_scan_single_line_section` helper (`pdklib/magic_tech.py`)
   generalizing `_parse_types_with_lines`'s own real line-tracking
   approach for domains whose every real entry sits on exactly one
   line (unlike `types`' own plane+alias-list shape, which keeps its
-  own bespoke parser, unchanged). `ihp/magic_tech_writer.py`'s own
+  own bespoke parser, unchanged). `pdklib/magic_tech_writer.py`'s own
   `render_tech_file` was generalized the same way, from a
   Types-only patch into a shared `_render_section_patch` applied to
   up to four active, non-overlapping real regions in one combined
@@ -2279,15 +2313,15 @@ models, ...), not just read/display layers. Concretely, still open:
   found/verified). Both fall back to a bare, unconfigured launch if
   the real file isn't there yet (`LaunchGuidance.requires_path`).
 - The **Simulation** top-level GUI group now has four real sub-tabs --
-  **ngspice Models** (`ihp/spice_models.py`, real `.model`/`.subckt`
-  extraction), **xschem** (`ihp/xschem.py`/`ihp/xschem_sch.py`, real
+  **ngspice Models** (`pdklib/spice_models.py`, real `.model`/`.subckt`
+  extraction), **xschem** (`pdklib/xschem.py`/`pdklib/xschem_sch.py`, real
   symbol and schematic extraction, see their own bullets), **Qucs-S**
   (see the dedicated bullet below), and **User Models** (see the
   user-defined Verilog/Verilog-A bullet below). ngspice's own real
   `.LIB NAME ... .ENDL` PVT-corner blocks are now done too
-  (`ihp/spice_models.py`'s own `Corners` sub-tab).
+  (`pdklib/spice_models.py`'s own `Corners` sub-tab).
 - **Qucs-S's own real component/symbol data is done** --
-  `ihp/qucs_sym.py`, hand-verified against all real, downloaded
+  `pdklib/qucs_sym.py`, hand-verified against all real, downloaded
   `libs.tech/qucs-s/symbols/` files. **A real, confirmed structural
   fact worth stating plainly, found before writing a single parser
   line**: this one real directory holds *two* genuinely different real
@@ -2336,7 +2370,7 @@ models, ...), not just read/display layers. Concretely, still open:
   its two real `nmos`/`pmos` variants) both render correctly.
 - **Qucs-S Components and Symbols both gained real editors with
   write-back.** **Components > Parameters**: a real Parameter's own
-  `default_value`/`equation` is editable; `ihp/qucs_component_writer.py`
+  `default_value`/`equation` is editable; `pdklib/qucs_component_writer.py`
   patches it via a real, surgical text scan for each real
   `<Parameter ...>` opening tag's own real character span (confirmed
   real: not always a single physical line -- a long real `equation=`
@@ -2351,9 +2385,9 @@ models, ...), not just read/display layers. Concretely, still open:
   reorders one). **Symbols > Ports**: real `PortSym`
   `x`/`y`/`type`/`angle`/`condition` are editable (the real, partial
   `hint` comment stays read-only, preserved verbatim); New/Delete Port
-  supported. `ihp/qucs_sym_writer.py` handles write-back, reusing the
+  supported. `pdklib/qucs_sym_writer.py` handles write-back, reusing the
   same "unchanged -> keep the real original line verbatim" discipline
-  `ihp/verilog_writer.py` already established -- **a real, column-
+  `pdklib/verilog_writer.py` already established -- **a real, column-
   alignment formatting bug was found and fixed by this project's own
   byte-identical check**: some real files pad extra spaces between
   attributes for visual alignment (`Varicap.sym`'s own real ports,
@@ -2371,7 +2405,7 @@ models, ...), not just read/display layers. Concretely, still open:
   translation, masking the exact difference it should have caught;
   only `main.py export-full`'s own smoking-gun round-trip test (a raw,
   untranslated `diff -rq --no-dereference`) caught it. Fixed once,
-  shared (`ihp/text_utils.py`'s new `restore_crlf_if_needed`, checking
+  shared (`pdklib/text_utils.py`'s new `restore_crlf_if_needed`, checking
   the real source file's own raw bytes directly), not per-writer.
   `gui/qucs_view.py` gained real forms for both (New/Delete Port for
   Symbols; Components' own read-only Overview/Netlists sub-tabs
@@ -2391,7 +2425,7 @@ models, ...), not just read/display layers. Concretely, still open:
   File** for a real, existing typed/selected path, or **Create File**
   for one that doesn't exist yet, writing a real, minimal, valid
   skeleton via a new `create_new_*` function per domain
-  (`ihp/xschem.py`/`ihp/xschem_sch.py`/`ihp/qucs_sym.py`) -- a real
+  (`pdklib/xschem.py`/`pdklib/xschem_sch.py`/`pdklib/qucs_sym.py`) -- a real
   xschem `.sym`/`.sch` header (`v`/`G`/`K`/`V`/`S`/`E`), an empty real
   Qucs-S `.sym`, or a real, valid `<Component>` skeleton, each
   confirmed to parse cleanly before shipping. A newly created file
@@ -2422,33 +2456,33 @@ models, ...), not just read/display layers. Concretely, still open:
   **Real geometry parsing came first**, extending every domain's own
   real parser to capture drawing primitives this project had
   deliberately left unparsed until now ("structure, not graphics," the
-  precedent this very feature request superseded): `ihp/xschem.py`
+  precedent this very feature request superseded): `pdklib/xschem.py`
   gained real `XschemLine`/`XschemArc`/`XschemText`/`XschemBox`
   (plus real pin *geometry*, not just name/direction) -- verified
   against ground truth exactly (1,222 lines/145 arcs/851 texts/378
   `B` primitives, matching a real, hand-verified inverter symbol's own
-  5 lines/1 arc/4 texts/2 pins one-for-one). `ihp/xschem_sch.py`
+  5 lines/1 arc/4 texts/2 pins one-for-one). `pdklib/xschem_sch.py`
   gained the same four shape kinds for a schematic's own real embedded
   decorative geometry (66 lines/0 arcs/112 texts/87 boxes, confirmed
   once `start_page.sch` -- the same real top-level-exception file
-  found earlier -- was included in the ground truth). `ihp/qucs_sym.py`
+  found earlier -- was included in the ground truth). `pdklib/qucs_sym.py`
   gained real `QucsLine`/`QucsArc`/`QucsText` (253/8/23 real
   primitives, summing with the existing 66 real ports to exactly the
   already-known 350 real primitive total).
 
   **Real write-back for all of it**, extending every existing writer
-  rather than adding new ones: `ihp/xschem_writer.py` now patches pin
+  rather than adding new ones: `pdklib/xschem_writer.py` now patches pin
   *position* (previously name/direction only) and every new shape
   kind, using the same real "unchanged -> keep the original line
   verbatim" discipline throughout, since a real pin/text primitive can
   carry real properties beyond what's modeled (`goto=`/`propag=`/
   `sim_pinnumber=`/`layer=`, all confirmed real) that must survive a
-  position-only edit untouched. `ihp/xschem_sch_writer.py` gained
+  position-only edit untouched. `pdklib/xschem_sch_writer.py` gained
   instance position/rotation/flip write-back and, newly, **real
   New Instance/New Wire support** -- deliberately *not* offered by
   this project's own first-pass Schematics editor (no sensible way to
   choose a real position), now real and safe because the graphical
-  canvas *is* that sensible way. `ihp/qucs_sym_writer.py` gained
+  canvas *is* that sensible way. `pdklib/qucs_sym_writer.py` gained
   Line/Arc/Text write-back with the same real, per-attribute
   column-alignment preservation already established for ports.
   Verified byte-identical against every real file in all three domains
@@ -2484,13 +2518,13 @@ models, ...), not just read/display layers. Concretely, still open:
   two-generation `export-full` smoking-gun round-trip still producing
   zero differences.
 - **xschem's own real schematic (`.sch`) files, as opposed to `.sym`
-  symbols, are done** -- `ihp/xschem_sch.py`, hand-verified against
+  symbols, are done** -- `pdklib/xschem_sch.py`, hand-verified against
   all 100 real, downloaded `.sch` files (99 real, one level under a
   family directory, plus one real, genuine exception,
   `start_page.sch`, sitting directly at the xschem root itself --
   found by cross-checking a full recursive real-file listing against
   a first-draft, naive one-level-deep glob before trusting a count,
-  and now handled by `find_sch_files`). Reuses `ihp/xschem.py`'s own
+  and now handled by `find_sch_files`). Reuses `pdklib/xschem.py`'s own
   real, quote-aware brace scanner and key=value parser directly rather
   than duplicating them, since a `.sch` file shares the same top-level
   `TAG {content}` primitive shape as a `.sym`, plus two schematic-only
@@ -2534,7 +2568,7 @@ models, ...), not just read/display layers. Concretely, still open:
   **Symbols > Pins** reuses `port_editor.PortEditor` directly, unmodified
   -- `XschemPin`'s own real `name`/`direction` fields duck-type exactly
   onto what `PortEditor` already expects, needing zero new editor code.
-  `ihp/xschem_writer.py` writes real edits back (name/direction only;
+  `pdklib/xschem_writer.py` writes real edits back (name/direction only;
   pin geometry and every other real `B`-primitive property stay
   untouched), verified byte-identical against all 202 real files with
   no edits, plus a real rename/redirect/add/delete round-trip.
@@ -2543,9 +2577,9 @@ models, ...), not just read/display layers. Concretely, still open:
   -- Delete only, deliberately no "New Instance/Wire": a real component
   needs a real symbol reference and real drawn position to mean
   anything, and this project has no schematic geometry editor to place
-  one sensibly. `ihp/xschem_sch_writer.py` handles write-back, reusing
+  one sensibly. `pdklib/xschem_sch_writer.py` handles write-back, reusing
   the same real `_C_HEAD_RE`/`_C_TAIL_RE`/`_N_HEAD_RE` matching
-  `ihp/xschem_sch.py`'s own parser already uses -- **a first-draft,
+  `pdklib/xschem_sch.py`'s own parser already uses -- **a first-draft,
   naive raw-character brace scan was replaced after it corrupted real
   files during byte-identical verification**, and a second, deeper
   real bug was found the same way: 27 real files (26 under
@@ -2554,7 +2588,7 @@ models, ...), not just read/display layers. Concretely, still open:
   `value="..."`/`tclcommand="..."` text ends with a real, doubled
   quote-then-close-brace idiom (`"\n"}`, confirmed present verbatim by
   direct search) that even the parser's own quote-aware scanner
-  (`ihp/xschem.py`'s `_scan_braced`) cannot safely disambiguate --
+  (`pdklib/xschem.py`'s `_scan_braced`) cannot safely disambiguate --
   without real xschem's own source to confirm the intended grammar,
   two real, computable safety signals (overlapping parsed entry ranges;
   an odd unescaped-quote count within one entry's own text -- zero
@@ -2571,14 +2605,14 @@ models, ...), not just read/display layers. Concretely, still open:
   parity with every other write-back domain.
 - **User-defined Verilog/Verilog-A model inclusion, plus a way to link
   it to the rest of the PDK, is done** -- see the
-  `ihp/user_models.py`/`gui/user_models_view.py` bullet in "What's
+  `pdklib/user_models.py`/`gui/user_models_view.py` bullet in "What's
   real here" for the full real design and verification. `main.py
   user-models` gives the same listing on the CLI. Its own three
   follow-ons are now done too: **editing a model's own ports** from
   inside **Simulation > User Models** (an **Edit Ports** button opens
   the same real port editor CDL/SPICE/Verilog already use, then writes
   straight back to the real, local `.v`/`.va` source via
-  `ihp/verilog_writer.py` -- unlike the real, downloaded PDK's own
+  `pdklib/verilog_writer.py` -- unlike the real, downloaded PDK's own
   views, a user model's own file *is* the user's live edit surface, so
   there's no separate export step); **batch-relinking many modules at
   once** (the tree is real Tk `extended`-select, so Ctrl/Shift-clicking
@@ -2587,7 +2621,7 @@ models, ...), not just read/display layers. Concretely, still open:
   row's *current* implicit name-match into an explicit, persisted link
   in one save -- confirmed idempotent once every row already has one);
   and **real ngspice/OSDI simulation-tool wiring** for Verilog-A
-  modules (`ihp/user_models.py`'s own `osdi_snippet`, rendered via a
+  modules (`pdklib/user_models.py`'s own `osdi_snippet`, rendered via a
   new, generically reusable `gui/text_dialog.py` -- a read-only modal
   for generated text with no real backing file, distinct from
   `file_view_dialog.py`'s own real-file view/edit/save dialog) -- not a guess,

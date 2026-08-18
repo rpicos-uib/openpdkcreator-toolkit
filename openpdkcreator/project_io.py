@@ -25,7 +25,7 @@ any real editor takes precedence over silently re-reading a changed
 source until you explicitly discard it.
 
 Saved under a new top-level ``saves/`` directory, not inside ``data/``
-(which `ihp/fetch.py` can delete/re-create wholesale -- these are the
+(which `pdklib/fetch.py` can delete/re-create wholesale -- these are the
 user's own authored edits, kept independent of that) -- gitignored for
 the same reason `data/` is: derived from a real, third-party PDK's own
 real starting values, not this project's own original code.
@@ -38,8 +38,8 @@ from pathlib import Path
 
 import yaml
 
-from .ihp.lef import LefPin, LefPort
-from .ihp.magic_tech import AliasEntry, ContactEntry, PlaneEntry, TypeEntry
+from .pdklib.lef import LefPin, LefPort
+from .pdklib.magic_tech import AliasEntry, ContactEntry, PlaneEntry, TypeEntry
 from .models import DesignRule, Layer
 
 SAVE_DIR = Path(__file__).resolve().parents[1] / "saves"
@@ -63,7 +63,7 @@ def save_state(
     """*magic_types*: technology name -> its current Types list.
     *magic_planes*/*magic_contacts*/*magic_aliases*: the same real
     shape, one dict per newly-editable Magic Tech domain (see
-    ``ihp/magic_tech_writer.py``'s own docstring) -- optional and
+    ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
     matching ``LefView.lef_files``'s own keys) -> macro name -> its

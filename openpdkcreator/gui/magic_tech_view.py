@@ -1,5 +1,5 @@
 """Magic Tech tab: real, parsed Magic ``.tech`` data
-(``openpdkcreator/ihp/magic_tech.py``), one real technology at a time
+(``openpdkcreator/pdklib/magic_tech.py``), one real technology at a time
 (``ihp-sg13g2`` and ``ihp-sg13g2-GDS`` for IHP -- the two genuinely
 separate technologies; the fragment files ``include``d into
 ``ihp-sg13g2.tech`` have no own header/name and are skipped in the
@@ -10,7 +10,7 @@ contacts/aliases/styles/CIF layers/**CIF Input**/**CIF Input
 Recipes**, plus **Compose**/**Connect**/**DRC (Magic)**/**Extract**/
 **Extract Coefficients**/**Extract Devices**/**Extract Misc** (real
 ``cifinput``/``compose``/``connect``/``drc``/``extract`` section
-content -- see ``ihp/magic_tech.py``'s own docstring for exactly
+content -- see ``pdklib/magic_tech.py``'s own docstring for exactly
 what's extracted from each and why). **Types**/**Planes**/
 **Contacts**/**Aliases** are editable -- Types keeps its own
 hand-written list + form pane (a real comma-split aliases list, a
@@ -25,7 +25,7 @@ need its own real editor design -- Styles' own real
 sections aren't a clean fit for either existing editor shape; see
 README's own Future Work). Editing is in-memory, same as DRC Rules/
 LEF pins, with native write-back into the real ``.tech`` file via
-``ihp/magic_tech_writer.py`` (``File > Export Edited Magic
+``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
 label, this now writes back all four editable domains at once, not
 just Types). "View File" opens the real, underlying ``.tech`` file
@@ -39,7 +39,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
-from ..ihp import magic_tech as magic_tech_mod
+from ..pdklib import magic_tech as magic_tech_mod
 from .file_view_dialog import view_file_dialog
 from .list_filter import build_filter_row, matches
 from .simple_list_editor import SimpleListEditor
@@ -270,7 +270,7 @@ class MagicTechView(ttk.Frame):
 
     def _new_tech_file(self):
         """A real, minimal, valid Magic ``.tech`` skeleton
-        (``ihp/magic_tech.py``'s own ``create_new_tech_file``) --
+        (``pdklib/magic_tech.py``'s own ``create_new_tech_file``) --
         genuinely usable immediately afterward: **New Type**/**New
         Plane**/**New Contact**/**New Alias** below all work against
         it the same as against a real, downloaded file (see that
@@ -351,7 +351,7 @@ class MagicTechView(ttk.Frame):
 
         tech = self._current_tech()
         if tech is None:
-            self.summary_var.set("No Magic .tech data loaded -- has ihp/fetch.py been run?")
+            self.summary_var.set("No Magic .tech data loaded -- has pdklib/fetch.py been run?")
             self.planes_editor.set_entries(None)
             self.contacts_editor.set_entries(None)
             self.aliases_editor.set_entries(None)

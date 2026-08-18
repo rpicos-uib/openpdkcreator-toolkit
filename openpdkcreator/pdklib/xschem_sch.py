@@ -6,7 +6,7 @@ listing against a first-draft, naive one-level-deep glob before
 trusting a count**: ``start_page.sch``, xschem's own top-level
 navigation schematic, sits directly at the xschem root, not nested in
 any family directory -- see ``find_sch_files``). Reuses
-``ihp/xschem.py``'s own real, quote-aware brace scanner
+``pdklib/xschem.py``'s own real, quote-aware brace scanner
 (``_scan_braced``) and key=value parser (``_parse_kv_block``) directly
 rather than duplicating them -- a real ``.sch`` file shares the exact
 same top-level ``TAG {content}`` primitive shape as a real ``.sym``
@@ -23,7 +23,7 @@ only real primitives this module adds support for:
 The symbol's own real drawing geometry primitives that a ``.sch`` file
 can *also* contain (``L``/``A``/``T``/``B``, when a schematic embeds
 inline symbol-editing content) are deliberately not parsed here, the
-same "structure, not graphics" precedent ``ihp/xschem.py``'s own
+same "structure, not graphics" precedent ``pdklib/xschem.py``'s own
 ``.sym`` parser already established.
 
 **Real symbol-reference resolution, confirmed by direct check, not
@@ -102,7 +102,7 @@ class XschemWire:
     """This wire's own real, 1-indexed source line range (the ``N``
     line's own header through its own closing ``}``, inclusive) --
     ``0`` for a wire this parser can't map back to real source lines.
-    Used by ``ihp/xschem_sch_writer.py`` for write-back."""
+    Used by ``pdklib/xschem_sch_writer.py`` for write-back."""
 
 
 @dataclass
@@ -120,7 +120,7 @@ class XschemInstance:
     props: dict[str, str] = field(default_factory=dict)
     """Every other real instance property, kept raw -- real device
     parameters vary per symbol kind, the same "don't guess further
-    semantics" precedent ``ihp/xschem.py``'s own ``raw_fields`` uses."""
+    semantics" precedent ``pdklib/xschem.py``'s own ``raw_fields`` uses."""
     resolved_path: Path | None = None
     """The real, existing PDK file ``symbol_ref`` resolves to
     (relative to ``libs.tech/xschem/``), or ``None`` for one of
@@ -131,7 +131,7 @@ class XschemInstance:
     """This instance's own real, 1-indexed source line range (the
     ``C`` line's own header through its own closing ``}``, inclusive)
     -- ``0`` for an instance this parser can't map back to real source
-    lines. Used by ``ihp/xschem_sch_writer.py`` for write-back."""
+    lines. Used by ``pdklib/xschem_sch_writer.py`` for write-back."""
 
     @property
     def is_pin(self) -> bool:
@@ -161,8 +161,8 @@ class XschemSchematic:
     """Every real instance's/wire's own (start_line, end_line) as
     originally parsed, in real file order -- unlike ``instances``/
     ``wires``, never mutated by editing (Delete); mirrors
-    ``ihp/lef.py``'s ``LefMacro.all_parsed_pin_ranges``, used by
-    ``ihp/xschem_sch_writer.py`` to tell a real deleted entry apart
+    ``pdklib/lef.py``'s ``LefMacro.all_parsed_pin_ranges``, used by
+    ``pdklib/xschem_sch_writer.py`` to tell a real deleted entry apart
     from a verbatim gap."""
     lines: list[XschemLine] = field(default_factory=list)
     all_parsed_line_ranges: list[tuple[int, int]] = field(default_factory=list)
@@ -175,7 +175,7 @@ class XschemSchematic:
     """Real, decorative/annotation drawing geometry a schematic can
     also directly embed (confirmed real: 66 real lines/97 real texts/
     87 real boxes/0 real arcs across the downloaded deck) -- reuses
-    ``ihp/xschem.py``'s own ``XschemLine``/``XschemArc``/
+    ``pdklib/xschem.py``'s own ``XschemLine``/``XschemArc``/
     ``XschemText``/``XschemBox`` dataclasses and real regexes directly,
     the exact same real primitive shapes a ``.sym`` file uses. For the
     real graphical editor (``gui/geometry_canvas.py``)."""

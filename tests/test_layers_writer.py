@@ -1,8 +1,8 @@
 import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
-from openpdkcreator.ihp import layers as layers_mod
-from openpdkcreator.ihp import layers_writer
+from openpdkcreator.pdklib import layers as layers_mod
+from openpdkcreator.pdklib import layers_writer
 
 root = Path("data/ihp-sg13g2/ihp-sg13g2")
 lyp_path = layers_mod.find_lyp(root)

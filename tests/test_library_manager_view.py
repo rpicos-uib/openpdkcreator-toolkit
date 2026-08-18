@@ -6,7 +6,7 @@ import shutil
 
 from openpdkcreator.gui.app import App
 from openpdkcreator import export as export_mod
-from openpdkcreator.ihp import library_index as li_mod
+from openpdkcreator.pdklib import library_index as li_mod
 from openpdkcreator.gui import library_manager_view as lmv_mod
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")

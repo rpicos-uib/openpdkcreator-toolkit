@@ -1,4 +1,4 @@
-"""Cells tab: real, parsed LEF data (``openpdkcreator/ihp/lef.py``) --
+"""Cells tab: real, parsed LEF data (``openpdkcreator/pdklib/lef.py``) --
 tech-layer routing rules and real macro/cell footprints (class/size/
 site/symmetry, pins with direction/use/port geometry, obstruction
 layers). A file picker over all real, downloaded ``.lef`` files (a
@@ -17,7 +17,7 @@ in both), and **Vias** (real ``VIA``/``ViaRULE`` via-stack geometry --
 each real layer's own rect count for a fixed ``VIA``, or its own real
 enclosure/spacing/resistance for a ``ViaRULE GENERATE`` -- read-only,
 no editor exists for via geometry, matching every other real,
-display-only domain here; see ``ihp/lef.py``'s own docstring for the
+display-only domain here; see ``pdklib/lef.py``'s own docstring for the
 exact real body structure).
 
 The file picker's own combobox is editable, not a closed real-file
@@ -26,18 +26,18 @@ file pickers already use (``gui/file_picker_utils.py``): typing a real,
 existing relative path (``libs.ref/<family>/lef/<name>.lef``) reads
 **Edit File** (opens ``file_view_dialog.view_file_dialog``); typing one
 that doesn't exist yet reads **Create File** (writes a real, minimal,
-valid empty-library ``.lef`` skeleton via ``ihp/lef.py``'s own
+valid empty-library ``.lef`` skeleton via ``pdklib/lef.py``'s own
 ``create_new_lef_file``, then reloads and selects it). **New Macro...**
 (LEF Macros sub-tab) then adds a real, brand-new, empty macro to
 whichever LEF file is loaded -- pins are added to it afterward through
 the same **New Pin** flow an existing macro already uses;
-``ihp/lef_writer.py``'s own ``render_lef_file`` renders it as a whole,
+``pdklib/lef_writer.py``'s own ``render_lef_file`` renders it as a whole,
 freshly-generated block on export (see that module's own docstring).
 
 Real parsing + persistence live one level up, on ``App`` itself
 (``app.get_parsed_lef``/``app.lef_cache``/``app.lef_pin_overrides``),
 not here -- ``cell_hub_view.py``'s own cell aggregation
-(``ihp/cells.py``) parses the very same ``.lef`` files independently,
+(``pdklib/cells.py``) parses the very same ``.lef`` files independently,
 so caching and saved-pin-override application had to move somewhere
 both tabs share, rather than living inside this one tab as before (a
 real bug, found and fixed here originally, would otherwise re-parse a
@@ -51,7 +51,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
-from ..ihp import lef as lef_mod
+from ..pdklib import lef as lef_mod
 from .file_picker_utils import handle_action, update_action_button
 from .list_filter import build_filter_row, matches
 from .pin_editor import PinEditor
@@ -207,7 +207,7 @@ class LefView(ttk.Frame):
 
         path = self.lef_files.get(self.file_var.get())
         if path is None:
-            self.summary_var.set("No LEF data loaded -- has ihp/fetch.py been run?")
+            self.summary_var.set("No LEF data loaded -- has pdklib/fetch.py been run?")
             self.current = None
             self._show_macro(None)
             return
@@ -278,7 +278,7 @@ class LefView(ttk.Frame):
         writer here uses) to the currently-loaded LEF file -- CLASS/
         SIZE/SYMMETRY start blank; real pins are added afterward via
         the existing PinEditor, the same **New Pin** flow an existing
-        macro already uses. ``ihp/lef_writer.py``'s own
+        macro already uses. ``pdklib/lef_writer.py``'s own
         ``render_lef_file`` renders it as a whole, freshly-generated
         ``MACRO ... END`` block, appended after every real, existing
         macro on export."""

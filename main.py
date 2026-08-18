@@ -32,26 +32,26 @@ sections are fully parsed, and one real pattern each is pulled out of
 its harder ``drc`` (``width``/``spacing``/``maxwidth``, 192 real checks),
 ``extract`` (``resist``/``planeorder``, 44 real entries), and
 ``cifinput`` (``ignore``/standalone ``calma`` hints, 156 real entries
-combined) mini-rule-languages -- see ``ihp/magic_tech.py``'s own
+combined) mini-rule-languages -- see ``pdklib/magic_tech.py``'s own
 docstring for exact real coverage and what's still not attempted
 (``device``, the rest of ``drc``/``extract``, ``cifinput``'s own real
 geometry-boolean recipes). LEF's own real
 ``VIA``/``ViaRULE`` via-stack geometry is also parsed (real layer/rect
 geometry for a fixed via, real enclosure/spacing/resistance for a
-generated one -- ``ihp/lef.py``); no attempt at Liberty's own real
+generated one -- ``pdklib/lef.py``); no attempt at Liberty's own real
 lookup-table content. Real,
 open_pdks-format write-back now exists for every currently
 structured-editable domain -- LEF pins (``export-lef``/
-``ihp/lef_writer.py``), DRC Rules (``export-drc``/``ihp/drc_writer.py``
+``pdklib/lef_writer.py``), DRC Rules (``export-drc``/``pdklib/drc_writer.py``
 -- a rule's ``rule_id``/``description`` patched into its real ``.drc``
 script, its ``value`` into the one real JSON config file it actually
 lives in), Magic Types (``export-magic-types``/
-``ihp/magic_tech_writer.py`` -- a type's own real one-line entry in
+``pdklib/magic_tech_writer.py`` -- a type's own real one-line entry in
 its real ``.tech`` file), CDL/SPICE/Verilog ports
-(``export-netlist``/``export-verilog``/``ihp/netlist_writer.py``/
-``ihp/verilog_writer.py``), Liberty pin/timing-arc data
-(``export-liberty``/``ihp/liberty_writer.py``), and Layers
-(``export-layers``/``ihp/layers_writer.py``) -- all surgical,
+(``export-netlist``/``export-verilog``/``pdklib/netlist_writer.py``/
+``pdklib/verilog_writer.py``), Liberty pin/timing-arc data
+(``export-liberty``/``pdklib/liberty_writer.py``), and Layers
+(``export-layers``/``pdklib/layers_writer.py``) -- all surgical,
 position-targeted patching into a new ``export/`` tree, never touching
 ``data/``, and independently re-verified faithful across the *entire*
 real PDK via ``export-full``'s own smoking-gun round-trip test. The
@@ -84,23 +84,23 @@ import sys
 from pathlib import Path
 
 from openpdkcreator import export as export_mod
-from openpdkcreator.ihp import cells as cells_mod
-from openpdkcreator.ihp import drc as drc_mod
-from openpdkcreator.ihp import fetch as fetch_mod
-from openpdkcreator.ihp import gds as gds_mod
-from openpdkcreator.ihp import inventory as inventory_mod
-from openpdkcreator.ihp import layers as layers_mod
-from openpdkcreator.ihp import lef as lef_mod
-from openpdkcreator.ihp import liberty as liberty_mod
-from openpdkcreator.ihp import magic_tech as magic_tech_mod
-from openpdkcreator.ihp import netlist as netlist_mod
-from openpdkcreator.ihp import qucs_sym as qucs_mod
-from openpdkcreator.ihp import reconcile as reconcile_mod
-from openpdkcreator.ihp import spice_models as spice_models_mod
-from openpdkcreator.ihp import user_models as user_models_mod
-from openpdkcreator.ihp import verilog as verilog_mod
-from openpdkcreator.ihp import xschem as xschem_mod
-from openpdkcreator.ihp import xschem_sch as xschem_sch_mod
+from openpdkcreator.pdklib import cells as cells_mod
+from openpdkcreator.pdklib import drc as drc_mod
+from openpdkcreator.pdklib import fetch as fetch_mod
+from openpdkcreator.pdklib import gds as gds_mod
+from openpdkcreator.pdklib import inventory as inventory_mod
+from openpdkcreator.pdklib import layers as layers_mod
+from openpdkcreator.pdklib import lef as lef_mod
+from openpdkcreator.pdklib import liberty as liberty_mod
+from openpdkcreator.pdklib import magic_tech as magic_tech_mod
+from openpdkcreator.pdklib import netlist as netlist_mod
+from openpdkcreator.pdklib import qucs_sym as qucs_mod
+from openpdkcreator.pdklib import reconcile as reconcile_mod
+from openpdkcreator.pdklib import spice_models as spice_models_mod
+from openpdkcreator.pdklib import user_models as user_models_mod
+from openpdkcreator.pdklib import verilog as verilog_mod
+from openpdkcreator.pdklib import xschem as xschem_mod
+from openpdkcreator.pdklib import xschem_sch as xschem_sch_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
 

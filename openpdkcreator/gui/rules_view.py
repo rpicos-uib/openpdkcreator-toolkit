@@ -11,18 +11,18 @@ tracks ``layers``/``design_rules``) -- auto-naming here always falls
 back to plain layer-name joining.
 
 Rules start real, not blank: loaded from a real, extracted KLayout DRC
-deck (``ihp/drc.py``) at startup, editable afterward the same way any
+deck (``pdklib/drc.py``) at startup, editable afterward the same way any
 hand-authored rule would be -- New/Delete/every field, exactly what
 OpenPDKCreator's own tab already offers, just against a real,
 pre-populated starting set instead of an empty one.
 
 **New DRC Deck...** creates a real, minimal, valid, empty deck when
-none exists yet (``ihp/drc.py``'s own ``create_new_drc_deck``) -- a
+none exists yet (``pdklib/drc.py``'s own ``create_new_drc_deck``) -- a
 from-scratch project's real starting point. A hand-authored **New
 Rule** is genuinely exportable too, not just metadata, for the three
 ``check_type``s with a real, single-method KLayout DRC shape this
 project knows how to generate (``min_width``/``min_spacing``/
-``min_enclosure``, the exact three ``ihp/drc.py``'s own extractor
+``min_enclosure``, the exact three ``pdklib/drc.py``'s own extractor
 already recognizes the other way): **File > Export Edited DRC Rules**
 generates real, runnable Ruby into a separate, tool-owned
 ``custom_rules.drc`` (each rule defines its own layer(s) inline via
@@ -31,7 +31,7 @@ pickers above against ``app.project.layers`` -- pick a real layer with
 a real GDS layer/datatype, not just any name). Every other
 ``check_type``, or a layer picker with no matching real ``Layer``,
 still can't be written back -- reported in the status line, not
-silently dropped; see ``ihp/drc_writer.py``'s own docstring.
+silently dropped; see ``pdklib/drc_writer.py``'s own docstring.
 """
 
 from __future__ import annotations
@@ -438,7 +438,7 @@ class RulesView(ttk.Frame):
     def _view_source(self):
         """Opens the real .drc file the selected rule was extracted
         from (DesignRule.source_provenance's own "path:line (...)"
-        text -- real for anything from ihp/drc.py, blank for a rule
+        text -- real for anything from pdklib/drc.py, blank for a rule
         added by hand via New Rule)."""
 
         if self.current_rule is not None:

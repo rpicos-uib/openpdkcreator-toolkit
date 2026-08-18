@@ -6,18 +6,18 @@ drawn geometry; Qucs-S Components has none of its own, see
 canvas implementations.
 
 **One shared shape model, ``GeometryItem``**, decoupled from any one
-real file format: each domain's own real objects (``ihp/xschem.py``'s
+real file format: each domain's own real objects (``pdklib/xschem.py``'s
 ``XschemLine``/``XschemArc``/``XschemText``/``XschemBox``/
-``XschemPin``, ``ihp/xschem_sch.py``'s additional
-``XschemInstance``/``XschemWire``, ``ihp/qucs_sym.py``'s
+``XschemPin``, ``pdklib/xschem_sch.py``'s additional
+``XschemInstance``/``XschemWire``, ``pdklib/qucs_sym.py``'s
 ``QucsLine``/``QucsArc``/``QucsText``/``QucsPort``) are wrapped by a
 small per-domain adapter (``gui/geometry_adapters.py``) into a
 ``GeometryItem`` -- real coordinates only, no file-format knowledge in
 this module at all. Edits made on the canvas (drag = move, Delete key
 = remove) call straight back into the real, live domain object via
 each item's own ``on_move``/``on_delete`` callback, so the exact same
-writers already verified elsewhere (``ihp/xschem_writer.py``/
-``ihp/xschem_sch_writer.py``/``ihp/qucs_sym_writer.py``) serialize
+writers already verified elsewhere (``pdklib/xschem_writer.py``/
+``pdklib/xschem_sch_writer.py``/``pdklib/qucs_sym_writer.py``) serialize
 whatever the canvas produced -- this module never writes a real file
 itself.
 

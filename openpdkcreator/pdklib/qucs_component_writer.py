@@ -6,12 +6,12 @@ only; every other real element (``Description``/``Models``/
 -- ``name``/``unit``/``show``) is left completely untouched.
 
 Standard ``xml.etree.ElementTree`` is used for *reading*
-(``ihp/qucs_sym.py``, a read-only domain there), but deliberately
+(``pdklib/qucs_sym.py``, a read-only domain there), but deliberately
 **not** for write-back: a full ElementTree round-trip
 re-serialization would reformat the whole real file (attribute order,
 quoting, whitespace) -- the same real risk that already ruled out
 ElementTree for KLayout's own real ``.lyp`` write-back
-(``ihp/layers.py``/``layers_writer.py``). Instead, this module does
+(``pdklib/layers.py``/``layers_writer.py``). Instead, this module does
 its own, separate, surgical text scan locating each real
 ``<Parameter ...>`` opening tag's own real character span (confirmed
 real: not always a single physical line -- a long real ``equation=``

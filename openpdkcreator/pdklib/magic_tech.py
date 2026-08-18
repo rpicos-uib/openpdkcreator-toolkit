@@ -21,8 +21,8 @@ each harder, mini-rule-language section rather than a full interpreter:
 
 - ``cifoutput``: real "recipes" ending in a ``calma <layer> <datatype>``
   statement -- the Magic-type-name to real-GDS-layer/datatype mapping,
-  cross-referenceable against ``ihp/layers.py``'s own KLayout ``.lyp``
-  layer list (``ihp/reconcile.py``).
+  cross-referenceable against ``pdklib/layers.py``'s own KLayout ``.lyp``
+  layer list (``pdklib/reconcile.py``).
 - ``drc``: the three dominant, cleanly tabular real statement kinds --
   ``width <layers> <value> "message"``,
   ``spacing <layer1> <layer2> <value> ... "message"``, and
@@ -186,7 +186,7 @@ class PlaneEntry:
     same way ``TypeEntry.line_no`` is (see ``_safe_prefix_line_count``)
     -- ``0`` for a plane added this session, or one whose section this
     parser can't safely map back to real source line numbers. Used by
-    ``ihp/magic_tech_writer.py`` for write-back."""
+    ``pdklib/magic_tech_writer.py`` for write-back."""
 
 
 @dataclass
@@ -204,7 +204,7 @@ class TypeEntry:
     ``types`` section this parser can't safely map back to
     ``source_path``'s own line numbers (see
     ``_safe_prefix_line_count``'s own docstring). Used by
-    ``ihp/magic_tech_writer.py`` to patch just this type's own real
+    ``pdklib/magic_tech_writer.py`` to patch just this type's own real
     line in place on export."""
 
 
@@ -504,8 +504,8 @@ class MagicTechnology:
     all_parsed_type_line_nos: list[int] = field(default_factory=list)
     """Every real type's own line number as originally parsed, in real
     file order -- unlike ``types``, never mutated by editing (New/
-    Delete Type); mirrors ``ihp/lef.py``'s ``LefMacro.
-    all_parsed_pin_ranges``, used by ``ihp/magic_tech_writer.py`` to
+    Delete Type); mirrors ``pdklib/lef.py``'s ``LefMacro.
+    all_parsed_pin_ranges``, used by ``pdklib/magic_tech_writer.py`` to
     tell a real deleted type apart from a comment/blank-line gap.
     Excludes any real type line this parser couldn't safely map back
     to ``source_path``'s own line numbers (see
@@ -623,7 +623,7 @@ def _safe_prefix_line_count(path: Path) -> int:
     line before *path*'s own first real ``include`` statement (all of
     it, if there's none). Confirmed true for IHP's own real
     ``ihp-sg13g2.tech``: its real ``types`` section (and everything
-    ``ihp/magic_tech_writer.py`` needs to write back) sits well before
+    ``pdklib/magic_tech_writer.py`` needs to write back) sits well before
     its first real ``include`` line. Not assumed true in general --
     write-back for a real ``types`` line past this boundary is
     deliberately refused (``TypeEntry.line_no`` stays ``0``) rather

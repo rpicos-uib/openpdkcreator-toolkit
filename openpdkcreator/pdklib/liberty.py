@@ -58,7 +58,7 @@ class LibertyTimingArc:
     end_line: int = 0
     """Real, 1-indexed, inclusive source line range of this arc's own
     ``timing () { ... }`` group -- used by
-    ``ihp/liberty_writer.py`` to patch just this arc's own real
+    ``pdklib/liberty_writer.py`` to patch just this arc's own real
     attribute lines in place, leaving its own real lookup-table
     sub-groups (``cell_rise``/...) completely untouched."""
 
@@ -79,9 +79,9 @@ class LibertyPin:
     all_parsed_arc_ranges: list[tuple[int, int]] = field(default_factory=list)
     """Every real timing arc's own (start_line, end_line) as originally
     parsed, in real file order -- unlike ``timing_arcs``, never mutated
-    by editing (New/Delete Arc); mirrors ``ihp/lef.py``'s
+    by editing (New/Delete Arc); mirrors ``pdklib/lef.py``'s
     ``LefMacro.all_parsed_pin_ranges``, used by
-    ``ihp/liberty_writer.py`` to tell a real deleted arc apart from a
+    ``pdklib/liberty_writer.py`` to tell a real deleted arc apart from a
     comment/blank-line gap."""
 
 
@@ -94,7 +94,7 @@ class LibertyCell:
     all_parsed_pin_ranges: list[tuple[int, int]] = field(default_factory=list)
     """Every real pin's own (start_line, end_line) as originally
     parsed, in real file order -- unlike ``pins``, never mutated by
-    editing (New/Delete Pin); used by ``ihp/liberty_writer.py`` the
+    editing (New/Delete Pin); used by ``pdklib/liberty_writer.py`` the
     same way ``all_parsed_arc_ranges`` is."""
 
 

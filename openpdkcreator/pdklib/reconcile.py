@@ -1,7 +1,7 @@
 """Cross-reference the two independently-parsed, real (GDS layer, GDS
-datatype) mappings this project has: KLayout's own ``.lyp`` (``ihp/
+datatype) mappings this project has: KLayout's own ``.lyp`` (``pdklib/
 layers.py``, keyed by display name) and Magic's ``cifoutput`` section
-(``ihp/magic_tech.py``, keyed by Magic CIF layer name). Both describe
+(``pdklib/magic_tech.py``, keyed by Magic CIF layer name). Both describe
 the *same* real fabricated GDS stream, from two different tools'
 independent points of view -- reconciling them is a real, concrete
 answer to "is anything in one tool's view missing from the other's."

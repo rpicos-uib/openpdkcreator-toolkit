@@ -96,7 +96,7 @@ assert str(umv.edit_ports_button["state"]) == "normal"
 assert str(umv.osdi_button["state"]) == "normal"
 
 model_file, module = umv.row_by_iid[va_iid]
-from openpdkcreator.ihp.verilog import VerilogPort
+from openpdkcreator.pdklib.verilog import VerilogPort
 module.ports.append(VerilogPort(name="new_port", direction="input", width=""))
 
 import openpdkcreator.gui.user_models_view as umv_mod
@@ -124,7 +124,7 @@ va_iid2 = [iid for iid in rows3 if umv.row_by_iid[iid][0].kind == "veriloga"][0]
 umv.tree.selection_set(va_iid2)
 umv._on_select()
 
-from openpdkcreator.ihp import user_models as user_models_mod
+from openpdkcreator.pdklib import user_models as user_models_mod
 mf, mod = umv.row_by_iid[va_iid2]
 snippet = user_models_mod.osdi_snippet(umv._project_root(), mf, mod)
 print("OSDI snippet:\n", snippet)

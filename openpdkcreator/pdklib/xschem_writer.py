@@ -5,13 +5,13 @@ direction/**position**, and now every real drawing primitive's own
 position too (``L``ines, ``A``rcs, ``T``ext, non-pin ``B``oxes).
 
 **Surgical patching, not full regeneration**, the same discipline
-``ihp/lef_writer.py``'s own PIN/END patching established: re-reads the
+``pdklib/lef_writer.py``'s own PIN/END patching established: re-reads the
 *original* source file fresh from disk and, using each primitive's
 real source line range (tracked at parse time), keeps every real,
 *unedited* primitive's own line completely verbatim -- only a
 genuinely edited (or brand-new) primitive's own line is regenerated,
 the same "unchanged -> keep the real original line verbatim" real,
-column-alignment-preserving discipline ``ihp/qucs_sym_writer.py``
+column-alignment-preserving discipline ``pdklib/qucs_sym_writer.py``
 already established (a naive always-regenerate approach would
 otherwise silently reformat real, untouched lines the moment *any*
 other primitive changed).

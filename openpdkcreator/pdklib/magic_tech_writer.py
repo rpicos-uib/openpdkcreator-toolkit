@@ -1,6 +1,6 @@
 """Real Magic write-back -- the third and final piece of native
-write-back serialization (after ``ihp/lef_writer.py`` and
-``ihp/drc_writer.py``), same surgical, position-targeted discipline:
+write-back serialization (after ``pdklib/lef_writer.py`` and
+``pdklib/drc_writer.py``), same surgical, position-targeted discipline:
 re-reads the real *original* ``.tech`` file fresh from disk (always
 pristine, since export never writes to ``data/``) and patches only the
 real lines belonging to a currently-editable domain -- **Types**,
@@ -21,11 +21,11 @@ or DRC's multi-line ``.output()`` calls), so all four share one
 generic patch routine, ``_render_section_patch``, parameterized by a
 per-domain line-render function -- rather than four near-duplicated
 copies of the same real positional-patch logic.
-``ihp/magic_tech.py``'s own ``TypeEntry.line_no``/``PlaneEntry.
+``pdklib/magic_tech.py``'s own ``TypeEntry.line_no``/``PlaneEntry.
 line_no``/``ContactEntry.line_no``/``AliasEntry.line_no`` (tracked at
 parse time, only when safely mappable back to real file line numbers
 -- see ``_safe_prefix_line_count``'s own docstring) are used exactly
-the way ``ihp/lef.py``'s ``LefPin.start_line``/``LefMacro.
+the way ``pdklib/lef.py``'s ``LefPin.start_line``/``LefMacro.
 all_parsed_pin_ranges`` are: a deleted entry's original line is
 omitted entirely; a brand-new entry (``line_no == 0``) is appended
 just before its own real section's closing ``end`` line; an existing

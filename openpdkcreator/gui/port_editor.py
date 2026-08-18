@@ -5,7 +5,7 @@ pattern every other editable view here uses (``pin_editor.PinEditor``,
 port editing (``gui/cell_hub_view.py``'s own "Edit ... Ports" dialogs)
 since all three are structurally the same real thing -- an ordered
 list of named ports, each with an optional real direction
-(``ihp/netlist.py``'s ``NetlistPort``/``ihp/verilog.py``'s
+(``pdklib/netlist.py``'s ``NetlistPort``/``pdklib/verilog.py``'s
 ``VerilogPort``) -- via duck typing plus a ``port_factory`` callback
 for "New Port" (the two real dataclasses differ: `VerilogPort` also
 has a real bus ``width``, `NetlistPort` doesn't, since CDL/SPICE ports

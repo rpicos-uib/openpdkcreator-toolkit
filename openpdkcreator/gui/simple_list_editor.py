@@ -7,7 +7,7 @@ per entry, plain string fields, no nested structure or nested list
 field the way Types' own ``aliases: list[str]`` needs special
 handling) doesn't need its own hand-copied set of the same eight
 methods. Introduced for Magic Tech's own Planes/Contacts/Aliases
-editors (``ihp/magic_tech.py``'s ``PlaneEntry``/``ContactEntry``/
+editors (``pdklib/magic_tech.py``'s ``PlaneEntry``/``ContactEntry``/
 ``AliasEntry`` -- all plain-string-field dataclasses, a clean fit);
 Types keeps its own existing, bespoke code unchanged (it has a real
 comma-split aliases *list* field and a boolean obsolete combo, neither

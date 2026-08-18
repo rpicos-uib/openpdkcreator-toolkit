@@ -18,11 +18,11 @@ Every other editable field on ``models.Layer`` (``purpose``, ``plane``,
 project's own metadata with no real counterpart in a ``.lyp`` at all --
 project-only, saved via ``project_io.py``, never written back here,
 the same "only real, resolvable fields get real write-back" precedent
-``ihp/drc_writer.py``'s own docstring already established for
+``pdklib/drc_writer.py``'s own docstring already established for
 ``DesignRule``.
 
 Per-field diffing against a fresh re-parse, not blanket re-emission:
-matches every other writer here (see e.g. ``ihp/liberty_writer.py``'s
+matches every other writer here (see e.g. ``pdklib/liberty_writer.py``'s
 own docstring for why) -- an unedited field's real original line is
 preserved exactly, not silently reformatted.
 """

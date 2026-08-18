@@ -1,5 +1,5 @@
 """Real Verilog port write-back -- same overall strategy as
-``ihp/netlist_writer.py``: compares each module's *current* port list
+``pdklib/netlist_writer.py``: compares each module's *current* port list
 (name + real direction + real width) against a **fresh re-parse** of
 the same real original file. Unchanged -- the real original header and
 every real declaration line are kept byte-for-byte, wherever they sit
@@ -13,7 +13,7 @@ there was none) -- real device/logic lines and comments in between are
 never touched, only the declaration lines themselves move.
 
 A module added this session (no real source position) can't be
-written back, matching ``ihp/netlist_writer.py``'s own precedent --
+written back, matching ``pdklib/netlist_writer.py``'s own precedent --
 only ports *within* an existing real module are structured-editable.
 """
 

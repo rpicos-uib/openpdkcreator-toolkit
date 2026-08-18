@@ -4,7 +4,7 @@ the same commit-on-switch pattern every editor here uses --
 is currently selected, its own **Timing Arcs** (related_pin/
 timing_type/timing_sense/when). Deliberately does *not* expose the
 real lookup tables (``cell_rise``/``cell_fall``/...) each arc's own
-real source may carry -- see ``ihp/liberty.py``'s own docstring for
+real source may carry -- see ``pdklib/liberty.py``'s own docstring for
 why: those stay read-only, the same "bounded, not a full parser"
 precedent every other editor here already follows.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from ..ihp import liberty as liberty_mod
+from ..pdklib import liberty as liberty_mod
 
 
 class LibertyPinEditor(ttk.Frame):

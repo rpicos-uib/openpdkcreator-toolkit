@@ -64,21 +64,21 @@ class VerilogModule:
     header_end_line: int = 0
     """The real last line of the (possibly multi-line) header --
     equal to ``start_line`` when the header fits on one real line.
-    ``ihp/verilog_writer.py`` replaces exactly this real span on
+    ``pdklib/verilog_writer.py`` replaces exactly this real span on
     write-back."""
     declaration_line_nos: list[int] = field(default_factory=list)
     """Every real ``input``/``output``/``inout`` declaration line's own
     line number, in real file order -- used by
-    ``ihp/verilog_writer.py`` to know exactly which real lines to
+    ``pdklib/verilog_writer.py`` to know exactly which real lines to
     replace (or leave alone) on write-back, the same way
-    ``ihp/lef.py``'s ``LefMacro.all_parsed_pin_ranges`` does for pins."""
+    ``pdklib/lef.py``'s ``LefMacro.all_parsed_pin_ranges`` does for pins."""
 
 
 def create_new_verilog_file(path: Path, module_name: str, ports: list[tuple[str, str]] | None = None) -> None:
     """Writes a real, minimal, valid Verilog module skeleton --
     ``module NAME(port, ...); direction port; ... endmodule`` -- with a
     real ``input``/``output``/``inout`` declaration line for every port
-    whose direction is known (see ``ihp/library_index.py``'s own
+    whose direction is known (see ``pdklib/library_index.py``'s own
     ``infer_ports_for_cell`` for where a ports list reflecting a cell's
     already-known real pins comes from). A port with an unknown
     direction still appears in the header port list, just without its

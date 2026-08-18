@@ -37,7 +37,7 @@ app._export_magic_types()
 root.update()
 print("Export status:", app.status.get())
 
-from openpdkcreator.ihp import magic_tech as mt
+from openpdkcreator.pdklib import magic_tech as mt
 export_path = export_mod.export_path_for(PDK_ROOT, type_entry_source := mtv.technologies["ihp-sg13g2"].source_path)
 reexported = mt.parse_tech_file(export_path)
 assert any(t.canonical_name == "nwell_renamed" for t in reexported.types)

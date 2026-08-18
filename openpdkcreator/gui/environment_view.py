@@ -1,6 +1,6 @@
 """Environment sub-tab (under Settings): generates a real, sourceable
 bash script for direct CLI use of the currently-loaded PDK --
-``ihp/shell_env.py``'s own ``generate_shell_env_script``, no separate
+``pdklib/shell_env.py``'s own ``generate_shell_env_script``, no separate
 logic here. A thin GUI wrapper the same way ``tools_view.py`` wraps
 ``eda_tools.py``: this view only calls that one function and writes
 its own returned text to disk; every real path/convention decision
@@ -27,7 +27,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .. import export as export_mod
-from ..ihp import shell_env as shell_env_mod
+from ..pdklib import shell_env as shell_env_mod
 
 SHELL_ENV_DIRNAME = "shell_env"
 SCRIPT_NAME = "pdk_env.sh"

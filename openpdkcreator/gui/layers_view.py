@@ -18,7 +18,7 @@ The layer list is filtered by two, independent, combined criteria: a
 ``purpose`` values the currently loaded project's own layers actually
 have, never a static list (the real IHP deck alone has 51 distinct
 real values). ``purpose`` itself is now a real, derived-at-import
-value (``ihp/layers.py``'s own ``purpose_from_name`` -- the segment
+value (``pdklib/layers.py``'s own ``purpose_from_name`` -- the segment
 after a real layer's last ``.``, e.g. ``"pin"`` for ``"Activ.pin"``),
 not the small, fixed 6-value enum this field used to be force-fit
 into -- so the **Purpose** field in the edit form on the right is now
@@ -166,7 +166,7 @@ class LayersView(ttk.Frame):
         # (the real IHP deck alone has 51 distinct real values: drawing/
         # pin/label/net/boundary/text/... down to one-off via names
         # like "m2tm1", since purpose is itself now derived from each
-        # real layer's own name -- see ihp/layers.py's own
+        # real layer's own name -- see pdklib/layers.py's own
         # purpose_from_name). Everything selected by default, so an
         # untouched filter never hides real data.
         purpose_frame = ttk.Frame(left)
@@ -365,7 +365,7 @@ class LayersView(ttk.Frame):
             combo.bind("<<ComboboxSelected>>", self._on_field_changed)
             if editable:
                 # Purpose is now real, derived, per-project data (see
-                # ihp/layers.py's own purpose_from_name) -- free-typed,
+                # pdklib/layers.py's own purpose_from_name) -- free-typed,
                 # live-committing on every keystroke like a plain Entry,
                 # not locked to a closed enum; `values` (its dropdown
                 # suggestions) is kept current from refresh().

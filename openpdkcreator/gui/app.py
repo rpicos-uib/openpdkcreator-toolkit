@@ -18,13 +18,13 @@ grouped by what they actually represent rather than left flat:
   one sub-tab per tool that defines it: **Layers** (KLayout's real
   ``.lyp``), **Magic Tech** (Magic's real ``.tech`` files), and
   **DRC Rules** (a real KLayout DRC deck, best-effort extracted --
-  ``ihp/drc.py``) -- reusing OpenPDKCreator's own Design Rules tab
+  ``pdklib/drc.py``) -- reusing OpenPDKCreator's own Design Rules tab
   (``RulesView``/``rule_canvas.py``), the same "reuse the existing
   interface" pattern ``LayersView`` already established, just against
   a real, pre-extracted starting set instead of an empty one.
 - **Cells** -- real cell/macro data, two sub-tabs: **LEF** (tech-layer
   routing rules plus real macro/cell footprints with editable pins) and
-  **By Cell** (``CellHubView``/``ihp/cells.py``) -- a hierarchical,
+  **By Cell** (``CellHubView``/``pdklib/cells.py``) -- a hierarchical,
   cell-centric picture: pick one real cell, see which of its real views
   (LEF/CDL/SPICE/Verilog/Liberty/GDS) actually exist across
   ``libs.ref/<family>/*/``, jump straight to that cell's own real block
@@ -32,9 +32,9 @@ grouped by what they actually represent rather than left flat:
   same in-memory macro the LEF tab itself edits (see
   ``App.get_parsed_lef`` below).
 - **Simulation** -- **ngspice Models** (real ``.model``/``.subckt``
-  statements -- ``ihp/spice_models.py``) and **xschem Symbols** (a
+  statements -- ``pdklib/spice_models.py``) and **xschem Symbols** (a
   real symbol's own device-attribute block and real pin list --
-  ``ihp/xschem.py``), both matching the **Technology**/**Cells**
+  ``pdklib/xschem.py``), both matching the **Technology**/**Cells**
   groups' own file-picker/Treeview shape; read-only, no editor exists
   for simulation model or symbol data. Qucs-S schematic data stays
   inventory-only (see the Overview tab) -- no real parser exists yet,
@@ -79,7 +79,7 @@ pane parse and edit real ``.lef`` macros, and must see the exact same,
 single in-memory object for a given real macro -- not two independent
 parses silently drifting apart the moment one tab edits a pin. Owned
 here, at the ``App`` level, rather than inside either tab, for exactly
-that reason (``ihp/cells.py``'s own ``build_cell_index`` takes an
+that reason (``pdklib/cells.py``'s own ``build_cell_index`` takes an
 injectable ``get_lef`` hook so ``CellHubView`` can route through this
 same cache too).
 
@@ -88,20 +88,20 @@ Files** / **DRC Rules** / **Magic Types** / **CDL/SPICE Ports** /
 **Verilog Ports** / **Liberty Files** / **Layers**): unlike
 ``project_io.py``'s own program-format ``saves/``, this writes real,
 valid text back into the real file formats -- ``.lef`` (pin edits,
-``ihp/lef_writer.py``), DRC Rules (a rule's ``rule_id``/``description``
+``pdklib/lef_writer.py``), DRC Rules (a rule's ``rule_id``/``description``
 patched into its real ``.drc`` script's own ``.output()`` call, its
 ``value`` into the one real JSON config file it actually lives in --
-``ihp/drc_writer.py``), Magic Types (a type's own real one-line entry
-in its real ``.tech`` file -- ``ihp/magic_tech_writer.py``),
+``pdklib/drc_writer.py``), Magic Types (a type's own real one-line entry
+in its real ``.tech`` file -- ``pdklib/magic_tech_writer.py``),
 CDL/SPICE/Verilog port lists (a real ``.SUBCKT``/``*.PININFO`` pair or
 real ``module``/``input``/``output``/``inout`` declarations --
-``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), Liberty
+``pdklib/netlist_writer.py``/``pdklib/verilog_writer.py``), Liberty
 pin/timing-arc data (a pin's own real ``direction``/``capacitance``/
 ``function`` attribute lines, a timing arc's own real
 ``related_pin``/``timing_type``/``timing_sense``/``when`` attribute
-lines -- ``ihp/liberty_writer.py``), and Layers (a real ``<name>``/
+lines -- ``pdklib/liberty_writer.py``), and Layers (a real ``<name>``/
 ``<source>``/``<frame-color>``/``<fill-color>`` tag, the only four
-real ``.lyp`` fields a ``Layer`` has -- ``ihp/layers_writer.py``) --
+real ``.lyp`` fields a ``Layer`` has -- ``pdklib/layers_writer.py``) --
 all via surgical, position-targeted text splicing, everything else
 preserved byte-for-byte, to a new ``export/`` tree mirroring each
 file's own real relative path under ``pdk_root``. Never touches
@@ -119,17 +119,17 @@ from tkinter import messagebox, simpledialog, ttk
 
 from .. import export as export_mod
 from .. import project_io
-from ..ihp import drc as drc_mod
-from ..ihp import inventory as inventory_mod
-from ..ihp import layers as layers_mod
-from ..ihp import lef as lef_mod
-from ..ihp import liberty as liberty_mod
-from ..ihp import netlist as netlist_mod
-from ..ihp import qucs_sym as qucs_sym_mod
-from ..ihp import user_models as user_models_mod
-from ..ihp import verilog as verilog_mod
-from ..ihp import xschem as xschem_mod
-from ..ihp import xschem_sch as xschem_sch_mod
+from ..pdklib import drc as drc_mod
+from ..pdklib import inventory as inventory_mod
+from ..pdklib import layers as layers_mod
+from ..pdklib import lef as lef_mod
+from ..pdklib import liberty as liberty_mod
+from ..pdklib import netlist as netlist_mod
+from ..pdklib import qucs_sym as qucs_sym_mod
+from ..pdklib import user_models as user_models_mod
+from ..pdklib import verilog as verilog_mod
+from ..pdklib import xschem as xschem_mod
+from ..pdklib import xschem_sch as xschem_sch_mod
 from ..models import DesignRule, Layer
 from .cell_hub_view import CellHubView
 from .environment_view import EnvironmentView
@@ -336,7 +336,7 @@ class App(ttk.Frame):
     def _export_lef_files(self):
         """Writes real, patched .lef text for every real file parsed
         this session (LEF tab or By Cell tab) to ``export/<pdk
-        name>/...`` -- see ``export.py``'s/``ihp/lef_writer.py``'s own
+        name>/...`` -- see ``export.py``'s/``pdklib/lef_writer.py``'s own
         docstrings for exactly what's patched and what's preserved
         verbatim. Never touches the real, downloaded ``data/`` copy."""
 
@@ -355,7 +355,7 @@ class App(ttk.Frame):
         resolvable provenance, and real, *generated* KLayout DRC Ruby
         (``custom_rules.drc``) for every hand-authored rule (New Rule)
         whose check_type/value/layers this project knows how to
-        generate -- see ``export.py``'s/``ihp/drc_writer.py``'s own
+        generate -- see ``export.py``'s/``pdklib/drc_writer.py``'s own
         docstrings. A rule that still can't be written back either way
         is reported in the status line, not silently dropped."""
 
@@ -377,7 +377,7 @@ class App(ttk.Frame):
 
     def _new_drc_deck(self):
         """A real, minimal, valid, empty DRC deck
-        (``ihp/drc.py``'s own ``create_new_drc_deck``) -- genuinely
+        (``pdklib/drc.py``'s own ``create_new_drc_deck``) -- genuinely
         usable immediately afterward: **New Rule** in the DRC Rules
         tab, and a real export, both work against it (see that
         function's own docstring)."""
@@ -412,7 +412,7 @@ class App(ttk.Frame):
     def _export_magic_types(self):
         """Writes real, patched .tech text for every real technology
         currently loaded, with any in-memory Types edits patched in --
-        see ``export.py``'s/``ihp/magic_tech_writer.py``'s own
+        see ``export.py``'s/``pdklib/magic_tech_writer.py``'s own
         docstrings."""
 
         self.magic_tech_view.commit_pending_edits()
@@ -426,7 +426,7 @@ class App(ttk.Frame):
         """Writes real, patched CDL/SPICE text for every real
         ``.cdl``/``.spice`` file parsed this session (By Cell tab's own
         Edit CDL/SPICE Ports dialogs) -- see ``export.py``'s/
-        ``ihp/netlist_writer.py``'s own docstrings."""
+        ``pdklib/netlist_writer.py``'s own docstrings."""
 
         written = export_mod.export_netlist_files(self.pdk_root, self.netlist_cache)
         if not written:
@@ -437,7 +437,7 @@ class App(ttk.Frame):
     def _export_verilog_files(self):
         """Writes real, patched Verilog text for every real ``.v`` file
         parsed this session (By Cell tab's own Edit Verilog Ports
-        dialog) -- see ``export.py``'s/``ihp/verilog_writer.py``'s own
+        dialog) -- see ``export.py``'s/``pdklib/verilog_writer.py``'s own
         docstrings."""
 
         written = export_mod.export_verilog_files(self.pdk_root, self.verilog_cache)
@@ -450,7 +450,7 @@ class App(ttk.Frame):
         """Writes real, patched Liberty pin/timing-arc text for every
         real ``.lib`` file parsed this session (By Cell tab's own Edit
         Pins/Timing dialog) -- see ``export.py``'s/
-        ``ihp/liberty_writer.py``'s own docstrings."""
+        ``pdklib/liberty_writer.py``'s own docstrings."""
 
         written = export_mod.export_liberty_files(self.pdk_root, self.liberty_cache)
         if not written:
@@ -461,7 +461,7 @@ class App(ttk.Frame):
     def _export_layers(self):
         """Writes real, patched ``.lyp`` text reflecting whatever's
         currently in ``self.project.layers`` -- see ``export.py``'s/
-        ``ihp/layers_writer.py``'s own docstrings. Unlike every other
+        ``pdklib/layers_writer.py``'s own docstrings. Unlike every other
         domain here, Layers has no per-file cache to check first: the
         Layers tab commits every field live (no pending-edit state),
         and there's only ever one real ``.lyp`` loaded per session."""
@@ -475,7 +475,7 @@ class App(ttk.Frame):
     def _export_xschem_symbols(self):
         """Writes real, patched xschem ``.sym`` text (pin name/direction
         only) for every real file parsed this session to ``export/<pdk
-        name>/...`` -- see ``export.py``'s/``ihp/xschem_writer.py``'s
+        name>/...`` -- see ``export.py``'s/``pdklib/xschem_writer.py``'s
         own docstrings. Never touches the real, downloaded ``data/``
         copy."""
 
@@ -490,7 +490,7 @@ class App(ttk.Frame):
         """Writes real, patched xschem ``.sch`` text (instance name/
         net-label, wire label, and deletion only) for every real file
         parsed this session to ``export/<pdk name>/...`` -- see
-        ``export.py``'s/``ihp/xschem_sch_writer.py``'s own docstrings,
+        ``export.py``'s/``pdklib/xschem_sch_writer.py``'s own docstrings,
         including the real, narrow class of entries/files that writer
         safely refuses to touch. Never touches the real, downloaded
         ``data/`` copy."""
@@ -506,7 +506,7 @@ class App(ttk.Frame):
         """Writes real, patched Qucs-S ``.sym`` text (real ``PortSym``
         x/y/type/angle/condition only) for every real file parsed this
         session to ``export/<pdk name>/...`` -- see ``export.py``'s/
-        ``ihp/qucs_sym_writer.py``'s own docstrings. Never touches the
+        ``pdklib/qucs_sym_writer.py``'s own docstrings. Never touches the
         real, downloaded ``data/`` copy."""
 
         self.qucs_view.commit_pending_edits()
@@ -520,7 +520,7 @@ class App(ttk.Frame):
         """Writes real, patched Qucs-S component ``.xml`` text (real
         Parameter default_value/equation only) for every real file
         parsed this session to ``export/<pdk name>/...`` -- see
-        ``export.py``'s/``ihp/qucs_component_writer.py``'s own
+        ``export.py``'s/``pdklib/qucs_component_writer.py``'s own
         docstrings. Never touches the real, downloaded ``data/`` copy."""
 
         self.qucs_view.commit_pending_edits()
@@ -656,7 +656,7 @@ class App(ttk.Frame):
 
     def _new_lyp_file(self):
         """A real, minimal, valid, empty KLayout ``.lyp`` skeleton
-        (``ihp/layers.py``'s own ``create_new_lyp_file``) --
+        (``pdklib/layers.py``'s own ``create_new_lyp_file``) --
         genuinely usable immediately afterward: **New Layer** in the
         Layers tab, and a real export, both work against it the same
         as against a real, downloaded file (see that function's own
@@ -849,7 +849,7 @@ class App(ttk.Frame):
 
         lyp_path = layers_mod.find_lyp(self.pdk_root)
         if lyp_path is None:
-            self.status.set(f"No .lyp found under {self.pdk_root}/libs.tech/ -- has ihp/fetch.py been run?")
+            self.status.set(f"No .lyp found under {self.pdk_root}/libs.tech/ -- has pdklib/fetch.py been run?")
             return
         self.lyp_path = lyp_path
 
@@ -867,7 +867,7 @@ class App(ttk.Frame):
         warning = f" (WARNING: {group_members} <group-members> block(s) found -- some layers may be missing)" if group_members else ""
         status = (
             f"Loaded {len(parsed)} layers from {lyp_path.name}{warning}; "
-            f"extracted {len(rules)} DRC rules ({len(skipped)} construct(s) not auto-extracted, see ihp/drc.py)"
+            f"extracted {len(rules)} DRC rules ({len(skipped)} construct(s) not auto-extracted, see pdklib/drc.py)"
         )
 
         saved = project_io.load_state(self.pdk_root)

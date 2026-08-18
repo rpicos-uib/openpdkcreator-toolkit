@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
 
-from openpdkcreator.ihp import libman_project as lp
+from openpdkcreator.pdklib import libman_project as lp
 
 TMP = Path("/tmp/test_libman_project")
 import shutil

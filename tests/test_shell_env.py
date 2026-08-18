@@ -3,7 +3,7 @@ sys.path.insert(0, "/foss/designs")
 from pathlib import Path
 import shutil
 
-from openpdkcreator.ihp import shell_env as shell_env_mod
+from openpdkcreator.pdklib import shell_env as shell_env_mod
 
 # --- Real IHP PDK ---
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")

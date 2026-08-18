@@ -1,8 +1,8 @@
 import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
-from openpdkcreator.ihp import liberty as lib_mod
-from openpdkcreator.ihp import liberty_writer as libw
+from openpdkcreator.pdklib import liberty as lib_mod
+from openpdkcreator.pdklib import liberty_writer as libw
 
 STD_PATH = Path("data/ihp-sg13g2/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib")
 SRAM_PATH = Path("data/ihp-sg13g2/ihp-sg13g2/libs.ref/sg13g2_sram/lib/RM_IHPSG13_1P_1024x16_c2_bm_bist_typ_1p20V_25C.lib")

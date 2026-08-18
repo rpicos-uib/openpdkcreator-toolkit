@@ -12,7 +12,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from ..ihp import liberty as liberty_mod
+from ..pdklib import liberty as liberty_mod
 from .liberty_editor import LibertyPinEditor
 
 

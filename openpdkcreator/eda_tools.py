@@ -28,7 +28,7 @@ afterward, not the full real DRC-deck/technology registration (no
 single-flag KLayout startup switch for that was found/verified here).
 Both guidances carry a real `requires_path` -- `resolve_launch` falls
 back to a bare, unconfigured launch if the real file isn't there
-(`ihp/fetch.py` hasn't run yet, or a non-default `--dest` was used),
+(`pdklib/fetch.py` hasn't run yet, or a non-default `--dest` was used),
 rather than launching either tool with a flag pointed at nothing.
 
 Usable two ways:
@@ -73,7 +73,7 @@ from pathlib import Path
 # openpdkcreator/eda_tools.py -> project root.
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# ihp/fetch.py's own real, default sparse-checkout destination
+# pdklib/fetch.py's own real, default sparse-checkout destination
 # (DEFAULT_DEST = PROJECT_ROOT / "data" / "ihp-sg13g2") -- the real
 # clone lands one level deeper, at .../ihp-sg13g2/ihp-sg13g2/, since
 # the sparse checkout preserves the upstream repo's own top-level
@@ -141,7 +141,7 @@ class LaunchGuidance:
     """A real, `{repo_root}`-substituted path that must exist on disk
     for this guidance to apply -- e.g. the real PDK file it pre-points
     at. `resolve_launch` silently falls back to a bare-binary launch if
-    it's missing (``ihp/fetch.py`` hasn't run yet, or a custom
+    it's missing (``pdklib/fetch.py`` hasn't run yet, or a custom
     ``--dest`` was used), rather than launching the tool with a flag
     pointed at nothing."""
 

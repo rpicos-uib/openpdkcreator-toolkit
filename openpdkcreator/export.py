@@ -5,16 +5,16 @@ valid, patched files to a new ``export/`` tree, mirroring each file's
 own real relative path under its ``pdk_root`` -- never touching the
 real, downloaded ``data/`` copy.
 
-Covers every currently-editable domain: LEF pins (``ihp/lef_writer.py``'s
+Covers every currently-editable domain: LEF pins (``pdklib/lef_writer.py``'s
 own docstring explains exactly how the patching preserves everything
 this project's LEF model doesn't capture), DRC Rules
-(``ihp/drc_writer.py``'s own docstring explains the real
+(``pdklib/drc_writer.py``'s own docstring explains the real
 ``.drc``-script-vs-JSON-config split), Magic Types
-(``ihp/magic_tech_writer.py``), CDL/SPICE/Verilog ports
-(``ihp/netlist_writer.py``/``ihp/verilog_writer.py``), Liberty
-pin/timing-arc data (``ihp/liberty_writer.py``'s own docstring explains
+(``pdklib/magic_tech_writer.py``), CDL/SPICE/Verilog ports
+(``pdklib/netlist_writer.py``/``pdklib/verilog_writer.py``), Liberty
+pin/timing-arc data (``pdklib/liberty_writer.py``'s own docstring explains
 the per-field diffing discipline; the real lookup-table sub-groups
-stay untouched, unmodeled), and Layers (``ihp/layers_writer.py`` --
+stay untouched, unmodeled), and Layers (``pdklib/layers_writer.py`` --
 only ``name``/``gds_layer``/``gds_datatype``/``frame_color``/
 ``fill_color`` have any real ``.lyp`` counterpart; every other
 editable ``Layer`` field is this project's own metadata, saved via
@@ -28,27 +28,27 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .ihp import drc as drc_mod
-from .ihp import drc_writer
-from .ihp import layers as layers_mod
-from .ihp import layers_writer
-from .ihp import lef as lef_mod
-from .ihp import lef_writer
-from .ihp import liberty as liberty_mod
-from .ihp import liberty_writer
-from .ihp import magic_tech as magic_tech_mod
-from .ihp import magic_tech_writer
-from .ihp import netlist as netlist_mod
-from .ihp import netlist_writer
-from .ihp import qucs_component_writer
-from .ihp import qucs_sym as qucs_sym_mod
-from .ihp import qucs_sym_writer
-from .ihp import verilog as verilog_mod
-from .ihp import verilog_writer
-from .ihp import xschem as xschem_mod
-from .ihp import xschem_sch as xschem_sch_mod
-from .ihp import xschem_sch_writer
-from .ihp import xschem_writer
+from .pdklib import drc as drc_mod
+from .pdklib import drc_writer
+from .pdklib import layers as layers_mod
+from .pdklib import layers_writer
+from .pdklib import lef as lef_mod
+from .pdklib import lef_writer
+from .pdklib import liberty as liberty_mod
+from .pdklib import liberty_writer
+from .pdklib import magic_tech as magic_tech_mod
+from .pdklib import magic_tech_writer
+from .pdklib import netlist as netlist_mod
+from .pdklib import netlist_writer
+from .pdklib import qucs_component_writer
+from .pdklib import qucs_sym as qucs_sym_mod
+from .pdklib import qucs_sym_writer
+from .pdklib import verilog as verilog_mod
+from .pdklib import verilog_writer
+from .pdklib import xschem as xschem_mod
+from .pdklib import xschem_sch as xschem_sch_mod
+from .pdklib import xschem_sch_writer
+from .pdklib import xschem_writer
 from .models import DesignRule, Layer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -91,7 +91,7 @@ def export_drc_rules(
     rule's value needs patching there). A rule with no real,
     resolvable provenance (hand-authored via New Rule) is instead
     *generated*, not patched, into a separate, entirely tool-owned
-    ``custom_rules.drc`` (``ihp/drc_writer.py``'s own
+    ``custom_rules.drc`` (``pdklib/drc_writer.py``'s own
     ``render_custom_drc_file`` -- see its own docstring for why this
     is a genuinely different write-back discipline from every other
     real file here). *layers* resolves a generated rule's own real
@@ -226,7 +226,7 @@ def export_xschem_symbols(
     """Every real ``.sym`` file in *symbol_cache* (the GUI passes only
     files parsed this session; ``main.py export-xschem-sym`` passes
     every real file, freshly parsed). Only pin name/direction are ever
-    edited -- see ``ihp/xschem_writer.py``'s own docstring. Returns the
+    edited -- see ``pdklib/xschem_writer.py``'s own docstring. Returns the
     real export paths written."""
 
     written = []
@@ -242,7 +242,7 @@ def export_xschem_schematics(
 ) -> list[Path]:
     """Every real ``.sch`` file in *schematic_cache*. Only instance
     name/net-label, wire label, and deletion are ever edited -- see
-    ``ihp/xschem_sch_writer.py``'s own docstring, including the real,
+    ``pdklib/xschem_sch_writer.py``'s own docstring, including the real,
     narrow class of entries/files it safely refuses to touch. Returns
     the real export paths written."""
 
@@ -259,7 +259,7 @@ def export_qucs_symbols(
 ) -> list[Path]:
     """Every real Qucs-S ``.sym`` file in *symbol_cache*. Only real
     ``PortSym`` x/y/type/angle/condition are ever edited -- see
-    ``ihp/qucs_sym_writer.py``'s own docstring. Returns the real
+    ``pdklib/qucs_sym_writer.py``'s own docstring. Returns the real
     export paths written."""
 
     written = []
@@ -275,7 +275,7 @@ def export_qucs_components(
 ) -> list[Path]:
     """Every real Qucs-S component ``.xml`` file in *component_cache*.
     Only a real Parameter's own ``default_value``/``equation`` is ever
-    edited -- see ``ihp/qucs_component_writer.py``'s own docstring.
+    edited -- see ``pdklib/qucs_component_writer.py``'s own docstring.
     Returns the real export paths written."""
 
     written = []

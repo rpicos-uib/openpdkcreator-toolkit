@@ -89,7 +89,7 @@ class LefPin:
     """Real, 1-indexed, inclusive source line range of this pin's own
     'PIN name ... END name' block in *its macro's* source file --
     ``0`` for a pin created this session (New Pin), which has no real
-    source position. Used by ``ihp/lef_writer.py`` to patch just this
+    source position. Used by ``pdklib/lef_writer.py`` to patch just this
     pin's own real text back in place on export, without needing to
     fully regenerate content this parser doesn't model (e.g. real
     PORT rect coordinates -- only a count is tracked)."""
@@ -111,7 +111,7 @@ class LefMacro:
     all_parsed_pin_ranges: list[tuple[int, int]] = field(default_factory=list)
     """Every real pin's (start_line, end_line) as originally parsed,
     in real file order -- unlike ``pins``, never mutated by editing
-    (New/Delete Pin) -- ``ihp/lef_writer.py`` uses this to tell a real
+    (New/Delete Pin) -- ``pdklib/lef_writer.py`` uses this to tell a real
     deleted pin (omit its original text) apart from a gap between real
     pins that's just a comment/blank line (keep it verbatim)."""
 

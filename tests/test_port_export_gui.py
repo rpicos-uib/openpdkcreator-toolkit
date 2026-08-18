@@ -28,7 +28,7 @@ cv = chv.current_cell
 # Edit CDL ports live via the actual dialog machinery (construct the
 # PortEditor the dialog would, without the blocking wait_window).
 from openpdkcreator.gui.port_editor import PortEditor
-from openpdkcreator.ihp import netlist as netlist_mod
+from openpdkcreator.pdklib import netlist as netlist_mod
 
 cdl_editor = PortEditor(root, port_factory=lambda name: netlist_mod.NetlistPort(name=name))
 cdl_editor.set_ports(cv.cdl_cell.ports)
@@ -40,7 +40,7 @@ app._export_netlist_files()
 root.update()
 print("Netlist export status:", app.status.get())
 cdl_export = export_mod.export_path_for(PDK_ROOT, cv.cdl_source)
-from openpdkcreator.ihp import netlist as nl
+from openpdkcreator.pdklib import netlist as nl
 reexported = nl.find_cells(cdl_export)
 re_cell = next(c for c in reexported if c.name == "sg13g2_a21o_1")
 re_port = next(p for p in re_cell.ports if p.name == cdl_port.name)
@@ -48,7 +48,7 @@ assert re_port.direction == cdl_port.direction
 print("PASS: File > Export Edited CDL/SPICE Ports reflects the real edit.")
 
 # Verilog
-from openpdkcreator.ihp import verilog as verilog_mod
+from openpdkcreator.pdklib import verilog as verilog_mod
 v_editor = PortEditor(root, port_factory=lambda name: verilog_mod.VerilogPort(name=name), has_width=True)
 v_editor.set_ports(cv.verilog_module.ports)
 root.update()

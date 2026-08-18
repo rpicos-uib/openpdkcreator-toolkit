@@ -22,11 +22,11 @@ means for a 2-terminal device with no IHP precedent to copy from.
 node**: Layers, Magic Tech, DRC Rules, LEF, xschem Symbols/Schematics,
 and Qucs-S Symbols/Components all support creating a brand-new file
 from inside this GUI today (their own "New..."/**Create File**
-actions -- see ``ihp/layers.py``'s ``create_new_lyp_file``,
-``ihp/magic_tech.py``'s ``create_new_tech_file``, ``ihp/drc.py``'s
-``create_new_drc_deck``, ``ihp/lef.py``'s ``create_new_lef_file``,
-``ihp/xschem.py``'s ``create_new_sym_file``, ``ihp/xschem_sch.py``'s
-``create_new_sch_file``, ``ihp/qucs_sym.py``'s
+actions -- see ``pdklib/layers.py``'s ``create_new_lyp_file``,
+``pdklib/magic_tech.py``'s ``create_new_tech_file``, ``pdklib/drc.py``'s
+``create_new_drc_deck``, ``pdklib/lef.py``'s ``create_new_lef_file``,
+``pdklib/xschem.py``'s ``create_new_sym_file``, ``pdklib/xschem_sch.py``'s
+``create_new_sch_file``, ``pdklib/qucs_sym.py``'s
 ``create_new_symbol_geometry_file``/``create_new_component_file``).
 LEF's and DRC Rules' own versions are each deliberately partial,
 though (see ``_status_lef``/the ``drc_rules`` stage's own description
@@ -37,7 +37,7 @@ DRC **New Rule** is genuinely exportable -- real, generated KLayout
 Ruby, not just metadata -- only for the six ``check_type``s with a
 real, single-method shape this project knows how to emit
 (``min_width``/``min_spacing``/``min_enclosure``/``min_area``/
-``min_overlap``/``max_length`` -- see ``ihp/drc_writer.py``'s own
+``min_overlap``/``max_length`` -- see ``pdklib/drc_writer.py``'s own
 docstring); every other check type still can't be written back. Every
 remaining domain (Verilog, Liberty,
 CDL/SPICE, ngspice Models, and User Models' own ``.va``/``.v`` files)
@@ -66,16 +66,16 @@ from tkinter import ttk
 from typing import Callable
 
 from .. import export as export_mod
-from ..ihp import cells as cells_mod
-from ..ihp import drc as drc_mod
-from ..ihp import layers as layers_mod
-from ..ihp import lef as lef_mod
-from ..ihp import magic_tech as magic_tech_mod
-from ..ihp import qucs_sym as qucs_sym_mod
-from ..ihp import spice_models as spice_models_mod
-from ..ihp import user_models as user_models_mod
-from ..ihp import xschem as xschem_mod
-from ..ihp import xschem_sch as xschem_sch_mod
+from ..pdklib import cells as cells_mod
+from ..pdklib import drc as drc_mod
+from ..pdklib import layers as layers_mod
+from ..pdklib import lef as lef_mod
+from ..pdklib import magic_tech as magic_tech_mod
+from ..pdklib import qucs_sym as qucs_sym_mod
+from ..pdklib import spice_models as spice_models_mod
+from ..pdklib import user_models as user_models_mod
+from ..pdklib import xschem as xschem_mod
+from ..pdklib import xschem_sch as xschem_sch_mod
 from .settings_view import DEFAULT_PROJECT_NAME
 from .tooltip import CanvasItemTooltip
 
@@ -108,7 +108,7 @@ def _glob_count(app, pattern: str) -> int:
 
 
 def _status_overview(app):
-    from ..ihp import inventory as inventory_mod
+    from ..pdklib import inventory as inventory_mod
 
     count = len(inventory_mod.scan_all(app.pdk_root))
     return True, f"{count} real tool director(y/ies) inventoried under {app.pdk_root.name}/.", None
@@ -250,7 +250,7 @@ def _status_gds(app):
             False,
             "No real .gds file found under libs.ref/.",
             "There's no in-GUI GDS editor at all (view-only, via "
-            "ihp/gds.py's KLayout API) -- draw the physical layout in "
+            "pdklib/gds.py's KLayout API) -- draw the physical layout in "
             "KLayout or Magic directly and place the .gds under "
             "libs.ref/<family>/gds/.",
         )

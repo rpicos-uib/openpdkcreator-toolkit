@@ -24,7 +24,7 @@ root.update()
 # --- Create a real .lyp, add real layers, matching the openMemristorPDK
 # session that first found this gap ---
 lv = app.layers_view
-from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.pdklib import layers as layers_mod
 lyp_path = PDK_ROOT / "libs.tech" / "klayout" / "tech" / "test.lyp"
 layers_mod.create_new_lyp_file(lyp_path)
 app.load()

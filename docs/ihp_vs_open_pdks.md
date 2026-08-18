@@ -44,7 +44,7 @@ Top level (`ihp-sg13g2/`): exactly `libs.doc`, `libs.qa`, `libs.ref`,
 `sg13g2_sram`, `sg13g2_stdcell`. Per-view subdirectories found:
 `sg13g2_io/{cdl,doc,gds,lef,lib,spice,verilog}`,
 `sg13g2_pr/{gds}` (GDS-only -- no per-device split, honestly matching
-what `openpdkcreator/ihp/inventory.py`'s own real scan reports),
+what `openpdkcreator/pdklib/inventory.py`'s own real scan reports),
 `sg13g2_sram/{cdl,doc,gds,lef,lib,verilog}`,
 `sg13g2_stdcell/{cdl,doc,gds,lef,lib,spice,verilog}` -- a real,
 slightly different view set per family (not every family ships every
@@ -55,9 +55,9 @@ view), which the spec's own `...` already anticipates.
 `openmempdk` ships): `digital, gdsfactory, klayout, librelane, magic,
 netgen, ngspice, openems, openroad, palace, parasitics, qucs-s,
 verilog-a, xschem, xyce`. Confirmed real, representative counts (via
-`openpdkcreator/ihp/inventory.py`, run against the real download):
+`openpdkcreator/pdklib/inventory.py`, run against the real download):
 `magic/` has 35 files including 6 real `.tech` files. Confirmed by
-actually reading them (see `openpdkcreator/ihp/magic_tech.py`): only
+actually reading them (see `openpdkcreator/pdklib/magic_tech.py`): only
 2 are genuinely separate technologies -- `ihp-sg13g2.tech` (the real,
 connectivity-aware one) and `ihp-sg13g2-GDS.tech` (a second, simpler
 "raw GDS layers" one, its own real `tech`/`version` header, used for
@@ -69,7 +69,7 @@ technologies of their own. `klayout/` has 548 files including a real,
 flat (see below) `sg13g2.lyp` and 42 real `.drc` files under
 `tech/drc/` (`ihp-sg13g2.drc` plus 41 more under `rule_decks/`).
 `digital/` and `palace/` are real git submodules IHP references but
-this project deliberately never initializes (see `ihp/fetch.py`'s own
+this project deliberately never initializes (see `pdklib/fetch.py`'s own
 docstring) -- they show as real, empty directories, not missing ones.
 
 ## The one real divergence found
@@ -89,7 +89,7 @@ IHP's real `sg13g2.lyp` (`libs.tech/klayout/tech/sg13g2.lyp`) was
 hand-checked for `<group-members>` nesting (real KLayout `.lyp` files
 can group layers this way, which a flat top-level scan would silently
 miss): **zero** `<group-members>` blocks found; all 377 real
-`<properties>` entries are flat, top-level. `openpdkcreator/ihp/layers.py`'s
+`<properties>` entries are flat, top-level. `openpdkcreator/pdklib/layers.py`'s
 `import_layers()` (a flat scan, adapted from OpenPDKCreator's own
 `import_open_pdks.py`) is confirmed correct for this specific file --
 `find_group_members()` still checks and warns for any future `.lyp`
@@ -97,11 +97,11 @@ where that isn't true.
 
 ## Magic .tech vs. KLayout .lyp: two real, independent views of the same GDS stream
 
-`openpdkcreator/ihp/magic_tech.py` parses `ihp-sg13g2.tech`'s real
+`openpdkcreator/pdklib/magic_tech.py` parses `ihp-sg13g2.tech`'s real
 `cifoutput` section (every `layer NAME ... calma L D` recipe -- 248
 real named entries, 138 real `calma` output statements) into a
 Magic-type-name -> (GDS layer, GDS datatype) mapping, independently of
-the `.lyp`-derived one. `openpdkcreator/ihp/reconcile.py` cross-checks
+the `.lyp`-derived one. `openpdkcreator/pdklib/reconcile.py` cross-checks
 them against each other -- both describe the same real, fabricated GDS
 stream, from two different tools' own points of view.
 
@@ -120,7 +120,7 @@ what it needs to actually paint), not a parsing gap in either parser.
 
 ## Real LEF keyword casing note
 
-`openpdkcreator/ihp/lef.py` was checked against all 32 of IHP's real,
+`openpdkcreator/pdklib/lef.py` was checked against all 32 of IHP's real,
 downloaded `.lef` files. Most LEF keywords in these real files are
 uppercase, matching the LEF spec's usual documented convention (`LAYER`,
 `MACRO`, `PIN`, `SITE`, `PORT`, `OBS`, `CLASS`, `SIZE`, `SYMMETRY`,
@@ -144,7 +144,7 @@ cells' `CoreSite`), not one.
 
 ## Real KLayout DRC-deck extraction results
 
-`openpdkcreator/ihp/drc.py` was pointed at the **full**, real,
+`openpdkcreator/pdklib/drc.py` was pointed at the **full**, real,
 downloaded IHP DRC deck (`libs.tech/klayout/tech/drc/`, 42 real `.drc`
 files -- the top-level `ihp-sg13g2.drc` plus 41 more under
 `rule_decks/`, several nested a level deeper still, e.g.
@@ -174,7 +174,7 @@ text, not silently dropped or guessed at.
 
 ## Real per-cell file organization: two different real conventions, confirmed
 
-`openpdkcreator/ihp/cells.py` (built for the **By Cell** hierarchical
+`openpdkcreator/pdklib/cells.py` (built for the **By Cell** hierarchical
 view) had to handle a real structural fact confirmed by directly
 counting real files, not assumed from one family alone: IHP's own four
 real families use *two different* real per-view file organizations for

@@ -1,5 +1,5 @@
 """Simulation tab: user-authored Verilog/Verilog-A models
-(``openpdkcreator/ihp/user_models.py``) -- browse every real module
+(``openpdkcreator/pdklib/user_models.py``) -- browse every real module
 found under ``user_models/verilog/*.v``/``user_models/veriloga/*.va``
 and see (or set) which real cell each one is linked to.
 
@@ -8,7 +8,7 @@ as ``(auto: NAME)``, not editable here -- rename the module or add an
 explicit link below to override); an explicit link is set by selecting
 one or more rows and typing a cell name into **Cell name**, then
 **Save Link** -- persisted immediately to ``user_models/links.yaml``
-(``ihp/user_models.py``'s own ``save_links``), and ``App.reload_user_models``
+(``pdklib/user_models.py``'s own ``save_links``), and ``App.reload_user_models``
 is called afterward so **By Cell** picks up the change without a
 restart. Multi-selecting rows (``Ctrl``/``Shift``-click, real Tk
 ``extended`` select mode) applies the same typed cell name to every
@@ -24,14 +24,14 @@ silently break a link that used to "just work."
 **Edit Ports** opens the same real port editor CDL/SPICE/Verilog
 already use (``port_dialog.edit_ports_dialog``), then writes the
 edited port list straight back to the real, local ``.v``/``.va``
-source file via ``ihp/verilog_writer.py`` -- unlike the real,
+source file via ``pdklib/verilog_writer.py`` -- unlike the real,
 downloaded PDK's own CDL/SPICE/Verilog views, a user model's own
 source file *is* the user's live, git-tracked edit surface, so there's
 no separate export/write-back step: closing the dialog commits.
 
 **Generate ngspice OSDI Snippet** (Verilog-A modules only) renders
 IHP's own real, documented OpenVAF-compile-then-``osdi``-load
-recipe (``ihp/user_models.py``'s own ``osdi_snippet``), pointed at the
+recipe (``pdklib/user_models.py``'s own ``osdi_snippet``), pointed at the
 selected module -- a real, copy-pasteable two-step wiring recipe, not
 executed or written to disk by this tool.
 """
@@ -42,9 +42,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .. import export as export_mod
-from ..ihp import user_models as user_models_mod
-from ..ihp import verilog as verilog_mod
-from ..ihp import verilog_writer as verilog_writer_mod
+from ..pdklib import user_models as user_models_mod
+from ..pdklib import verilog as verilog_mod
+from ..pdklib import verilog_writer as verilog_writer_mod
 from .port_dialog import edit_ports_dialog
 from .text_dialog import show_text_dialog
 

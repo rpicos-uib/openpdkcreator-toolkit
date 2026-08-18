@@ -30,7 +30,7 @@ one file location, not one:
   real, parseable by the standard ``xml.etree.ElementTree`` with zero
   failures across all 34 real files -- unlike this project's other
   real, XML-*shaped* format (KLayout's own real ``.lyp``, see
-  ``ihp/layers.py``), ``ElementTree`` is safe and appropriate here:
+  ``pdklib/layers.py``), ``ElementTree`` is safe and appropriate here:
   this domain is read-only, with no line-number-tracking write-back
   requirement forcing a hand-rolled scanner. A ``.sym`` file, by
   contrast, is genuinely *not* single-root XML (a flat top-level tag
@@ -43,14 +43,14 @@ primitive (e.g. ``condition="type=npn"``) marks that primitive as
 belonging to only one real symbol *variant* -- a real BJT symbol's own
 drawn geometry switches between its ``npn``/``pnp`` variants this way,
 the Qucs-S schematic-capture analog of Magic's own ``variants``
-conditional-scoping construct (``ihp/magic_tech.py``). Not evaluated
+conditional-scoping construct (``pdklib/magic_tech.py``). Not evaluated
 or resolved here -- kept as a raw, per-primitive fact, the same
 "structure, not full semantics" precedent as everywhere else.
 
 Real device Parameters are kept raw/positional (``raw_attrs``), the
 same "don't guess further semantics" precedent
-``ihp/magic_tech.py``'s own ``ComposeStatement`` and
-``ihp/xschem.py``'s own ``raw_fields`` already use.
+``pdklib/magic_tech.py``'s own ``ComposeStatement`` and
+``pdklib/xschem.py``'s own ``raw_fields`` already use.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ class QucsPort:
     carry (see this module's own docstring)."""
     line_no: int = 0
     """This port's own real, 1-indexed source line number -- ``0`` for
-    a port added this session. Used by ``ihp/qucs_sym_writer.py`` for
+    a port added this session. Used by ``pdklib/qucs_sym_writer.py`` for
     write-back."""
 
 
@@ -162,7 +162,7 @@ class QucsSymbolGeometry:
     """Every real primitive's own line number as originally parsed, in
     real file order, one list per real shape kind -- unlike ``ports``/
     ``lines``/``arcs``/``texts``, never mutated by editing (New/
-    Delete); used by ``ihp/qucs_sym_writer.py`` to tell a real deleted
+    Delete); used by ``pdklib/qucs_sym_writer.py`` to tell a real deleted
     primitive apart from a non-matching-kind/comment gap."""
 
 
@@ -222,7 +222,7 @@ def create_new_component_file(path: Path, name: str) -> None:
     uses (library/schematic_id, Description, Models, Netlists,
     Symbols referencing a same-named real ``.sym`` file, an empty real
     Parameters list -- adding one isn't supported here, see
-    ``ihp/qucs_component_writer.py``'s own docstring). Every real
+    ``pdklib/qucs_component_writer.py``'s own docstring). Every real
     field this project has no structured editor for (Description,
     Models, Netlists) is left as an honest placeholder for real,
     raw-text editing via the GUI's own View File -> Edit -> Save.

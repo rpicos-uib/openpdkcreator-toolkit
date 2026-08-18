@@ -7,7 +7,7 @@ lookup-table sub-groups (``cell_rise``/``cell_fall``/...), which this
 project never parses or models -- byte-for-byte untouched.
 
 **Per-field diffing against a fresh re-parse, not blanket
-re-emission**: unlike ``ihp/lef_writer.py`` (which can safely always
+re-emission**: unlike ``pdklib/lef_writer.py`` (which can safely always
 re-emit ``DIRECTION``/``USE`` since those two fields have no
 alternate real formatting), a real Liberty attribute line's exact
 whitespace/quoting varies file to file (confirmed real: `sg13g2_stdcell`
@@ -147,7 +147,7 @@ def _render_pin_header(pin: liberty_mod.LibertyPin, fresh: liberty_mod.LibertyPi
     """Preserves the real original header line verbatim whenever the
     name didn't change -- real files use two different, both-real
     spacing conventions (``pin (NAME) {`` vs ``pin(NAME) {``, see
-    ``ihp/liberty.py``'s own module docstring), so this must not
+    ``pdklib/liberty.py``'s own module docstring), so this must not
     blindly re-emit one fixed style."""
 
     if fresh is not None and pin.name == fresh.name:

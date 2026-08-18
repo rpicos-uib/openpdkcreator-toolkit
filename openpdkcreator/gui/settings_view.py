@@ -18,7 +18,7 @@ at exactly one real PDK):
   data) -- **Original PDK name** (``pdk_root.name`` -- IHP's own real
   directory name, e.g. ``ihp-sg13g2``) and **Original PDK location**
   (the real, absolute local path it was fetched into, plus the real
-  upstream URL it came from -- ``ihp/fetch.py``'s own ``REPO_URL``).
+  upstream URL it came from -- ``pdklib/fetch.py``'s own ``REPO_URL``).
   This is what the project was *built from*; per the "final objective"
   (see README's opening paragraph), a future project here could point
   at an entirely different real PDK, so this pairing is kept separate
@@ -36,7 +36,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-from ..ihp import fetch as fetch_mod
+from ..pdklib import fetch as fetch_mod
 
 DEFAULT_PROJECT_NAME = "Untitled PDK Project"
 
@@ -85,7 +85,7 @@ class SettingsView(ttk.Frame):
         self.pdk_location_var = field("Original PDK location:", readonly=True)
         self.pdk_upstream_var = field("Fetched from:", readonly=True)
         ttk.Label(
-            self, text="What this project was originally built from -- see ihp/fetch.py.\n"
+            self, text="What this project was originally built from -- see pdklib/fetch.py.\n"
             "The current model, not a permanent target: see this project's own README.",
             foreground="#666", justify="left",
         ).grid(row=row, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 4))

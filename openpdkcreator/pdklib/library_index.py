@@ -9,7 +9,7 @@ already inconsistent across this PDK's own real tool domains --
 ``libs.ref/`` uses ``sg13g2_stdcell`` (singular); ``libs.tech/xschem/``
 uses ``sg13g2_stdcells`` (plural, and has no ``_io``/``_sram`` dir at
 all); ``libs.tech/qucs-s/symbols/`` is flat, no per-family split
-whatsoever (see ``ihp/cells.py``'s own docstring for exactly how
+whatsoever (see ``pdklib/cells.py``'s own docstring for exactly how
 ``build_cell_index`` already works around this by matching real
 xschem/Qucs-S files to a cell by *name*, not by directory). Forcing
 new, project-authored content into a directory layout modeled on
@@ -25,7 +25,7 @@ other the wrong way**:
   *pdk_root* itself (never persisted -- it's just a live reflection of
   the real, downloaded PDK's own current state, same "cheap glob,
   recomputed live" discipline as everywhere else in this project).
-  Built by flattening ``ihp/cells.py``'s own ``build_cell_index``
+  Built by flattening ``pdklib/cells.py``'s own ``build_cell_index``
   output -- reused, not duplicated; this module owns no parsing logic
   of its own.
 - ``source="registered"`` -- user-added via the Library Manager's own
@@ -82,20 +82,20 @@ VIEW_KIND_LABELS: dict[str, str] = {
 }
 VIEW_KIND_ORDER: tuple[str, ...] = tuple(VIEW_KIND_LABELS.keys())
 """Real create-from-scratch support exists (this session, verified)
-only for these seven -- ``ihp/cells.py``'s own docstring/every other
+only for these seven -- ``pdklib/cells.py``'s own docstring/every other
 writer's own real ``start_line == 0`` skip explains why the rest
 don't yet. Verilog/Verilog-A were added later than the original four
 xschem/Qucs-S ones -- see ``create_new_verilog_file``/
-``create_new_veriloga_file`` in ``ihp/verilog.py`` and
+``create_new_veriloga_file`` in ``pdklib/verilog.py`` and
 ``infer_ports_for_cell`` below for how a newly-created one gets a
 real cell's own already-known pins pre-populated, not an empty
 template. ``mag`` (Magic Layout) was added later still -- see
-``ihp/mag.py``'s own ``create_new_mag_file``; unlike every other real
+``pdklib/mag.py``'s own ``create_new_mag_file``; unlike every other real
 view here, a newly-created one is *not* meant to be edited in this
 Python GUI at all, only opened in real Magic to actually draw real
 geometry (the same "Create an empty skeleton, do the real work in the
 real external tool" pattern xschem/Qucs-S Symbol/Schematic already
-established). ``libman_core`` (added still later, ``ihp/
+established). ``libman_core`` (added still later, ``pdklib/
 libman_project.py``'s own real **Import from LibMan Project...**) is
 different again: a real view whose real file this project can neither
 create *nor open* -- it's LibMan's own real, proprietary Cap'n Proto
@@ -121,7 +121,7 @@ class ViewEntry:
 
 
 def discover_real_entries_for_family(pdk_root: Path, family: str) -> list[ViewEntry]:
-    """Every real view for *family* alone (``ihp/cells.py``'s own
+    """Every real view for *family* alone (``pdklib/cells.py``'s own
     ``build_cell_index``, reused not duplicated) -- deliberately
     scoped to one real family at a time, not the whole deck, matching
     ``gui/cell_hub_view.py``'s own lazy, per-family loading
@@ -160,12 +160,12 @@ def discover_real_entries_for_family(pdk_root: Path, family: str) -> list[ViewEn
             entries.append(ViewEntry(family, cell_name, "gds", cv.gds_source, "real"))
         # cv.gds_present without cv.gds_source (a real, combined
         # multi-cell GDS with no confirmed per-cell membership -- see
-        # ihp/cells.py's own docstring) is deliberately not indexed:
+        # pdklib/cells.py's own docstring) is deliberately not indexed:
         # pointing every cell at the same shared file would mislead.
 
     # Magic .mag layouts: matched by real cell name (file stem), same
     # "enrich an already-known cell, never introduce a new one" real
-    # boundary xschem/Qucs-S already have -- ihp/cells.py's own
+    # boundary xschem/Qucs-S already have -- pdklib/cells.py's own
     # CellViews has no mag_source field (this is a Library-Manager-
     # only view kind), so this can't reuse build_cell_index's own
     # output the way every other real view kind above does.
@@ -320,7 +320,7 @@ def infer_ports_for_cell(pdk_root: Path, project_root: Path, library: str, cell:
     direction one of ``"input"``/``"output"``/``"inout"``/``""``) for
     *cell*, used to pre-populate a newly **Create**d Verilog/Verilog-A
     view with that cell's own already-known real pins instead of an
-    empty template -- see ``ihp/verilog.py``'s own
+    empty template -- see ``pdklib/verilog.py``'s own
     ``create_new_verilog_file``/``create_new_veriloga_file``.
 
     Tries each of this cell's own already-known real/registered views,

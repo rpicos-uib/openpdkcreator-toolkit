@@ -5,8 +5,8 @@ from pathlib import Path
 import shutil
 
 from openpdkcreator.gui.app import App
-from openpdkcreator.ihp import drc as drc_mod
-from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.pdklib import drc as drc_mod
+from openpdkcreator.pdklib import layers as layers_mod
 from openpdkcreator import export as export_mod
 from openpdkcreator.models import Layer
 
@@ -142,7 +142,7 @@ with __import__("tempfile").TemporaryDirectory() as tmp:
     print("PASS: real, generated KLayout DRC Ruby (all six generatable check_types) is correct and runnable-shaped.")
 
     # --- Re-import: the generated file should parse back to the 2 real
-    # rules ihp/drc.py's own extractor already recognizes -- the three
+    # rules pdklib/drc.py's own extractor already recognizes -- the three
     # newer shapes (min_area/min_overlap/max_length) are a real,
     # honest, documented gap on the read side (see drc_writer.py's own
     # docstring), not silently claimed to round-trip ---

@@ -27,7 +27,7 @@ previously-unnoticed bug (the real, top-level hard-macro SUBCKTs
 happen to each fit on one real line, so it never affected the By Cell
 hub's own top-level-only default view) fixed here by joining ``+``
 continuation lines before parsing a header, the same discipline
-``ihp/drc_writer.py``'s own backslash-continuation joining already
+``pdklib/drc_writer.py``'s own backslash-continuation joining already
 established for a different real format.
 
 **Real per-port direction** (``NetlistPort.direction``): CDL files
@@ -77,7 +77,7 @@ class NetlistCell:
     header_end_line: int = 0
     """The real last line of the (possibly ``+``-continued) header --
     equal to ``start_line`` when the header fits on one real line.
-    ``ihp/netlist_writer.py`` replaces exactly this real span on
+    ``pdklib/netlist_writer.py`` replaces exactly this real span on
     write-back."""
     pininfo_line_no: int = 0
     """The real source line of this cell's ``*.PININFO`` comment, ``0``

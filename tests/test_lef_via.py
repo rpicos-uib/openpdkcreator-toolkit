@@ -1,7 +1,7 @@
 import sys
 sys.path.insert(0, "/foss/designs")
 from pathlib import Path
-from openpdkcreator.ihp import lef as lef_mod
+from openpdkcreator.pdklib import lef as lef_mod
 
 path = Path("data/ihp-sg13g2/ihp-sg13g2/libs.ref/sg13g2_stdcell/lef/sg13g2_tech.lef")
 tech = lef_mod.parse_lef_file(path)

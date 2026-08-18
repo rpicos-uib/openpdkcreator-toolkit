@@ -91,7 +91,7 @@ def scan_all(pdk_root: Path) -> list[ToolInventory]:
 
 def print_inventory(inventories: list[ToolInventory]) -> None:
     if not inventories:
-        print("Nothing found -- has ihp/fetch.py been run yet?")
+        print("Nothing found -- has pdklib/fetch.py been run yet?")
         return
     widths = (30, 10, 14, 30)
     header = ("domain", "files", "size", "top extensions")

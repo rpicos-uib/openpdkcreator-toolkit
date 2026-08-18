@@ -29,7 +29,7 @@ print("CDL ports before:", [(p.name, p.direction) for p in cv.cdl_cell.ports])
 # would block this script) -- construct the PortEditor the same way
 # edit_ports_dialog does, without opening an actual Toplevel loop.
 from openpdkcreator.gui.port_editor import PortEditor
-from openpdkcreator.ihp import netlist as netlist_mod
+from openpdkcreator.pdklib import netlist as netlist_mod
 
 editor = PortEditor(root, port_factory=lambda name: netlist_mod.NetlistPort(name=name))
 editor.set_ports(cv.cdl_cell.ports)

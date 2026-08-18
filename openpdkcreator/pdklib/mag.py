@@ -1,6 +1,6 @@
 """Real, minimal Magic ``.mag`` layout file parsing/creation --
 structural scope only (tech/timestamp header, per-section real rect
-*count*, not full geometry -- matching ``ihp/gds.py``'s own real
+*count*, not full geometry -- matching ``pdklib/gds.py``'s own real
 "bbox/shape-count, not full geometry" precedent for the exact same
 reason: this project's own bounded "structure, not a full parser/
 editor" discipline used everywhere else).

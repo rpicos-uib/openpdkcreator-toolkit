@@ -12,7 +12,7 @@ Two real, cleanly recognizable statement kinds are extracted in full:
   (e.g. ``.MODEL darea D (tnom=27 is=... )`` vs. ``.model dinner_mod d
   tnom=27 level=1``); real keyword case varies file to file
   (``.MODEL``/``.model``), matched case-insensitively like every other
-  keyword-driven parser here (``ihp/lef.py``). Real parameter values
+  keyword-driven parser here (``pdklib/lef.py``). Real parameter values
   are kept as raw strings, not converted to float -- some real BSIM/PSP
   model cards use a quoted formula expression as a value (e.g.
   ``vfbo = '-0.94312*sg13g2_lv_nmos_vfbo'``), not a plain number, so
@@ -21,7 +21,7 @@ Two real, cleanly recognizable statement kinds are extracted in full:
   physical lines via a leading ``+`` continuation marker (SPICE's own
   convention, distinct from Magic's trailing ``\\``) are joined first.
 - ``.subckt NAME port1 port2 ... / .ends NAME`` -- a real port list,
-  the same bounded shape ``ihp/netlist.py``'s own CDL/SPICE
+  the same bounded shape ``pdklib/netlist.py``'s own CDL/SPICE
   ``.SUBCKT`` extraction already uses. A real ``.model`` can sit
   *inside* a real ``.subckt`` body (a locally-scoped model, confirmed
   real -- e.g. ``resistors_mod.lib``'s own ``rsil`` subckt defines its
@@ -131,7 +131,7 @@ def _join_plus_continuations(lines: list[str]) -> list[str]:
     """Real ngspice ``.lib`` statements wrap across lines with a
     *leading* ``+`` marker on the continuation line -- SPICE's own,
     different convention from Magic's trailing ``\\`` (see
-    ``ihp/magic_tech.py``'s own ``_join_backslash_continuations``)."""
+    ``pdklib/magic_tech.py``'s own ``_join_backslash_continuations``)."""
 
     joined: list[str] = []
     for line in lines:

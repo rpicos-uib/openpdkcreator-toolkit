@@ -1,5 +1,5 @@
 """Per-domain adapters converting real domain objects
-(``ihp/xschem.py``/``ihp/xschem_sch.py``/``ihp/qucs_sym.py``) into
+(``pdklib/xschem.py``/``pdklib/xschem_sch.py``/``pdklib/qucs_sym.py``) into
 ``geometry_canvas.GeometryItem``s -- the only place any of these three
 real formats' own field names/shapes are known to the graphical
 editor; ``geometry_canvas.py`` itself stays completely format-
@@ -7,7 +7,7 @@ agnostic (see its own docstring).
 
 Each adapter function takes the real, live in-memory structure (the
 same object the App's own per-file cache holds, and the same object
-``ihp/*_writer.py`` serializes) and returns a real
+``pdklib/*_writer.py`` serializes) and returns a real
 ``geometry_canvas.Scene`` whose items' own ``on_move``/``on_delete``
 closures mutate that *exact* structure in place -- a drag or delete on
 the canvas is immediately visible to (and exportable by) every other
@@ -17,9 +17,9 @@ editable domain in this project already uses.
 
 from __future__ import annotations
 
-from ..ihp import qucs_sym as qucs_mod
-from ..ihp import xschem as xschem_mod
-from ..ihp import xschem_sch as xschem_sch_mod
+from ..pdklib import qucs_sym as qucs_mod
+from ..pdklib import xschem as xschem_mod
+from ..pdklib import xschem_sch as xschem_sch_mod
 from .geometry_canvas import GeometryItem, Scene
 
 _PIN_STEMS = {"ipin", "opin", "iopin"}

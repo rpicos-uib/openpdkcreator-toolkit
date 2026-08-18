@@ -6,7 +6,7 @@ canvas, ``gui/geometry_canvas.py``) edits:
   flip, and, for a real pin instance (``ipin``/``opin``/``iopin``),
   its real ``lab=`` net-label property -- name/label patched via the
   same real, quote-aware key=value substitution
-  ``ihp/xschem_writer.py`` already uses for symbol pins, preserving
+  ``pdklib/xschem_writer.py`` already uses for symbol pins, preserving
   every other real instance property (device parameters like ``l=``/
   ``w=``/``model=``, ...) untouched; position/rotation/flip patched in
   the instance's own header, the same "unchanged -> keep the real
@@ -15,7 +15,7 @@ canvas, ``gui/geometry_canvas.py``) edits:
 - Real decorative ``L``ine/``A``rc/``T``ext/``B``ox geometry a
   schematic can also directly embed -- the exact same real primitive
   shapes a ``.sym`` file uses, so this module reuses
-  ``ihp/xschem_writer.py``'s own render functions directly rather than
+  ``pdklib/xschem_writer.py``'s own render functions directly rather than
   duplicating them.
 - **New Instance/New Wire are now supported**, unlike this project's
   own first-pass Schematics editor: a real graphical canvas gives the
@@ -163,7 +163,7 @@ def render_sch_file(original_path: Path, schematic: xschem_sch_mod.XschemSchemat
     own multi-line ``value="..."``/``tclcommand="..."`` property text
     ends with a real, doubled quote-then-close-brace idiom
     (``"\\n"}``, confirmed present verbatim via direct search) that
-    this project's quote-aware brace scanner (``ihp/xschem.py``'s own
+    this project's quote-aware brace scanner (``pdklib/xschem.py``'s own
     ``_scan_braced``, shared with the ``.sym`` domain, where this
     exact idiom has never been observed) cannot safely disambiguate
     from a second, nested quoted region. Two real, computable safety

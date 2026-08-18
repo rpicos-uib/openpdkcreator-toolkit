@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from openpdkcreator import export as export_mod
-from openpdkcreator.ihp import drc as drc_mod
+from openpdkcreator.pdklib import drc as drc_mod
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 drc_root = drc_mod.find_drc_root(PDK_ROOT)
@@ -101,7 +101,7 @@ assert failures4 == [("NEW.RULE.1", "no value set")], failures4
 print(f"PASS: a hand-authored rule with no value is correctly reported, not silently dropped: {failures4}")
 
 # --- Test 5: a hand-authored rule WITH a resolvable value/layer generates real Ruby ---
-from openpdkcreator.ihp import layers as layers_mod
+from openpdkcreator.pdklib import layers as layers_mod
 lyp_path = layers_mod.find_lyp(PDK_ROOT)
 real_layers = layers_mod.import_layers(PDK_ROOT, lyp_path) if lyp_path else []
 real_layer = next((l for l in real_layers if l.gds_layer is not None), None)

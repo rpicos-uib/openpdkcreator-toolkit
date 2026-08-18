@@ -10,7 +10,7 @@ project.
 original ``ElementTree`` implementation so each real ``<properties>``
 block's own real, 1-indexed source line range could be tracked
 (stdlib ``ElementTree`` doesn't expose source line numbers; only
-``lxml`` does), needed by ``ihp/layers_writer.py``'s own real,
+``lxml`` does), needed by ``pdklib/layers_writer.py``'s own real,
 surgical write-back. Confirmed real and fully uniform before switching,
 not assumed: all 377 real ``<properties>`` blocks in IHP's own
 ``sg13g2.lyp`` are exactly 16 real lines each, same 14-tag field order
@@ -81,7 +81,7 @@ def find_layer_blocks(lyp_path: Path) -> list[tuple[int, int, dict[str, str]]]:
     """Every real top-level ``<properties>`` block's own real,
     1-indexed, inclusive ``(start_line, end_line)`` line range plus its
     flat tag->text field dict -- the shared real-position scan both
-    ``import_layers`` (below) and ``ihp/layers_writer.py`` use, so the
+    ``import_layers`` (below) and ``pdklib/layers_writer.py`` use, so the
     two never independently re-derive (and risk disagreeing about)
     the same real block boundaries."""
 

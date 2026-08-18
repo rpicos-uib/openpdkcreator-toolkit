@@ -56,7 +56,7 @@ print(f"Export status: {app.status.get()}")
 
 export_path = export_mod.export_path_for(PDK_ROOT, app.lef_view.lef_files[lef_relpath])
 assert export_path.is_file(), export_path
-from openpdkcreator.ihp import lef as lef_mod
+from openpdkcreator.pdklib import lef as lef_mod
 reexported = lef_mod.parse_lef_file(export_path)
 re_macro = next(m for m in reexported.macros if m.name == macro.name)
 re_pin = next(p for p in re_macro.pins if p.name == pin.name)

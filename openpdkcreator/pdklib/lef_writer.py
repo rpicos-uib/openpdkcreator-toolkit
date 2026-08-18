@@ -25,7 +25,7 @@ fields this parser *does* model would have silently dropped that real
 content -- so instead, ``render_lef_file`` re-reads the *original*
 source file fresh from disk (always still pristine, since this module
 never writes there) and, using each pin's real source line range
-(tracked at parse time in ``ihp/lef.py``), keeps **every** real
+(tracked at parse time in ``pdklib/lef.py``), keeps **every** real
 interior line of an existing pin verbatim -- ``ANTENNAMODEL``, ``PORT``
 sub-blocks, anything else -- substituting only the specific
 ``DIRECTION``/``USE`` lines (the two fields this project actually

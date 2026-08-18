@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from openpdkcreator.gui.app import App
-from openpdkcreator.ihp import lef as lef_mod
+from openpdkcreator.pdklib import lef as lef_mod
 
 PDK_ROOT = Path("/tmp/empty_pdk2")
 import shutil

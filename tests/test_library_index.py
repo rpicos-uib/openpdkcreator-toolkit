@@ -3,7 +3,7 @@ sys.path.insert(0, "/foss/designs")
 from pathlib import Path
 import shutil
 
-from openpdkcreator.ihp import library_index as li_mod
+from openpdkcreator.pdklib import library_index as li_mod
 
 PDK_ROOT = Path("/foss/designs/data/ihp-sg13g2/ihp-sg13g2")
 PROJECT_ROOT = Path("/tmp/test_library_index_project")

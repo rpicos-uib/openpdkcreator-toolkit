@@ -1,14 +1,14 @@
 """Real support for user-authored Verilog/Verilog-A model files --
 letting a user bring their own behavioral or compact models into this
 project and connect them to the rest of the real PDK, alongside every
-real, downloaded view ``ihp/cells.py``'s own ``CellViews`` already
+real, downloaded view ``pdklib/cells.py``'s own ``CellViews`` already
 aggregates (LEF/CDL/SPICE/Verilog/Liberty/GDS).
 
 **Real Verilog-A's own module/port header syntax is identical to plain
 digital Verilog's**, confirmed real, not assumed: IHP's own real,
 downloaded ``libs.tech/verilog-a/mosvar/mosvar.va`` declares
 ``module mosvar(g,bi,b); ... endmodule``, the exact same
-``module NAME(port, ...); ... endmodule`` shape ``ihp/verilog.py``'s
+``module NAME(port, ...); ... endmodule`` shape ``pdklib/verilog.py``'s
 own parser already handles. So that existing, already-general parser
 is reused directly here for both ``.v`` and ``.va`` files, not
 duplicated -- real Verilog-A's own additional analog constructs
@@ -26,7 +26,7 @@ user's own project content, meant to be tracked and committed.
 
 **Linking to the rest of the PDK**, two real mechanisms, not one:
 a user module whose own name matches a real cell name is picked up
-automatically by ``ihp/cells.py``'s own ``build_cell_index`` -- the
+automatically by ``pdklib/cells.py``'s own ``build_cell_index`` -- the
 same real name-matching convention every other view already uses, zero
 extra configuration needed. An explicit ``UserModelLink`` additionally
 lets a user module with a *different* name (or one describing a wholly
@@ -175,7 +175,7 @@ def group_by_cell(
     module named the same as a real cell) or an explicit
     ``UserModelLink`` (checked first, so an explicit link can
     override a same-named module's own default auto-match target).
-    Ready for ``ihp/cells.py``'s own ``build_cell_index`` to merge in
+    Ready for ``pdklib/cells.py``'s own ``build_cell_index`` to merge in
     directly, so that module never needs to know about link
     persistence or path-relative bookkeeping."""
 

@@ -22,7 +22,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from ..ihp import lef as lef_mod
+from ..pdklib import lef as lef_mod
 
 DIRECTIONS = ("INPUT", "OUTPUT", "INOUT")
 USES = ("SIGNAL", "POWER", "GROUND")

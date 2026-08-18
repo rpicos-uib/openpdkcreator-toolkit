@@ -1,6 +1,6 @@
 """Real CDL/SPICE port write-back -- same surgical, position-targeted
-discipline as ``ihp/lef_writer.py``/``ihp/drc_writer.py``/
-``ihp/magic_tech_writer.py``: re-reads the real *original* file fresh
+discipline as ``pdklib/lef_writer.py``/``pdklib/drc_writer.py``/
+``pdklib/magic_tech_writer.py``: re-reads the real *original* file fresh
 from disk and patches only what actually changed.
 
 Unlike those three, there's no single stable per-entry "original
@@ -24,7 +24,7 @@ A newly-assigned direction on a port whose real cell had no real
 confirmed real, honest gap, not a parser gap) gets a freshly-inserted
 one, right after the header. A cell added this session (no real source
 position) can't be written back -- whole-cell creation isn't attempted,
-matching ``ihp/lef_writer.py``'s own "no New Macro" precedent -- only
+matching ``pdklib/lef_writer.py``'s own "no New Macro" precedent -- only
 ports *within* an existing real cell are structured-editable here.
 """
 

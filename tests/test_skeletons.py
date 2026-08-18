@@ -5,9 +5,9 @@ import tkinter as tk
 from pathlib import Path
 
 from openpdkcreator.gui.app import App
-from openpdkcreator.ihp import layers as layers_mod
-from openpdkcreator.ihp import magic_tech as magic_tech_mod
-from openpdkcreator.ihp import lef as lef_mod
+from openpdkcreator.pdklib import layers as layers_mod
+from openpdkcreator.pdklib import magic_tech as magic_tech_mod
+from openpdkcreator.pdklib import lef as lef_mod
 from openpdkcreator import export as export_mod
 
 PDK_ROOT = Path("/tmp/empty_pdk")
@@ -68,7 +68,7 @@ tech.planes.append(new_plane)
 new_type = magic_tech_mod.TypeEntry(plane="metal", canonical_name="TE", aliases=["topelectrode"])
 tech.types.append(new_type)
 
-from openpdkcreator.ihp import magic_tech_writer as magic_tech_writer_mod
+from openpdkcreator.pdklib import magic_tech_writer as magic_tech_writer_mod
 rendered = magic_tech_writer_mod.render_tech_file(tech_path, tech)
 print("--- rendered .tech (planes/types section) ---")
 lines = rendered.splitlines()
