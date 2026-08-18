@@ -12,10 +12,18 @@ The internal parsing/writing package used to be named `ihp/` for
 exactly that reason -- a naming leftover from when this only targeted
 one real PDK -- and has since been renamed to **`pdklib/`**
 (`openpdkcreator.pdklib`); every real reference throughout this
-README/codebase was updated along with it. Real, external references
-to the actual IHP PDK/company itself (`ihp-sg13g2`, `IHP-GmbH`, the
-real, downloaded deck) are unaffected -- only this project's own
-internal module namespace changed.
+README/codebase was updated along with it. The GitHub repo itself was
+renamed the same way, from `openpdkcreator-ihp-template` to
+**`openpdkcreator-toolkit`** (`github.com/rpicos-uib/
+openpdkcreator-toolkit`) -- `openpdkcreator` alone was already taken by
+the separate, sibling project linked just below. Real, external
+references to the actual IHP PDK/company itself (`ihp-sg13g2`,
+`IHP-GmbH`, the real, downloaded deck) are unaffected by either
+rename, and are kept deliberately, not scrubbed -- **IHP's real SG13G2
+PDK is still the real template/reference deck this whole project is
+built and verified against**, exactly as stated above; only the
+internal module namespace and the repo's own name changed, not what
+this project is actually grounded in.
 
 A separate, independent project from
 [`OpenPDKCreator`](https://github.com/rpicos-uib/OpenPDKCreator) (the
