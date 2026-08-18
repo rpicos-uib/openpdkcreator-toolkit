@@ -142,6 +142,7 @@ from .pdk_wizard_view import PdkWizardView
 from .rules_view import RulesView
 from .settings_view import DEFAULT_PROJECT_NAME, SettingsView
 from .spice_models_view import SpiceModelsView
+from .text_dialog import show_text_dialog
 from .tools_view import ToolsView
 from .qucs_view import QucsView
 from .user_models_view import UserModelsView
@@ -314,24 +315,123 @@ class App(ttk.Frame):
 
     def _build_menu(self):
         menubar = tk.Menu(self.root)
+
+        # File: project-level actions only -- save/reload this
+        # project's own edits, plus the two real, project-wide LibMan
+        # .projects import/export actions (ihp/libman_project.py) --
+        # moved here from being Library-Manager-tab-only, since they
+        # act across every real library at once, the same project-wide
+        # scope as Save Edits/Reload. Every individual, per-domain
+        # "Export Edited X (open_pdks format)" action now lives in its
+        # own **Export** menu instead (see below) -- this menu used to
+        # hold all of those too, which buried the two, real project-
+        # level actions among ten domain-specific ones.
         file_menu = tk.Menu(menubar, tearoff=False)
         file_menu.add_command(label="Save Edits", command=self._save_project, accelerator="Ctrl+S")
         file_menu.add_command(label="Reload from Real Files", command=self._reload_from_real_files)
         file_menu.add_separator()
-        file_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
-        file_menu.add_command(label="Export Edited DRC Rules (open_pdks format)", command=self._export_drc_rules)
-        file_menu.add_command(label="Export Edited Magic Types (open_pdks format)", command=self._export_magic_types)
-        file_menu.add_command(label="Export Edited CDL/SPICE Ports (open_pdks format)", command=self._export_netlist_files)
-        file_menu.add_command(label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files)
-        file_menu.add_command(label="Export Edited Liberty Files (open_pdks format)", command=self._export_liberty_files)
-        file_menu.add_command(label="Export Edited Layers (open_pdks format)", command=self._export_layers)
-        file_menu.add_command(label="Export Edited xschem Symbols (open_pdks format)", command=self._export_xschem_symbols)
-        file_menu.add_command(label="Export Edited xschem Schematics (open_pdks format)", command=self._export_xschem_schematics)
-        file_menu.add_command(label="Export Edited Qucs-S Symbols (open_pdks format)", command=self._export_qucs_symbols)
-        file_menu.add_command(label="Export Edited Qucs-S Components (open_pdks format)", command=self._export_qucs_components)
+        file_menu.add_command(label="Import from LibMan Project...", command=self._import_libman_project)
+        file_menu.add_command(label="Export to LibMan Project...", command=self._export_libman_project)
         menubar.add_cascade(label="File", menu=file_menu)
+
+        # Export: every real, individual, per-domain open_pdks-format
+        # write-back action -- previously crowded into File alongside
+        # genuinely project-level actions; split out into its own menu
+        # now that File also carries the two LibMan project actions above.
+        export_menu = tk.Menu(menubar, tearoff=False)
+        export_menu.add_command(label="Export Edited LEF Files (open_pdks format)", command=self._export_lef_files)
+        export_menu.add_command(label="Export Edited DRC Rules (open_pdks format)", command=self._export_drc_rules)
+        export_menu.add_command(
+            label="Export Edited Magic Types (open_pdks format)", command=self._export_magic_types
+        )
+        export_menu.add_command(
+            label="Export Edited CDL/SPICE Ports (open_pdks format)", command=self._export_netlist_files
+        )
+        export_menu.add_command(
+            label="Export Edited Verilog Ports (open_pdks format)", command=self._export_verilog_files
+        )
+        export_menu.add_command(
+            label="Export Edited Liberty Files (open_pdks format)", command=self._export_liberty_files
+        )
+        export_menu.add_command(label="Export Edited Layers (open_pdks format)", command=self._export_layers)
+        export_menu.add_command(
+            label="Export Edited xschem Symbols (open_pdks format)", command=self._export_xschem_symbols
+        )
+        export_menu.add_command(
+            label="Export Edited xschem Schematics (open_pdks format)", command=self._export_xschem_schematics
+        )
+        export_menu.add_command(
+            label="Export Edited Qucs-S Symbols (open_pdks format)", command=self._export_qucs_symbols
+        )
+        export_menu.add_command(
+            label="Export Edited Qucs-S Components (open_pdks format)", command=self._export_qucs_components
+        )
+        menubar.add_cascade(label="Export", menu=export_menu)
+
+        help_menu = tk.Menu(menubar, tearoff=False)
+        help_menu.add_command(label="Help", command=self._show_help)
+        help_menu.add_command(label="About openPDKcreator", command=self._show_about)
+        menubar.add_cascade(label="Help", menu=help_menu)
+
         self.root.config(menu=menubar)
         self.root.bind_all("<Control-s>", lambda _event: self._save_project())
+
+    def _import_libman_project(self):
+        self.goto("Library Manager")
+        self.library_manager_view._import_libman_project()
+
+    def _export_libman_project(self):
+        self.goto("Library Manager")
+        self.library_manager_view._export_libman_project()
+
+    def _show_about(self):
+        show_text_dialog(
+            self,
+            "About openPDKcreator",
+            "openPDKcreator\n"
+            "==============\n\n"
+            "A general PDK-authoring toolkit -- create/edit real PDK content (Layers, Magic "
+            "Tech, DRC Rules, LEF, GDS structural info, Liberty, CDL/SPICE, Verilog/Verilog-A, "
+            "xschem and Qucs-S symbols/schematics) through one GUI.\n\n"
+            "Final objective: a wizard to edit and create an open PDK, generally -- not "
+            "specific to any one process. IHP's real SG13G2 PDK "
+            "(github.com/IHP-GmbH/IHP-Open-PDK) is the current model this is being built and "
+            "verified against, not the permanent target.\n\n"
+            "Natively reads/writes IHP-GmbH's own LibMan project file format:\n"
+            "  github.com/IHP-GmbH/LibMan\n\n"
+            "Repository:\n"
+            "  github.com/rpicos-uib/openpdkcreator-toolkit\n\n"
+            "License: Apache-2.0",
+        )
+
+    def _show_help(self):
+        show_text_dialog(
+            self,
+            "Help",
+            "Getting started\n"
+            "---------------\n"
+            "Wizard -- a guided flowchart of every domain this tool knows how to read/edit. "
+            "Click a box for details; \"Go to Tab\" jumps straight there. Start here if you're "
+            "building a PDK from scratch.\n\n"
+            "PDK > Overview -- a real, per-tool file inventory of whichever PDK is loaded.\n"
+            "PDK > Technology -- Layers / Magic Tech / DRC Rules.\n"
+            "PDK > Cells -- LEF and By Cell (one real cell's views across every domain).\n"
+            "PDK > Library Manager -- a Cadence-style Libraries | Cells | Views browser "
+            "spanning real and project-authored content; also where LibMan .projects "
+            "import/export lives (see the File menu).\n"
+            "PDK > Simulation -- ngspice Models, xschem, Qucs-S, and your own User Models "
+            "(Verilog/Verilog-A).\n"
+            "Settings -- project name/directory, tool install status, generated shell-env "
+            "script.\n\n"
+            "Menus\n"
+            "-----\n"
+            "File -- save/reload your edits, import/export a LibMan .projects file.\n"
+            "Export -- write real, edited content back out in open_pdks format, one command "
+            "per domain.\n"
+            "Help -- this dialog, and About.\n\n"
+            "Full documentation lives in this project's own README.md:\n"
+            "  github.com/rpicos-uib/openpdkcreator-toolkit",
+        )
 
     def _export_lef_files(self):
         """Writes real, patched .lef text for every real file parsed
@@ -579,6 +679,63 @@ class App(ttk.Frame):
         self.xschem_view.load()
         self.qucs_view.load()
         self.load()
+
+    def change_project_directory(self, new_dir: Path):
+        """Switches this session's own project-level state -- not the
+        real PDK data (``self.pdk_root`` is untouched) -- to a
+        different real directory: ``saves/``, ``library_index.yaml``,
+        ``libraries/``, ``user_models/`` all move with it.
+
+        Real, not cosmetic: reassigns the actual, shared module-level
+        constants every consumer already reads dynamically
+        (``export.PROJECT_ROOT``/``EXPORT_ROOT``, ``project_io.
+        SAVE_DIR``) rather than introducing a second, parallel notion of
+        "current project root" -- confirmed, before writing this, that
+        every real consumer accesses these as ``export_mod.PROJECT_ROOT``
+        (module-qualified, re-read on every call) rather than a name
+        frozen at import time, so reassigning here is enough almost
+        everywhere. The one real exception:
+        ``LibraryManagerView.__init__`` caches it once into
+        ``self.project_root`` at construction time, so that has to be
+        re-synced explicitly here too, or it would keep silently
+        pointing at the old directory.
+
+        A genuinely new, empty directory starts a fresh, empty project
+        there (created if it doesn't exist yet); an existing one
+        restores its own real saved state -- the same real, full
+        reload sequence ``_reload_from_real_files`` already uses for
+        "start over," since the new directory's own saved Magic Types/
+        LEF pin overrides must apply on top of a real, freshly
+        re-parsed baseline, not whatever the *previous* project's own
+        edits left in memory."""
+
+        new_dir = new_dir.resolve()
+        new_dir.mkdir(parents=True, exist_ok=True)
+        export_mod.PROJECT_ROOT = new_dir
+        export_mod.EXPORT_ROOT = new_dir / "export"
+        project_io.SAVE_DIR = new_dir / "saves"
+        self.library_manager_view.project_root = export_mod.PROJECT_ROOT
+
+        self.lef_cache.clear()
+        self.lef_pin_overrides = {}
+        self.netlist_cache.clear()
+        self.verilog_cache.clear()
+        self.liberty_cache.clear()
+        self.xschem_symbol_cache.clear()
+        self.xschem_schematic_cache.clear()
+        self.qucs_symbol_cache.clear()
+        self.qucs_component_cache.clear()
+        self.set_project_name(DEFAULT_PROJECT_NAME)
+
+        self.lef_view.load()
+        self.cell_hub_view.load()
+        self.magic_tech_view.load()
+        self.xschem_view.load()
+        self.qucs_view.load()
+        self.load()
+        self.library_manager_view.refresh_libraries()
+        self.settings_view.refresh()
+        self.status.set(f"Switched project directory to {new_dir}")
 
     # -- PDK tab (wraps everything actually about the PDK's own content;
     # Settings -- project naming/tool config -- stays a separate,

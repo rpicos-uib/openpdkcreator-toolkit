@@ -10,10 +10,19 @@ at exactly one real PDK):
   they're building: **Project name** (free text, saved via
   ``project_io.py`` alongside DRC Rules/Magic Types/LEF pins -- so it
   survives a relaunch the same way) and **Project directory** (where
-  this tool and its saved state -- ``saves/`` -- actually live on
-  disk, read-only). Defaults to a deliberately generic placeholder,
-  *not* the real PDK's own name, so the two never look identical
-  before the user renames anything.
+  this project's saved state -- ``saves/``, ``library_index.yaml``,
+  ``libraries/``, ``user_models/`` -- actually lives on disk). Real,
+  multi-project support: **Browse...** picks a different real
+  directory and calls ``App.change_project_directory``, which
+  reassigns ``export.PROJECT_ROOT``/``EXPORT_ROOT`` and
+  ``project_io.SAVE_DIR`` (the actual, shared module-level constants
+  every consumer already reads dynamically, not a value frozen at
+  import time) and fully reloads the app against it -- a genuinely new,
+  empty directory starts a fresh project there, an existing one
+  restores its own real saved state, the same as a normal relaunch.
+  Defaults to a deliberately generic placeholder project name, *not*
+  the real PDK's own name, so the two never look identical before the
+  user renames anything.
 - **Source PDK** (real, read-only, sourced from the actual downloaded
   data) -- **Original PDK name** (``pdk_root.name`` -- IHP's own real
   directory name, e.g. ``ihp-sg13g2``) and **Original PDK location**
@@ -34,8 +43,9 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
 
+from .. import export as export_mod
 from ..pdklib import fetch as fetch_mod
 
 DEFAULT_PROJECT_NAME = "Untitled PDK Project"
@@ -73,10 +83,23 @@ class SettingsView(ttk.Frame):
         section("This Project")
         self.project_name_var = field("Project name:", readonly=False)
         self.project_name_var.trace_add("write", self._on_project_name_changed)
-        self.project_dir_var = field("Project directory:", readonly=True)
+
+        ttk.Label(self, text="Project directory:").grid(row=row, column=0, sticky="w", padx=(8, 8), pady=2)
+        dir_row = ttk.Frame(self)
+        dir_row.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=2)
+        dir_row.columnconfigure(0, weight=1)
+        self.project_dir_var = tk.StringVar()
+        ttk.Entry(dir_row, textvariable=self.project_dir_var, state="readonly").grid(row=0, column=0, sticky="ew")
+        ttk.Button(dir_row, text="Browse...", command=self._browse_project_directory).grid(
+            row=0, column=1, padx=(6, 0)
+        )
+        row += 1
         ttk.Label(
-            self, text="Where this tool and its saved edits (saves/) live -- not the PDK data itself.",
-            foreground="#666",
+            self,
+            text="Where this project's saved edits (saves/), library_index.yaml, libraries/, and "
+            "user_models/ live -- not the PDK data itself. Browse... switches to a different real "
+            "directory and reloads the whole app from its own saved state there.",
+            foreground="#666", justify="left", wraplength=460,
         ).grid(row=row, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 4))
         row += 1
 
@@ -96,8 +119,7 @@ class SettingsView(ttk.Frame):
         self.project_name_var.set(self.app.project_name)
         self._suspend_trace = False
 
-        project_dir = Path(__file__).resolve().parents[2]
-        self.project_dir_var.set(str(project_dir))
+        self.project_dir_var.set(str(export_mod.PROJECT_ROOT))
         self.pdk_name_var.set(self.app.pdk_root.name)
         self.pdk_location_var.set(str(self.app.pdk_root))
         self.pdk_upstream_var.set(fetch_mod.REPO_URL)
@@ -106,3 +128,26 @@ class SettingsView(ttk.Frame):
         if self._suspend_trace:
             return
         self.app.set_project_name(self.project_name_var.get())
+
+    def _browse_project_directory(self):
+        current = self.project_dir_var.get()
+        new_dir_str = filedialog.askdirectory(
+            title="Choose Project Directory", initialdir=current or None, parent=self,
+        )
+        if not new_dir_str:
+            return
+        new_dir = Path(new_dir_str).resolve()
+        if new_dir == Path(current).resolve():
+            return
+        if not messagebox.askyesno(
+            "Change Project Directory",
+            f"Switch the current project to:\n{new_dir}\n\n"
+            "This reloads the whole app from that directory's own saved state (saves/, "
+            "library_index.yaml, libraries/, user_models/) -- a genuinely new, empty directory "
+            "starts a fresh, empty project there. Any unsaved edits in the current project are "
+            "lost unless you Save Edits first.\n\nContinue?",
+            parent=self,
+        ):
+            return
+        self.app.change_project_directory(new_dir)
+        self.refresh()

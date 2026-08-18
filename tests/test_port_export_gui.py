@@ -45,7 +45,7 @@ reexported = nl.find_cells(cdl_export)
 re_cell = next(c for c in reexported if c.name == "sg13g2_a21o_1")
 re_port = next(p for p in re_cell.ports if p.name == cdl_port.name)
 assert re_port.direction == cdl_port.direction
-print("PASS: File > Export Edited CDL/SPICE Ports reflects the real edit.")
+print("PASS: Export > Export Edited CDL/SPICE Ports reflects the real edit.")
 
 # Verilog
 from openpdkcreator.pdklib import verilog as verilog_mod
@@ -63,7 +63,7 @@ reexported_v = verilog_mod.find_modules(v_export)
 re_module = next(m for m in reexported_v if m.name == "sg13g2_a21o_1")
 re_vport = next(p for p in re_module.ports if p.name == v_port.name)
 assert re_vport.direction == "inout"
-print("PASS: File > Export Edited Verilog Ports reflects the real edit.")
+print("PASS: Export > Export Edited Verilog Ports reflects the real edit.")
 
 if export_mod.EXPORT_ROOT.is_dir():
     shutil.rmtree(export_mod.EXPORT_ROOT)

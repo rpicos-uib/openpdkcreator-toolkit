@@ -476,7 +476,7 @@ highlighted straight to that cell's real line range within its
 - **`openpdkcreator/gui/layers_view.py`** -- OpenPDKCreator's own
   Layers tab, copied (now with a live filter box added here -- see the
   GUI structure section), displaying the real parsed layers above.
-  **File > Export Edited Layers** (`app.py`) writes real, patched
+  **Export > Export Edited Layers** (`app.py`) writes real, patched
   `.lyp` text reflecting whatever's currently in
   `self.project.layers` -- unlike every other writable domain here,
   Layers has no per-file cache to check first (the tab commits every
@@ -1174,7 +1174,7 @@ highlighted straight to that cell's real line range within its
   (always all of them with no edits made) -- a real, standalone
   correctness self-check runnable anytime, matching `main.py cells`/
   `gds`'s own style.
-- **File > Export Edited LEF Files** (`app.py`) -- the GUI action:
+- **Export > Export Edited LEF Files** (`app.py`) -- the GUI action:
   exports every real `.lef` file parsed this session (LEF tab or By
   Cell tab -- both route through the same `App.get_parsed_lef` cache)
   with any in-memory pin edits patched in. Verified for real, driven:
@@ -1226,7 +1226,7 @@ highlighted straight to that cell's real line range within its
   substrings in the real `.drc` file, confirmed by diffing every line
   against the original; a hand-authored rule is correctly reported as
   skipped, not silently dropped.
-- **`main.py export-drc`** / **File > Export Edited DRC Rules**
+- **`main.py export-drc`** / **Export > Export Edited DRC Rules**
   (`app.py`) -- CLI and GUI actions, matching `export-lef`'s own shape:
   export every rule with real provenance, report byte-identical counts
   and any hand-authored rules skipped. Verified for real, driven:
@@ -1271,7 +1271,7 @@ highlighted straight to that cell's real line range within its
   unchanged against a fresh parse), a brand-new type, and a deleted
   type; and a real edit made via the GUI's own Types form, exported,
   and confirmed correct in the real `.tech` file.
-- **`main.py export-magic-types`** / **File > Export Edited Magic
+- **`main.py export-magic-types`** / **Export > Export Edited Magic
   Types** (`app.py`) -- CLI and GUI actions, matching `export-lef`/
   `export-drc`'s own shape: exports every real technology currently
   loaded (both `ihp-sg13g2` and `ihp-sg13g2-GDS`) with any in-memory
@@ -1309,13 +1309,13 @@ highlighted straight to that cell's real line range within its
   was added**: still completely identical across the full real deck,
   confirming `liberty_writer.py`'s own real bug fixes (see its own
   section above) hold at full-PDK scale, not just per-file.
-- **`main.py export-liberty`** / **File > Export Edited Liberty
+- **`main.py export-liberty`** / **Export > Export Edited Liberty
   Files** (`app.py`) -- CLI and GUI actions, matching
   `export-netlist`/`export-verilog`'s own shape: exports every real
   `.lib` file parsed this session (`App.get_parsed_liberty`'s own
   cache for the GUI; every real file, freshly parsed, for the CLI and
   `export-full`) with any in-memory pin/timing-arc edits patched in.
-- **`main.py export-layers`** / **File > Export Edited Layers**
+- **`main.py export-layers`** / **Export > Export Edited Layers**
   (`app.py`) -- exports the one real `.lyp` file this project ever has
   loaded at once (`pdklib/layers_writer.py`), with any in-memory
   name/GDS-layer/GDS-datatype/color edits patched in.
@@ -2189,6 +2189,75 @@ editor yet -- see Future Work.
   real, driven: full suite re-run clean (56/56) after the rename;
   `main.py`'s own CLI (`magic-tech`) and a fresh `App()` build both
   confirmed working live in the container, not just import-checked.
+- **GitHub repo renamed too** (`openpdkcreator-ihp-template` ->
+  `openpdkcreator-toolkit`, same real reasoning as the internal package
+  rename above), and its own **description** now explicitly states the
+  real, native LibMan support and links to LibMan's own real repo
+  (`github.com/IHP-GmbH/LibMan`) -- per direct user request, right
+  alongside a reminder to keep it documented that IHP's real SG13G2
+  PDK is still the real template/reference this whole project is built
+  against (see this README's own opening paragraph).
+- **Menu bar restructured**: **File** now holds only genuinely
+  project-level actions (Save Edits, Reload from Real Files, and the
+  two real LibMan `.projects` Import/Export actions, moved here from
+  being Library-Manager-tab-only since they act across every real
+  library at once) -- previously it also held all eleven individual,
+  per-domain "Export Edited X (open_pdks format)" actions, which
+  buried the two, real project-level ones among domain-specific noise.
+  Those eleven now live in their own new **Export** menu. A new
+  **Help** menu holds **About openPDKcreator** (repo URL, LibMan link,
+  license) and a general **Help** quick-reference (every real tab and
+  menu, in one screen) -- both real `gui/text_dialog.py` modals, reused
+  rather than a new dialog type. Verified for real, driven:
+  `tests/test_menu_structure.py` (new, 6 real assertions) -- the real
+  menu bar's own three top-level cascades and their exact real
+  contents (introspected via Tk's own `Menu.index`/`entrycget`, not
+  guessed), File's LibMan actions really switching to the Library
+  Manager tab and calling the real underlying methods, and both
+  dialogs' real content (repo URL, LibMan link, license, tab guide).
+  Verified live via noVNC too: all three menus opened and read
+  correctly, and the real About dialog rendered with the right text.
+- **Settings > General: real, working multi-project support** -- a
+  **Browse...** button next to **Project directory** (previously
+  read-only) picks a different real directory and calls the new
+  `App.change_project_directory`, which switches this session's own
+  project-level state (`saves/`, `library_index.yaml`, `libraries/`,
+  `user_models/`) to it -- **not** the real PDK data itself
+  (`self.pdk_root` is untouched). **Grounded in a real architecture
+  check before writing any code**, not assumed: `export.PROJECT_ROOT`
+  turned out to be one of *three* separate, independent,
+  `__file__`-derived fixed constants (`export.PROJECT_ROOT`,
+  `project_io.SAVE_DIR`, and an unrelated `pdklib/fetch.py` one for
+  download defaults, confirmed to be a different, correctly-untouched
+  concern) -- but every real consumer of the first two turned out to
+  already access them as `export_mod.PROJECT_ROOT`/`project_io.
+  SAVE_DIR` (module-qualified, re-read on every real call), not a name
+  frozen at import time, confirmed by grepping for the one pattern that
+  *would* have broken this (`from ... import PROJECT_ROOT`) and finding
+  none. That meant a real, working implementation only needed to
+  reassign those two shared constants plus fix the one real exception
+  (`LibraryManagerView.__init__` caches it once into `self.project_root`
+  at construction time) rather than a much larger refactor threading a
+  new parameter through every consumer. A genuinely new, empty
+  directory starts a fresh project there (created if missing); an
+  existing one restores its own real saved state -- the same real, full
+  reload sequence `_reload_from_real_files` already used for "start
+  over," since a new directory's own saved Magic Types/LEF pin
+  overrides must apply on top of a real, freshly re-parsed baseline,
+  not whatever the *previous* project's own edits left in memory. A
+  real confirmation prompt warns that unsaved edits are lost first.
+  Verified for real, driven: `tests/test_change_project_directory.py`
+  (new, 8 real assertions) -- switching to two different new, real
+  directories each starts genuinely fresh with no leakage between them
+  or from the original; switching back to each of three real
+  directories in turn restores exactly its own real saved project
+  name/registered library, never mixed; and the full, real GUI flow
+  through Settings > General's own **Browse...** button, including
+  declining the confirmation prompt leaving everything unchanged.
+  Verified live via noVNC too: the real directory picker opens
+  pre-filled at the current real project directory, listing the real
+  `saves/`/`library_index.yaml`/`user_models/` alongside it. Full
+  suite re-run clean (58/58).
 
 ## Future work
 
@@ -2252,7 +2321,7 @@ models, ...), not just read/display layers. Concretely, still open:
   `sg13g2.lyp`) -- every one byte-identical with no edits, plus real,
   driven edit round-trips, and independently re-verified faithful
   across the *entire* real PDK at once via `main.py export-full`'s own
-  smoking-gun round-trip test (`export.py`, `File > Export Edited ...`,
+  smoking-gun round-trip test (`export.py`, `Export > Export Edited ...`,
   `main.py export-lef`/`export-drc`/`export-magic-types`/
   `export-netlist`/`export-verilog`/`export-liberty`/`export-layers`).
   What's left is everything that's still read-only in its own
@@ -2421,7 +2490,7 @@ models, ...), not just read/display layers. Concretely, still open:
   (`get_parsed_qucs_symbol`/`get_parsed_qucs_component`), the same
   "switching files and back never discards an edit" discipline
   everywhere else. `main.py export-qucs-sym`/`export-qucs-component`
-  and their own `File` menu entries add CLI/GUI parity. Verified for
+  and their own `Export` menu entries add CLI/GUI parity. Verified for
   real, driven in the container: byte-identical no-edit export for all
   22 `.sym` + 34 `.xml` files (confirmed via raw bytes, not
   `read_text()`, after the CRLF fix), real edit/add/delete round-trips
@@ -2609,7 +2678,7 @@ models, ...), not just read/display layers. Concretely, still open:
   rename/net-label-edit/delete round-trip, and a full, complete-PDK,
   two-generation `export-full` smoking-gun round-trip still producing
   zero differences. `main.py export-xschem-sym`/`export-xschem-sch`
-  and `File > Export Edited xschem Symbols/Schematics` add CLI/GUI
+  and `Export > Export Edited xschem Symbols/Schematics` add CLI/GUI
   parity with every other write-back domain.
 - **User-defined Verilog/Verilog-A model inclusion, plus a way to link
   it to the rest of the PDK, is done** -- see the
