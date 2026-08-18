@@ -273,12 +273,24 @@ class LefView(ttk.Frame):
         self._refresh_all()
 
     def _new_macro(self):
-        """Adds a real, brand-new, empty ``LefMacro`` (``start_line ==
-        0``, same real "added this session" convention every other
-        writer here uses) to the currently-loaded LEF file -- CLASS/
-        SIZE/SYMMETRY start blank; real pins are added afterward via
-        the existing PinEditor, the same **New Pin** flow an existing
-        macro already uses. ``pdklib/lef_writer.py``'s own
+        """Adds a real, brand-new ``LefMacro`` (``start_line == 0``,
+        same real "added this session" convention every other writer
+        here uses) to the currently-loaded LEF file -- CLASS/SIZE/
+        SYMMETRY start blank; real pins are added afterward via the
+        existing PinEditor, the same **New Pin** flow an existing macro
+        already uses. **ORIGIN is set automatically, not prompted**:
+        every one of the real 156 ``ORIGIN`` statements across this
+        deck's own real ``.lef`` files is exactly ``(0.0, 0.0)``, a
+        real, confirmed-safe default (Magic's own placement-transform
+        reference for a macro authored at the coordinate origin), so a
+        brand-new macro no longer starts without one at all. **SITE is
+        prompted, not defaulted**: unlike ``ORIGIN``, a real site name
+        genuinely varies across this deck's own real macros (e.g.
+        ``CoreSite``/``sg13g2_cornerSite``/``sg13g2_ioSite``) -- the
+        prompt pre-fills the currently-loaded file's own most common
+        real site name as a real, confirmable suggestion, never a
+        silent guess; leaving it blank leaves ``site`` unset, same as
+        CLASS/SIZE/SYMMETRY already do. ``pdklib/lef_writer.py``'s own
         ``render_lef_file`` renders it as a whole, freshly-generated
         ``MACRO ... END`` block, appended after every real, existing
         macro on export."""
@@ -292,9 +304,31 @@ class LefView(ttk.Frame):
         if any(m.name == name for m in self.current.macros):
             messagebox.showerror("New Macro", f"A macro named {name!r} already exists.", parent=self)
             return
-        self.current.macros.append(lef_mod.LefMacro(name=name))
+        default_site = self._most_common_site()
+        site = simpledialog.askstring(
+            "New Macro", "Site (optional):", parent=self, initialvalue=default_site,
+        )
+        macro = lef_mod.LefMacro(name=name, origin=(0.0, 0.0))
+        if site:
+            macro.site = site
+        self.current.macros.append(macro)
         self._refresh_all()
         self.macros_tree.selection_set(name)
+
+    def _most_common_site(self) -> str:
+        """The currently-loaded real file's own most common real
+        ``site`` value among its existing macros -- a real,
+        confirmable suggestion for **New Macro**'s own Site prompt,
+        never a silent guess (the user still sees and can clear/edit
+        it). ``""`` when no real macro has one set."""
+
+        if self.current is None:
+            return ""
+        counts: dict[str, int] = {}
+        for macro in self.current.macros:
+            if macro.site:
+                counts[macro.site] = counts.get(macro.site, 0) + 1
+        return max(counts, key=counts.get) if counts else ""
 
     def _on_macro_select(self, _event=None):
         if self.current is None:

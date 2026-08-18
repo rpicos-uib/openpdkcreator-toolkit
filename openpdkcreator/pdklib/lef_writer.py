@@ -43,10 +43,18 @@ there) inserted just before the macro's own real ``END`` line.
 tab's own **New Macro** action) works the same way, one level up: no
 real source position to interleave into, so ``_render_new_macro_block``
 generates the whole ``MACRO name ... END name`` block fresh (``CLASS``/
-``SIZE``/``SYMMETRY`` when set, each real pin via the same
-``_render_pin_block`` an existing macro's own new pins already use),
-appended after every real, existing macro -- never interleaved among
-them, since there is no real position to put it at.
+``ORIGIN``/``SIZE``/``SYMMETRY``/``SITE`` when set, in the same real
+order IHP's own real macro headers already use, each real pin via the
+same ``_render_pin_block`` an existing macro's own new pins already
+use), appended after every real, existing macro -- never interleaved
+among them, since there is no real position to put it at. ``ORIGIN``
+is a real, confirmed gap this used to leave silently unset: every one
+of the real 156 ``ORIGIN`` statements across this deck's own real
+``.lef`` files is exactly ``(0.0, 0.0)`` (Magic's own default
+placement-transform reference for a macro authored at the coordinate
+origin), so ``gui/lef_view.py``'s own **New Macro** action now sets it
+automatically -- a real, confirmed-safe default, not a guess -- rather
+than leaving a brand-new macro without one at all.
 """
 
 from __future__ import annotations
@@ -122,17 +130,23 @@ def _render_new_macro_block(macro: lef_mod.LefMacro) -> list[str]:
     a macro added this session (``start_line == 0`` -- no real source
     position, so there is no real interior to preserve, unlike an
     existing macro's own pins). Only the fields this project's own
-    ``LefMacro`` actually models are emitted -- ``CLASS``/``SIZE``/
-    ``SYMMETRY`` when set, plus each real pin via the same
+    ``LefMacro`` actually models are emitted -- ``CLASS``/``ORIGIN``/
+    ``SIZE``/``SYMMETRY``/``SITE`` when set, in the same real order
+    IHP's own real macro headers already use (confirmed by direct
+    inspection, not assumed), plus each real pin via the same
     ``_render_pin_block`` an existing macro's own new pins already use."""
 
     lines = [f"MACRO {macro.name}"]
     if macro.macro_class:
         lines.append(f"  CLASS {macro.macro_class} ;")
+    if macro.origin:
+        lines.append(f"  ORIGIN {macro.origin[0]:g} {macro.origin[1]:g} ;")
     if macro.size:
         lines.append(f"  SIZE {macro.size[0]} BY {macro.size[1]} ;")
     if macro.symmetry:
         lines.append(f"  SYMMETRY {' '.join(macro.symmetry)} ;")
+    if macro.site:
+        lines.append(f"  SITE {macro.site} ;")
     for pin in macro.pins:
         lines.extend(_render_pin_block(pin, "  ", []))
     lines.append(f"END {macro.name}")

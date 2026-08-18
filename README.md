@@ -172,11 +172,15 @@ Contact**/**New Alias**/**New Rule** and a real export all work
 against a skeleton the same as against a real, downloaded file.
 **LEF** now also supports a whole new **MACRO**, not just a valid empty
 *library*: the LEF Macros sub-tab's own **New Macro...** action adds a
-real, brand-new, empty macro (pins added afterward through the same
-**New Pin** flow an existing macro already uses); `pdklib/lef_writer.py`'s
+real, brand-new macro (pins added afterward through the same **New
+Pin** flow an existing macro already uses), with a real `ORIGIN 0 0 ;`
+set automatically (every one of the real 156 `ORIGIN` statements
+across this deck's own real `.lef` files is exactly `(0.0, 0.0)`, a
+real, confirmed-safe default, not a guess) and a real `SITE` prompted
+(pre-filled with the currently-loaded file's own most common real
+site, a real, confirmable suggestion); `pdklib/lef_writer.py`'s
 `render_lef_file` renders it as a whole, freshly-generated block,
-appended after every real, existing macro on export (`ORIGIN`/`SITE`
-still aren't modeled -- real, separate future work). **DRC Rules' New
+appended after every real, existing macro on export. **DRC Rules' New
 Rule is deliberately partial**: a hand-authored rule is genuinely exportable
 -- real, *generated* KLayout DRC Ruby into a separate, tool-owned
 `custom_rules.drc`, not just metadata -- but only for the three
@@ -3170,6 +3174,45 @@ editor yet -- see Future Work.
   relaunch; a real write-back lands the edited header in
   `ihp-sg13g2-cifin.tech` specifically. Full suite re-run clean
   (72/72).
+- **LEF macro `ORIGIN` parsed and set on New Macro; `SITE` now
+  prompted** -- closes the one remaining gap **New Macro...** left
+  open (`pdklib/lef.py`'s own docstring already flagged `ORIGIN`/
+  `SITE` as unmodeled on a fresh macro). **Investigated before writing
+  any code, not assumed equally hard**: `SITE` turned out to already
+  be parsed for *existing* macros (`LefMacro.site`, read-only) -- the
+  real gap was narrower than the note implied, just the **New
+  Macro...** skeleton never setting either field, since nothing in the
+  GUI ever populated them on a fresh `LefMacro`. `ORIGIN` itself was
+  genuinely unparsed anywhere. **A real, confirmed structural fact
+  drove the fix, not a guess**: every one of the real 156 `ORIGIN`
+  statements across this deck's own real `.lef` files is exactly
+  `(0.0, 0.0)` (Magic's own placement-transform reference for a macro
+  authored at the coordinate origin) -- a real, confirmed-safe default
+  for **New Macro...** to set automatically, unlike `SITE`, which
+  genuinely varies (`CoreSite`/`sg13g2_cornerSite`/`sg13g2_ioSite`
+  all confirmed real) and is instead prompted, pre-filled with the
+  currently-loaded file's own most common real site as a real,
+  confirmable suggestion -- never a silent guess. `LefMacro` gained an
+  `origin: tuple[float, float] | None` field (`_apply_macro_field`
+  parses a real `ORIGIN x y ;` statement the same way `SIZE`/`SITE`
+  already are); `pdklib/lef_writer.py`'s `_render_new_macro_block`
+  emits `ORIGIN`/`SITE` in the same real header order IHP's own real
+  macros already use (`CLASS`/`ORIGIN`/`SIZE`/`SYMMETRY`/`SITE`,
+  confirmed by direct inspection). An *existing* macro's own real
+  `ORIGIN`/`SITE`/`CLASS`/`SIZE`/`SYMMETRY` lines were never at risk
+  either way -- `render_lef_file` already preserves an existing
+  macro's own header completely verbatim, untouched by pin edits; this
+  change only concerns a *brand-new* macro's own skeleton. Verified
+  for real, driven: `tests/test_lef_macro_origin.py` (new) -- all 84
+  real macros in `sg13g2_stdcell.lef` parse `ORIGIN` as the real,
+  confirmed `(0.0, 0.0)`; no-edit export stays byte-identical; a
+  brand-new macro's own real block includes `ORIGIN 0 0 ;` before
+  `SITE ... ;`, in the real, confirmed header order, and both
+  round-trip correctly through a fresh re-parse.
+  `tests/test_lef_new_macro_gui.py` updated to confirm **New
+  Macro...** itself sets the real, confirmed-safe origin automatically
+  and prompts for site pre-filled with the real, most-common
+  suggestion. Full suite re-run clean (73/73).
 
 ## Future work
 

@@ -19,7 +19,7 @@ token only, never a name/value token, which stay real/case-preserved).
 
 Scoped like ``magic_tech.py``: a real, useful subset in full --
 ``LAYER`` (type/direction/pitch/width/one simple spacing value/
-resistance), ``SITE``, ``MACRO`` (class/size/site/symmetry) with real
+resistance), ``SITE``, ``MACRO`` (class/size/site/symmetry/origin) with real
 ``PIN`` (direction/use/port layers+rect counts) and ``OBS`` (layers
 touched) sub-blocks, and ``VIA``/``ViaRULE`` (real via-stack geometry
 -- see below) -- and an honest, deliberate skip of
@@ -102,6 +102,15 @@ class LefMacro:
     size: tuple[float, float] | None = None
     site: str = ""
     symmetry: list[str] = field(default_factory=list)
+    origin: tuple[float, float] | None = None
+    """Real 'ORIGIN x y ;' statement, when present -- confirmed real,
+    not assumed: every one of the 156 real occurrences across this
+    deck's own real ``.lef`` files is exactly ``(0.0, 0.0)`` (Magic's
+    own default placement-transform reference for a macro authored at
+    the coordinate origin), never any other real value. Previously
+    entirely unparsed -- see ``pdklib/lef_writer.py``'s own
+    ``_render_new_macro_block`` docstring for how a brand-new macro now
+    gets one too."""
     pins: list[LefPin] = field(default_factory=list)
     obs_layers: list[str] = field(default_factory=list)
     start_line: int = 0
@@ -241,6 +250,10 @@ def _apply_macro_field(macro: LefMacro, keyword: str, tokens: list[str]) -> None
         macro.site = tokens[1]
     elif keyword == "SYMMETRY":
         macro.symmetry = tokens[1:]
+    elif keyword == "ORIGIN" and len(tokens) >= 3:
+        origin = _try_xy(tokens)
+        if origin:
+            macro.origin = origin
 
 
 def _apply_pin_field(pin: LefPin, keyword: str, tokens: list[str]) -> None:
@@ -261,6 +274,15 @@ def _try_size(tokens: list[str]) -> tuple[float, float] | None:
     # "SIZE w BY h" -- tokens[1]=w, tokens[2]="BY", tokens[3]=h
     w, h = _try_float(tokens[1]), _try_float(tokens[3])
     return (w, h) if w is not None and h is not None else None
+
+
+def _try_xy(tokens: list[str]) -> tuple[float, float] | None:
+    # "ORIGIN x y" -- tokens[1]=x, tokens[2]=y, no "BY" separator
+    # (unlike SIZE's own real shape).
+    if len(tokens) < 3:
+        return None
+    x, y = _try_float(tokens[1]), _try_float(tokens[2])
+    return (x, y) if x is not None and y is not None else None
 
 
 def _try_rect(tokens: list[str]) -> tuple[float, float, float, float] | None:

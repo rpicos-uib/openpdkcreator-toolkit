@@ -18,9 +18,10 @@ lv._refresh_all()
 root.update()
 original_macro_count = len(lv.current.macros)
 
-# --- New Macro... (mock the blocking name-prompt dialog) ---
+# --- New Macro... (mock the blocking name-prompt and site-prompt dialogs) ---
 original_askstring = lef_view_mod.simpledialog.askstring
-lef_view_mod.simpledialog.askstring = lambda *a, **kw: "ZZ_GUI_NEW_MACRO"
+prompts = iter(["ZZ_GUI_NEW_MACRO", "ZZ_TEST_SITE"])
+lef_view_mod.simpledialog.askstring = lambda *a, **kw: next(prompts)
 try:
     lv._new_macro()
 finally:
@@ -32,6 +33,18 @@ assert lv.current.macros[-1].name == "ZZ_GUI_NEW_MACRO"
 assert lv.macros_tree.exists("ZZ_GUI_NEW_MACRO")
 assert lv.macros_tree.selection() == ("ZZ_GUI_NEW_MACRO",)
 print(f"PASS: New Macro... adds a real, empty macro through the actual GUI ({original_macro_count} -> {len(lv.current.macros)}).")
+
+# --- ORIGIN is set automatically (real, confirmed-safe default);
+# SITE comes from the real, real-GUI site prompt, not silently guessed ---
+new_macro = lv.current.macros[-1]
+assert new_macro.origin == (0.0, 0.0)
+assert new_macro.site == "ZZ_TEST_SITE"
+print("PASS: New Macro... sets a real, confirmed-safe (0.0, 0.0) origin automatically and the real, prompted site.")
+
+# --- The site prompt is pre-filled with this file's own most common real site ---
+suggested = lv._most_common_site()
+assert suggested == "CoreSite"
+print(f"PASS: the Site prompt's own real, confirmable default suggestion is {suggested!r}, the file's own most common real site.")
 
 # --- Adding a pin to the new macro via the existing PinEditor works the same as any other macro ---
 lv.pin_editor._new_pin()
