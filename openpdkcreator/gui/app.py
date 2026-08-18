@@ -499,6 +499,15 @@ class App(ttk.Frame):
             "Export -- write real, edited content back out in open_pdks format, one command "
             "per domain.\n"
             "Help -- this dialog, and About.\n\n"
+            "Command line\n"
+            "------------\n"
+            "python3 main.py wizard --name \"My PDK\" --pdk-root DIR -- creates a new PDK "
+            "project (or --blank for no files) without opening this GUI, saves the project "
+            "name, and writes a ready-to-source shell-env script (shell_env/pdk_env.sh); add "
+            "--open-gui to open it here right after. Every other real, read/export command "
+            "this tool has -- fetch/inventory/lef/drc/export-.../gui/... -- is listed by "
+            "python3 main.py --help, and each one's own options by e.g. "
+            "python3 main.py wizard --help.\n\n"
             "Full documentation lives in this project's own README.md:\n"
             "  github.com/rpicos-uib/openpdkcreator-toolkit",
         )

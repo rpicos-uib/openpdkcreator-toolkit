@@ -63,8 +63,33 @@ python3 main.py export-layers    # real, patched .lyp write-back to export/ (byt
 python3 main.py export-xschem-sym  # real, patched xschem .sym pin write-back to export/ (byte-identical with no edits)
 python3 main.py export-xschem-sch  # real, patched xschem .sch instance/wire write-back to export/ (byte-identical with no edits)
 python3 main.py export-full --dest DIR   # a complete, standalone PDK tree -- round-trip fidelity testing
+python3 main.py --pdk-root DIR wizard --name "My PDK"   # start a new PDK project from the CLI, no GUI needed
 python3 main.py gui          # PDK / Settings tabs (needs a real X11/Xvnc display)
 ```
+
+`main.py --help` lists every one of the above with a one-line description;
+`main.py <command> --help` (e.g. `main.py wizard --help`) shows that
+command's own options -- both come straight from `argparse`'s own real
+`help=` text, so they can never drift from what's actually implemented.
+
+`wizard` is the CLI equivalent of the GUI's own **File > Create a New
+PDK.../Create a Blank PDK...** -- no Tk/display needed. `--pdk-root DIR`
+(the same global option every other command already takes, just used here
+as the *destination* rather than an existing PDK to read) is where the new
+PDK is created; `--name` is saved as the project's own display name and
+(slugified) as the Layers/Magic Tech/LEF skeleton files' technology name;
+add `--blank` for the bare `libs.tech`/`libs.ref` shape instead of the
+default skeleton. It also generates the real, sourceable shell-env script
+(same `pdklib/shell_env.py` Settings > Environment already exposes in the
+GUI) -- `--env save` (default) writes `shell_env/pdk_env.sh` and prints its
+path, `--env print` prints only the raw script to stdout (everything else
+goes to stderr) so it can be sourced directly, e.g.:
+
+```
+source <(python3 main.py --pdk-root DIR wizard --name "My PDK" --env print)
+```
+
+`--open-gui` opens the GUI on the new project immediately afterward.
 
 `main.py gui` needs a real X11/Xvnc display -- this host has none locally (no
 `Xvfb`/`xvfb-run`, `$DISPLAY` unset), confirmed by trying `export DISPLAY=...`
@@ -2323,6 +2348,55 @@ editor yet -- see Future Work.
   confirmation each leave the current app and target directory
   untouched. `tests/test_menu_structure.py` extended for the two new
   File entries. Full suite re-run clean (59/59).
+- **`main.py wizard`**: a new CLI subcommand, per direct user request,
+  starting a new PDK project headlessly -- no Tk/display needed -- the
+  CLI equivalent of the GUI's own **File > Create a New/Blank PDK...**
+  above, reusing the exact same `pdklib/skeleton.py` builders (one real
+  source of truth, not a second implementation). `--pdk-root DIR`
+  (the same global option every other command already takes, here used
+  as the *destination* rather than an existing PDK to read) is where
+  the new PDK is created; `--name` is saved as the project's own
+  display name (`project_io.save_state`, unslugified) and, slugified
+  (`_slugify_name`: lowercased, non-alphanumeric runs collapsed to one
+  `_`), reused as the Layers/Magic Tech/LEF skeleton files' own
+  technology name; `--blank` swaps in the bare `libs.tech`/`libs.ref`
+  shape instead; a non-empty `--pdk-root` refuses unless `--force` is
+  given -- the same real confirmation the GUI action already shows,
+  translated to a CLI flag rather than a dropped safety check. Also
+  generates the real, sourceable shell-env script (`pdklib/
+  shell_env.py`, the same one Settings > Environment already exposes
+  in the GUI) via a new `--env {save,print,skip}` option: `save`
+  (default) writes `shell_env/pdk_env.sh` under the project root and
+  reports its path; `print` writes *only* the raw script text to
+  stdout (every other message moves to stderr instead), so the whole
+  invocation can be sourced directly -- `source <(python3 main.py
+  --pdk-root DIR wizard --name NAME --env print)`; `skip` does
+  neither. `--open-gui` chains straight into the existing `cmd_gui` on
+  the freshly created project. Every subcommand here (this one
+  included) already gets a one-line description in `main.py --help`
+  and its own full option list in `main.py wizard --help` for free,
+  straight from `argparse`'s own real `help=` text -- nothing new to
+  keep in sync by hand. The GUI's own Help dialog gained a matching
+  "Command line" section pointing back at it. Verified for real,
+  driven: `tests/test_wizard_cli.py` (new) -- calls `main.main(argv)`
+  directly (not a subprocess) and asserts on the real, on-disk result:
+  the default skeleton and `--blank` cases; `--name`'s exact,
+  unslugified value round-tripping through `project_io.load_state`;
+  the non-empty-directory guard refusing then `--force` proceeding
+  alongside the pre-existing file; `--env save`'s script byte-for-byte
+  matching `generate_shell_env_script`'s own real output and being
+  executable; `--env print` putting *only* the script on stdout with
+  status on stderr, and leaving the real, on-disk script from the
+  `--env save` case earlier in the same run untouched; `--env skip`
+  writing no script; `--open-gui` chaining into a monkeypatched
+  `cmd_gui` (never a real, blocking Tk window); and `--name`
+  slugification on a deliberately messy input
+  (`"  Weird!! Name--123  "` -> `weird_name_123`). Like
+  `test_change_project_directory.py`, temporarily redirects
+  `export.PROJECT_ROOT`/`project_io.SAVE_DIR` to a throwaway directory
+  for its own duration, since `--env save` otherwise writes into the
+  real, shared `saves/`/`shell_env/` trees. Full suite re-run clean
+  (60/60).
 
 ## Future work
 

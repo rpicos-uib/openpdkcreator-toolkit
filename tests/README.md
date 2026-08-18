@@ -46,7 +46,12 @@ for exercising a genuinely *empty*, from-scratch project (the
 `create_new_*` skeleton functions, the PDK Wizard's own from-scratch
 status) without needing the full real deck at all:
 `test_skeletons.py`, `test_skeleton_buttons.py`, `test_drc_generate.py`,
-`test_pdk_wizard_empty.py`, `test_create_pdk.py`.
+`test_pdk_wizard_empty.py`, `test_create_pdk.py`. `test_wizard_cli.py`
+(the `main.py wizard` CLI command) does the same, and also redirects
+`export.PROJECT_ROOT`/`project_io.SAVE_DIR` to a throwaway directory
+for its own duration -- same real precedent as
+`test_change_project_directory.py` -- since `wizard --env save` writes
+into the real, shared `saves/`/`shell_env/` otherwise.
 
 A handful exercise a real **Create File** action against the shared,
 real `data/` tree itself (not a throwaway dir) -- `test_edit_create_buttons.py`

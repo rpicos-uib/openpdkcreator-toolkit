@@ -80,10 +80,12 @@ work, still only partially attempted here.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 from openpdkcreator import export as export_mod
+from openpdkcreator import project_io
 from openpdkcreator.pdklib import cells as cells_mod
 from openpdkcreator.pdklib import drc as drc_mod
 from openpdkcreator.pdklib import fetch as fetch_mod
@@ -96,6 +98,8 @@ from openpdkcreator.pdklib import magic_tech as magic_tech_mod
 from openpdkcreator.pdklib import netlist as netlist_mod
 from openpdkcreator.pdklib import qucs_sym as qucs_mod
 from openpdkcreator.pdklib import reconcile as reconcile_mod
+from openpdkcreator.pdklib import shell_env as shell_env_mod
+from openpdkcreator.pdklib import skeleton as skeleton_mod
 from openpdkcreator.pdklib import spice_models as spice_models_mod
 from openpdkcreator.pdklib import user_models as user_models_mod
 from openpdkcreator.pdklib import verilog as verilog_mod
@@ -103,6 +107,27 @@ from openpdkcreator.pdklib import xschem as xschem_mod
 from openpdkcreator.pdklib import xschem_sch as xschem_sch_mod
 
 DEFAULT_PDK_ROOT = Path(__file__).resolve().parent / "data" / "ihp-sg13g2" / "ihp-sg13g2"
+
+# Matches gui/environment_view.py's own SHELL_ENV_DIRNAME/SCRIPT_NAME --
+# kept as separate literals rather than importing that module, so
+# every other CLI command here still runs without pulling in tkinter.
+SHELL_ENV_DIRNAME = "shell_env"
+SHELL_ENV_SCRIPT_NAME = "pdk_env.sh"
+
+
+def _slugify_name(name: str) -> str:
+    """A plain, real filename stem from a human-typed project name --
+    lowercased, any run of non-alphanumeric characters collapsed to one
+    underscore -- used only for ``wizard --name``'s own Layers/Magic
+    Tech/LEF skeleton file names (``build_new_pdk_skeleton``'s own
+    *name* argument). The project name saved via ``project_io.
+    save_state`` keeps whatever the user actually typed, unslugified --
+    the same real, deliberate distinction ``project_io.py``'s own
+    docstring already draws between a PDK's immutable directory name
+    and its separate, freely-editable display label."""
+
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", name.strip()).strip("_").lower()
+    return slug or "pdk"
 
 
 def cmd_fetch(dest: Path) -> int:
@@ -886,6 +911,65 @@ def cmd_export_full(pdk_root: Path, dest: Path) -> int:
     return 0
 
 
+def cmd_wizard(pdk_root: Path, name: str, blank: bool, force: bool, env: str, open_gui: bool) -> int:
+    """The CLI equivalent of the GUI's own **File > Create a New
+    PDK.../Create a Blank PDK...** (``gui/app.py``'s ``_create_pdk``)
+    -- same real ``pdklib/skeleton.py`` builders, same non-empty-
+    directory confirmation (here, ``--force``), no Tk required. Lets a
+    new project be started headlessly -- from a script, CI, or a
+    terminal with no display -- rather than only through the GUI.
+
+    *env* controls the generated shell-env script
+    (``pdklib/shell_env.py``, the same one Settings > Environment
+    already exposes): ``"save"`` (default) writes ``shell_env/
+    pdk_env.sh`` under the project root and reports its path;
+    ``"print"`` prints *only* the raw script text to stdout (every
+    other message here moves to stderr instead), so the whole command
+    can be sourced directly, e.g. ``source <(python3 main.py
+    --pdk-root DIR wizard --name NAME --env print)``; ``"skip"`` does
+    neither."""
+
+    out = sys.stderr if env == "print" else sys.stdout
+
+    if pdk_root.is_dir() and any(pdk_root.iterdir()) and not force:
+        print(
+            f"{pdk_root} already exists and is not empty -- pass --force to create the PDK there "
+            "anyway (matches the GUI's own File > Create a New/Blank PDK... confirmation).",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        if blank:
+            skeleton_mod.build_blank_pdk(pdk_root)
+        else:
+            skeleton_mod.build_new_pdk_skeleton(pdk_root, _slugify_name(name))
+    except FileExistsError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    print(f"Created a {'blank' if blank else 'new'} PDK at {pdk_root}", file=out)
+
+    save_path = project_io.save_state(pdk_root, design_rules=[], magic_types={}, lef_pins={}, project_name=name)
+    print(f"Project name {name!r} saved to {save_path}", file=out)
+
+    if env != "skip":
+        script = shell_env_mod.generate_shell_env_script(pdk_root, SHELL_ENV_SCRIPT_NAME)
+        if env == "print":
+            sys.stdout.write(script.text)
+        else:
+            dest_dir = export_mod.PROJECT_ROOT / SHELL_ENV_DIRNAME
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / SHELL_ENV_SCRIPT_NAME
+            dest_path.write_text(script.text, encoding="utf-8")
+            dest_path.chmod(0o755)
+            print(f"Shell-env script saved to {dest_path} -- run: source {dest_path}", file=out)
+
+    if open_gui:
+        return cmd_gui(pdk_root)
+    return 0
+
+
 def cmd_gui(pdk_root: Path) -> int:
     if not pdk_root.is_dir():
         print(f"Not a directory: {pdk_root} -- run 'python3 main.py fetch' first.", file=sys.stderr)
@@ -937,6 +1021,34 @@ def build_parser() -> argparse.ArgumentParser:
         "export-full", help="Export a complete, standalone PDK tree -- for round-trip fidelity testing.",
     )
     export_full_parser.add_argument("--dest", type=Path, required=True, help="Destination directory (must not exist).")
+    wizard_parser = sub.add_parser(
+        "wizard",
+        help="Create a new PDK project headlessly, no GUI needed -- the CLI equivalent of "
+        "File > Create a New/Blank PDK....",
+    )
+    wizard_parser.add_argument(
+        "--name", required=True,
+        help="Project name, saved to Settings > Project name; also slugified for the skeleton's "
+        "own Layers/Magic Tech/LEF file names (ignored with --blank).",
+    )
+    wizard_parser.add_argument(
+        "--blank", action="store_true",
+        help="Create a blank PDK (just libs.tech/libs.ref, no files) instead of the default "
+        "minimal, immediately-usable skeleton (Layers/Magic Tech/DRC deck/LEF).",
+    )
+    wizard_parser.add_argument(
+        "--force", action="store_true", help="Proceed even if --pdk-root already exists and is not empty.",
+    )
+    wizard_parser.add_argument(
+        "--env", choices=("save", "print", "skip"), default="save",
+        help="What to do with the generated shell-env script: 'save' (default) writes "
+        "shell_env/pdk_env.sh under the project root and prints its path; 'print' prints only the "
+        "raw script to stdout (everything else here goes to stderr instead), so it can be sourced "
+        "directly; 'skip' does neither.",
+    )
+    wizard_parser.add_argument(
+        "--open-gui", action="store_true", help="Launch the GUI on the new project once it's created.",
+    )
     sub.add_parser("gui", help="Open the Overview/Technology/Cells GUI.")
     return parser
 
@@ -991,6 +1103,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_export_qucs_component(args.pdk_root.resolve())
     if args.command == "export-full":
         return cmd_export_full(args.pdk_root.resolve(), args.dest.resolve())
+    if args.command == "wizard":
+        return cmd_wizard(args.pdk_root.resolve(), args.name, args.blank, args.force, args.env, args.open_gui)
     if args.command == "gui":
         return cmd_gui(args.pdk_root.resolve())
     return 1
