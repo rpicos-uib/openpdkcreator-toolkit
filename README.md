@@ -3112,6 +3112,64 @@ editor yet -- see Future Work.
   drc-section construct this parser recognizes is now editable -- both
   `extract` and `drc` have no remaining read-only content of their own.
   Full suite re-run clean (71/71).
+- **Magic Tech write-back extended to cifinput's own `layer`/
+  `templayer` recipe blocks' header fields** (`CifInputRecipeBlock`,
+  replacing the old, merged-by-name `CifInputRecipe`) -- the sixteenth
+  editable domain, and **a real data-model redesign, not just a new
+  domain**, closing the one remaining gap this project's own Future
+  Work had explicitly flagged as needing one. **Investigated and
+  re-scoped before writing any code**: the old `CifInputRecipe` merged
+  every real block sharing a NAME into one entry (`base_layers`/`ops`
+  as *lists*, one item per real occurrence, with no way to tell which
+  real occurrence a given item came from) -- exactly the shape that
+  made write-back impossible, since an edit couldn't be traced back to
+  a real source position. Re-modeled as one real entry per real block
+  *occurrence* instead (`base_layer` singular, `ops` scoped to just
+  that occurrence), the same flattening precedent
+  `CifOutputLayerMapping` already established for cifoutput's own
+  repeated `DNWELL` rows -- confirmed real, not assumed: 211 real block
+  occurrences across 188 real unique names, real `nwell` itself built
+  from two real, non-contiguous blocks (`NWELL,WELLPIN` and, later,
+  `schottkyarea`). **Editable header fields only
+  (`name`/`kind_text`/`base_layer`) -- real op content stays
+  deliberately read-only**: this project has no way to confirm it's
+  safe to let a user author an arbitrary real geometry-boolean op line
+  without understanding Magic's own op semantics, unlike a header
+  rename, which is purely positional text -- the same "don't guess
+  further" scope discipline as everywhere else. `allow_new_delete=False`
+  (a real precedent `CifOutputLayerMapping` also established): a
+  brand-new block with no real op content would be functionally inert.
+  **A real, genuinely different ranged shape from `device`/`angles`/
+  `MagicDrcCheck`**: a recipe block's own real end isn't marked by a
+  keyword or a trailing `\` -- it's implicitly delimited by whichever
+  real boundary comes next (another block, the section's own real
+  `ignore`/standalone `calma` content, or the section's own `end`), so
+  the new `_parse_cifinput_recipes_with_lines` closes the currently-
+  pending block the moment any of those appears, reusing the exact
+  same real exclusion logic the old, merged parser already needed.
+  Because real op content is never edited, the render function
+  (`_render_cifinput_recipe_range`) only ever needs to compare the
+  header line itself -- if unchanged, the entire real range (header
+  plus every real op line, verbatim) is returned untouched; if the
+  header changed, only that one line is regenerated, with every real
+  op line after it still carried through completely verbatim. Since
+  `gui/simple_list_editor.py`'s `SimpleListEditor` has no concept of a
+  read-only column, real op content is shown in a genuinely separate,
+  non-form `Treeview` alongside the new header editor, rather than a
+  form field that looks editable but silently isn't. Verified for
+  real, driven: `tests/test_magic_cifinput_recipes.py` (new) -- all
+  211 real block occurrences load across 188 real unique names, all
+  range-tracked; the two real, non-contiguous `nwell` blocks confirmed
+  as independent, distinct rows; no-edit export of
+  `ihp-sg13g2-cifin.tech` stays byte-identical; `ihp-sg13g2.tech`'s own
+  export stays byte-identical too; editing one `nwell` block's own
+  header preserves its own real op content and leaves the *other* real
+  `nwell` block, every real ignored layer, and every real layer hint
+  completely untouched; in-GUI `base_layer`/`kind_text` edits round-trip
+  correctly; the edit survives `File > Save Edits` and a simulated
+  relaunch; a real write-back lands the edited header in
+  `ihp-sg13g2-cifin.tech` specifically. Full suite re-run clean
+  (72/72).
 
 ## Future work
 

@@ -741,6 +741,7 @@ class App(ttk.Frame):
             magic_extract_devices=self.magic_tech_view.collect_extract_devices_by_tech(),
             magic_drc_angle_checks=self.magic_tech_view.collect_drc_angle_checks_by_tech(),
             magic_drc_checks=self.magic_tech_view.collect_drc_checks_by_tech(),
+            magic_cifinput_recipes=self.magic_tech_view.collect_cifinput_recipes_by_tech(),
             layers=self._layers_by_lyp_path(),
         )
         self.status.set(f"Saved edits to {path}")
@@ -1195,6 +1196,10 @@ class App(ttk.Frame):
                 tech = self.magic_tech_view.technologies.get(tech_name)
                 if tech is not None:
                     tech.drc_checks = checks
+            for tech_name, blocks in saved.magic_cifinput_recipes.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.cifinput_recipes = blocks
             self.magic_tech_view._refresh_all()
             self.apply_saved_lef_pin_overrides(saved.lef_pins)
             self.lef_view._refresh_all()

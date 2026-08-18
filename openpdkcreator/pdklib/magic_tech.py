@@ -318,9 +318,9 @@ class CifInputIgnoredLayer:
     -- a real Magic-type-name to skip entirely on CIF/GDS read. Flat
     and standalone the same real way ``CifInputLayerHint`` below is
     (confirmed real: never nested inside a 'layer'/'templayer' recipe
-    block -- ``_parse_cifinput_recipes``'s own docstring already
-    excludes real 'ignore' content from being swept into whichever
-    recipe happened to be open)."""
+    block -- ``_parse_cifinput_recipes_with_lines``'s own docstring
+    already excludes real 'ignore' content from being swept into
+    whichever recipe happened to be open)."""
 
     name: str
     line_no: int = 0
@@ -407,27 +407,36 @@ class CifInputOp:
 
 
 @dataclass
-class CifInputRecipe:
-    """One real Magic type's worth of ``layer NAME <base>`` /
-    ``templayer NAME <base>`` recipe content from the cifinput
-    section, plus every real op line following each such block (or the
-    section's own real ``ignore``/standalone ``calma`` content,
-    explicitly excluded -- see this module's own docstring) -- an
-    honest, complete real *record* of what each recipe says, not a
-    working boolean-geometry interpreter: the ops are never evaluated
-    or composed here.
+class CifInputRecipeBlock:
+    """One real ``layer NAME <base>``/``templayer NAME <base>`` block
+    from the cifinput section, plus every real op line following it up
+    to the next recognized real boundary (another block, the section's
+    own real ``ignore``/standalone ``calma`` content, or the section's
+    own ``end``) -- an honest, complete real *record* of what this one
+    block says, not a working boolean-geometry interpreter: the ops
+    are never evaluated or composed here.
 
-    **A real Magic type's own recipe can be built across more than one
-    real, textually-separated block with the same NAME** (confirmed
-    real -- e.g. real ``nwell`` has two real, separate ``layer nwell
-    ...`` blocks at different points in the file, each with its own
-    real base layer: ``NWELL,WELLPIN`` and, later, ``schottkyarea``) --
-    the same real structural fact ``cifoutput``'s own ``CifLayer``
-    already merges (its own real DNWELL, built across two real
-    ``layer DNWELL ...`` blocks). Matched here the same way:
-    ``base_layers``/``ops`` accumulate across every real occurrence, in
-    real file order, rather than only the first being kept and later
-    real occurrences silently overwriting or duplicating it."""
+    **Editable, real header fields only -- ``name``/``kind_text``/
+    ``base_layer``** (see this class's own ``line_no``-analogue,
+    ``start_line``/``end_line``, and ``pdklib/magic_tech_writer.py``'s
+    own docstring for exactly how an edit reconstructs just the
+    header). Real op content (``ops``) stays deliberately read-only,
+    same "don't guess further" scope discipline as everywhere else --
+    this module can't confirm it's safe to let a user *add* an
+    arbitrary real geometry-boolean op line without understanding
+    Magic's own op semantics (unlike a header rename, which is purely
+    positional text). **One entry per real block *occurrence*, not
+    merged by name** -- a real Magic type's own recipe can be built
+    across more than one real, textually-separated block sharing the
+    same NAME (confirmed real -- e.g. real ``nwell`` has two real,
+    separate ``layer nwell ...`` blocks at different points in the
+    file, each with its own real base layer: ``NWELL,WELLPIN`` and,
+    later, ``schottkyarea``) -- the same real structural fact
+    ``cifoutput``'s own ``CifOutputLayerMapping`` already flattens to
+    one row per real occurrence, rather than merging occurrences into
+    one entry with an inner list the way this class used to (as
+    ``CifInputRecipe``) before write-back needed a real, individually
+    addressable position per occurrence."""
 
     name: str
     is_templayer: bool
@@ -435,12 +444,31 @@ class CifInputRecipe:
     layer (not directly emitted); a real ``layer`` is a real,
     permanent one -- confirmed real distinction, not asserted
     semantics beyond the keyword itself."""
-    base_layers: list[str] = field(default_factory=list)
-    """Raw, e.g. "NWELL,WELLPIN" -- one real entry per real block
-    occurrence, in real file order, not decomposed further."""
+    base_layer: str = ""
+    """Raw, e.g. "NWELL,WELLPIN" -- this one real block occurrence's
+    own real base layer(s), not decomposed further."""
     ops: list[CifInputOp] = field(default_factory=list)
-    """Every real op line, concatenated across every real block
-    occurrence for this name, in real file order."""
+    """Every real op line belonging to this one real block occurrence,
+    in real file order -- read-only (see this class's own docstring)."""
+    start_line: int = 0
+    end_line: int = 0
+    """The real, 1-indexed line range this block's own real source
+    spans (both inclusive) -- the header line through its own last
+    real op line, same real range-tracking shape as
+    ``ExtractDevice.start_line``/``end_line``."""
+
+    @property
+    def kind_text(self) -> str:
+        """A plain-string view of ``is_templayer`` -- ``"templayer"``
+        or ``"layer"``, the real keyword itself -- same real reason
+        ``ExtractPlaneOrder.order_text`` exists for a non-string
+        field."""
+
+        return "templayer" if self.is_templayer else "layer"
+
+    @kind_text.setter
+    def kind_text(self, value: str) -> None:
+        self.is_templayer = value.strip() == "templayer"
 
 
 @dataclass
@@ -878,9 +906,10 @@ class MagicTechnology:
     cifinput_layer_hints: list[CifInputLayerHint] = field(default_factory=list)
     """Real, standalone 'calma NAME L D' statements from the cifinput
     section -- see ``CifInputLayerHint``'s own docstring."""
-    cifinput_recipes: list[CifInputRecipe] = field(default_factory=list)
-    """Real 'layer'/'templayer' geometry-boolean recipe blocks -- see
-    ``CifInputRecipe``'s own docstring."""
+    cifinput_recipes: list[CifInputRecipeBlock] = field(default_factory=list)
+    """Real 'layer'/'templayer' geometry-boolean recipe blocks, one
+    entry per real block occurrence -- see ``CifInputRecipeBlock``'s
+    own docstring."""
     compose: list[ComposeStatement] = field(default_factory=list)
     connect: list[ConnectRule] = field(default_factory=list)
     drc_checks: list[MagicDrcCheck] = field(default_factory=list)
@@ -972,10 +1001,17 @@ class MagicTechnology:
     gap logic needed the way ``styles`` needs for its own header line."""
     all_parsed_cifinput_ignore_line_nos: list[int] = field(default_factory=list)
     all_parsed_cifinput_hint_line_nos: list[int] = field(default_factory=list)
+    all_parsed_cifinput_recipe_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real recipe block's own ``(start_line, end_line)`` range
+    as originally parsed, in real file order -- the range-based
+    analogue of ``all_parsed_cifinput_ignore_line_nos``/etc. above (see
+    ``all_parsed_extract_device_ranges``'s own docstring for why a
+    range, not a single line number, for ``CifInputRecipeBlock``)."""
     cifinput_section_start_line: int = 0
     cifinput_section_end_line: int = 0
-    """Real bookkeeping for ``cifinput``'s own two flat sub-structures
-    (ignored layers, layer hints) -- **a real structural difference
+    """Real bookkeeping for ``cifinput``'s own three sub-structures
+    (ignored layers, layer hints, and now recipe blocks' own header
+    fields -- ``CifInputRecipeBlock``) -- **a real structural difference
     from every other editable domain above**: ``cifinput`` doesn't live
     in ``ihp-sg13g2.tech`` itself, it's spliced in from a separate real
     file, ``ihp-sg13g2-cifin.tech``, via ``include``. When parsed *as
@@ -995,14 +1031,18 @@ class MagicTechnology:
     Technology picker entirely; ``gui/magic_tech_view.py`` now falls
     back to the real file's own stem as a display name so it (and
     every other nameless fragment) shows up and can be selected,
-    without inventing a fake real ``tech.name``. Both sub-structures
-    share these same section bounds (one real ``cifinput``...``end``
-    block, confirmed real: neither is nested inside a ``layer``/
+    without inventing a fake real ``tech.name``. All three
+    sub-structures share these same section bounds (one real
+    ``cifinput``...``end`` block, confirmed real: the ignored-layers/
+    layer-hints tables are not nested inside any ``layer``/
     ``templayer`` recipe block) -- ``pdklib/magic_tech_writer.py``'s
     own ``render_tech_file`` was generalized to combine multiple,
     independently-tracked sub-structures into one real patch pass over
     a shared section, not two separate, mutually-clobbering passes over
-    the same real lines."""
+    the same real lines; recipe blocks are a real *ranged* group in
+    that same combined pass (see ``_render_section_patch``'s own
+    docstring, generalized for ``ExtractDevice``), unlike the other
+    two, which are flat, single-line groups."""
     all_parsed_cif_layer_line_nos: list[int] = field(default_factory=list)
     cifoutput_section_start_line: int = 0
     cifoutput_section_end_line: int = 0
@@ -1452,34 +1492,84 @@ def _parse_cifinput_hints_with_lines(lines: list[str], safe_through: int):
     return _scan_single_line_section(lines, "cifinput", safe_through, _parse_cifinput_hint_line)
 
 
-def _parse_cifinput_recipes(lines: list[str]) -> list[CifInputRecipe]:
-    by_name: dict[str, CifInputRecipe] = {}
-    order: list[str] = []
-    current: CifInputRecipe | None = None
-    for line in lines:
-        stripped = line.strip()
+def _parse_cifinput_recipes_with_lines(lines: list[str], safe_through: int):
+    """Real, range-tracked scan for cifinput's own ``layer``/
+    ``templayer`` recipe blocks -- one real entry per real block
+    *occurrence*, not merged by name (see ``CifInputRecipeBlock``'s own
+    docstring for why). Unlike every other ranged domain in this
+    module, a real block's own end isn't marked by a keyword or a
+    trailing ``\\`` -- it's implicitly delimited by whichever real
+    boundary comes next (another real block, the section's own real
+    ``ignore``/standalone ``calma`` content, or the section's own
+    ``end``), so this scanner closes the currently-pending block the
+    moment any of those is seen, the same real exclusion
+    ``ignore``/``calma`` content already needed before this domain had
+    any real line-tracking at all. Returns (entries, all_ranges,
+    section_start, section_end)."""
+
+    entries: list[CifInputRecipeBlock] = []
+    all_ranges: list[tuple[int, int]] = []
+    section_start = section_end = 0
+    in_section = False
+    pending: dict | None = None  # {"start": line_no, "block": CifInputRecipeBlock}
+
+    def close_pending(end_line: int) -> None:
+        nonlocal pending
+        if pending is not None:
+            if pending["start"]:
+                pending["block"].start_line = pending["start"]
+                pending["block"].end_line = end_line
+                all_ranges.append((pending["start"], end_line))
+            entries.append(pending["block"])
+            pending = None
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+
+        if not in_section:
+            if stripped == "cifinput":
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            close_pending(line_no - 1)
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
         if not stripped or stripped.startswith("#"):
             continue
-        block_match = _CIFINPUT_RECIPE_START_RE.match(line)
+
+        block_match = _CIFINPUT_RECIPE_START_RE.match(raw_line)
         if block_match:
+            close_pending(line_no - 1)
             kind, name, base = block_match.groups()
-            current = by_name.get(name)
-            if current is None:
-                current = CifInputRecipe(name=name, is_templayer=(kind == "templayer"))
-                by_name[name] = current
-                order.append(name)
-            current.base_layers.append(base)
+            safe_start = line_no if section_start and line_no <= safe_through else 0
+            pending = {
+                "start": safe_start,
+                "block": CifInputRecipeBlock(name=name, is_templayer=(kind == "templayer"), base_layer=base),
+            }
             continue
-        if current is None:
+
+        if pending is None:
+            # Real preamble (style/scalefactor/gridlimit/options) or
+            # the section's own real standalone ignore/calma table --
+            # neither belongs to any recipe block.
             continue
+
         # The section's own real 'ignore'/standalone 'calma' content
         # is not part of any recipe (see this module's own docstring)
-        # -- explicitly excluded rather than swept in as bogus 'ops'
-        # of whichever recipe happened to be open last.
+        # -- closes whichever block was open, rather than being swept
+        # in as bogus 'ops'.
         if _CIFINPUT_IGNORE_RE.match(stripped) or _CIFINPUT_CALMA_RE.match(stripped):
+            close_pending(line_no - 1)
             continue
+
         parts = stripped.split(None, 1)
-        current.ops.append(CifInputOp(verb=parts[0], args=parts[1] if len(parts) > 1 else ""))
+        pending["block"].ops.append(CifInputOp(verb=parts[0], args=parts[1] if len(parts) > 1 else ""))
+
+    return entries, all_ranges, section_start, section_end
     return [by_name[name] for name in order]
 
 
@@ -1980,11 +2070,14 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _cifinput_start2, _cifinput_end2 = (
         _parse_cifinput_hints_with_lines(lines, safe_through)
     )
-    # _cifinput_start2/_cifinput_end2 are the exact same real section
-    # bounds as above (one shared cifinput...end block) -- discarded,
-    # not asserted equal, matching this module's own "don't guess, but
-    # don't over-verify either" discipline elsewhere.
-    tech.cifinput_recipes = _parse_cifinput_recipes(sections.get("cifinput", []))
+    tech.cifinput_recipes, tech.all_parsed_cifinput_recipe_ranges, _cifinput_start3, _cifinput_end3 = (
+        _parse_cifinput_recipes_with_lines(lines, safe_through)
+    )
+    # _cifinput_start2/_cifinput_end2/_cifinput_start3/_cifinput_end3
+    # are the exact same real section bounds as above (one shared
+    # cifinput...end block) -- discarded, not asserted equal, matching
+    # this module's own "don't guess, but don't over-verify either"
+    # discipline elsewhere.
     tech.compose, tech.all_parsed_compose_line_nos, tech.compose_section_start_line, tech.compose_section_end_line = (
         _parse_compose_with_lines(lines, safe_through)
     )

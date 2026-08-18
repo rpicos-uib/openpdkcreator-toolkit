@@ -28,16 +28,16 @@ Coefficients**/**Extract Devices**/**Extract Misc** (real
 see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
-flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
-Misc**/**Extract Coefficients**/**Extract Devices**/**Extract**'s own
-**Plane order** and **Sheet resistance** sub-panes/**DRC (Magic)**'s
-own **angles** sub-pane are editable -- every real ``extract``-section
-construct this module recognizes is now editable, no read-only sub-tab
-remains in that domain; **DRC (Magic)** itself is still split, its own
-``width``/``spacing``/``maxwidth`` statements staying read-only for
-now (see ``MagicAngleCheck``'s own docstring, in
-``pdklib/magic_tech.py``, for why ``angles`` alone was safe to make
-editable first). Types keeps its
+flat sub-panes (ignored layers, layer hints)/**CIF Input Recipes**'s
+own header fields/**CIF Layers**/**Extract Misc**/**Extract
+Coefficients**/**Extract Devices**/**Extract**'s own **Plane order**
+and **Sheet resistance** sub-panes/**DRC (Magic)**'s own **angles**
+and **width/spacing/maxwidth** sub-panes are editable -- every real
+construct this module recognizes in `extract`/`drc` is now editable,
+no read-only sub-tab remains in either domain; **CIF Input Recipes**
+alone is still split, its own real op content staying read-only (see
+``CifInputRecipeBlock``'s own docstring, in ``pdklib/magic_tech.py``,
+for why only the header fields are safe to edit). Types keeps its
 own hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
@@ -142,22 +142,28 @@ rather than attempting to reproduce the original author's own real
 line-wrapping choice. Every real ``extract``-section construct this
 parser recognizes is now editable -- this domain has no remaining
 read-only sub-tab of its own. **DRC (Magic)**'s own **angles** sub-pane
-(``MagicAngleCheck``) is the same real ranged shape as Extract Devices
-(one of the real 17 entries, ``allm7``, also wraps across two real
-physical lines) -- it shares ``pdklib/magic_tech_writer.py``'s own
-``_render_section_patch``'s *range_groups* mechanism, generalized once
-and reused here rather than rebuilt. Its own real sibling constructs,
-``width``/``spacing``/``maxwidth`` (``MagicDrcCheck``, still shown
-read-only in the same tab's own left-hand ``Treeview``), stay
-deliberately out of scope: unlike ``angles``, those three routinely
-carry a real ``mode``/exception-list filler this parser doesn't model
-at all yet, and editing them before that content is captured would
-silently discard it -- see ``MagicAngleCheck``'s own docstring
-(``pdklib/magic_tech.py``) for the full real reasoning. Every other
-remaining domain across the rest of Magic Tech stays read-only (each
-would need its own real editor design -- the genuinely harder mini-DSL
-sections aren't a clean fit for any existing editor shape; see
-README's own Future Work). Editing is in-memory, same as
+(``MagicAngleCheck``) and **width/spacing/maxwidth** sub-pane
+(``MagicDrcCheck``) are the same real ranged shape as Extract Devices
+(``allm7`` and 70 of the real 192 ``MagicDrcCheck`` entries also wrap
+across real physical lines) -- both share
+``pdklib/magic_tech_writer.py``'s own ``_render_section_patch``'s
+*range_groups* mechanism, generalized once and reused here rather than
+rebuilt each time. ``MagicDrcCheck`` needed a real prerequisite first
+(a new ``filler_raw`` field capturing the real ``mode``/exception-list
+text those lines routinely carry, previously discarded entirely) --
+see ``MagicAngleCheck``'s own docstring (``pdklib/magic_tech.py``) for
+the full real reasoning. Every real construct both `extract` and
+`drc` parse is now editable -- neither section has any remaining
+read-only content of its own. **CIF Input Recipes**
+(``CifInputRecipeBlock``) is editable in a more limited, deliberate
+way: only its own real header fields (``name``/``kind_text``/
+``base_layer``), not its own real op content, which stays read-only in
+a separate ``Treeview`` for reference -- see that dataclass's own
+docstring for why. Every other remaining domain across the rest of
+Magic Tech stays read-only (each would need its own real editor design
+-- the genuinely harder mini-DSL sections aren't a clean fit for any
+existing editor shape; see README's own Future Work). Editing is
+in-memory, same as
 DRC Rules/LEF pins, with native write-back into the real ``.tech``
 file via ``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
@@ -251,9 +257,7 @@ class MagicTechView(ttk.Frame):
             allow_new_delete=False,
         )
         self._build_cifinput_tab(sub)
-        self.cifinput_recipes_tree = self._make_tab(
-            sub, "CIF Input Recipes", ("name", "kind", "base_layers", "ops"), (140, 90, 160, 460),
-        )
+        self._build_cifinput_recipes_tab(sub)
         self.compose_editor = self._build_simple_editor(
             sub, "Compose",
             [("verb", "Verb", 100), ("arg1", "Arg 1", 140), ("arg2", "Arg 2", 140), ("arg3", "Arg 3", 140)],
@@ -387,12 +391,11 @@ class MagicTechView(ttk.Frame):
         sub-structures, side by side -- unlike every other
         ``SimpleListEditor`` use in this file, these two share one
         real ``cifinput``...``end`` section (with each other, and with
-        every real, still-read-only ``layer``/``templayer`` recipe
-        block) rather than each owning an exclusive section; see
+        every real ``layer``/``templayer`` recipe block's own header,
+        also editable -- see ``_build_cifinput_recipes_tab`` below)
+        rather than each owning an exclusive section; see
         ``pdklib/magic_tech_writer.py``'s own docstring for how
-        write-back handles that. Real recipe content (``CifInputRecipe``)
-        stays read-only, in its own separate ``CIF Input Recipes`` tab,
-        unchanged."""
+        write-back handles that."""
 
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="CIF Input")
@@ -421,6 +424,57 @@ class MagicTechView(ttk.Frame):
                        "Datatype '*' means any.",
         )
         self.cifinput_hints_editor.pack(fill="both", expand=True)
+
+    def _build_cifinput_recipes_tab(self, notebook: ttk.Notebook):
+        """cifinput's own ``layer``/``templayer`` recipe blocks -- one
+        real entry per real block *occurrence* (``CifInputRecipeBlock``,
+        not merged by name -- see that dataclass's own docstring in
+        ``pdklib/magic_tech.py``). **Editable header fields only**
+        (``name``/``kind_text``/``base_layer``) in the left-hand
+        ``SimpleListEditor``, ``allow_new_delete=False`` since a
+        brand-new block with no real op content would be functionally
+        inert, the same real reasoning ``CifOutputLayerMapping``'s own
+        edit-in-place-only mode already established. Real op content
+        stays read-only, shown for reference (not editing) in the
+        right-hand ``Treeview`` -- ``SimpleListEditor`` has no concept
+        of a read-only column, so real op content that can't safely be
+        edited here stays in a genuinely separate, non-form widget
+        rather than a form field that looks editable but silently
+        isn't."""
+
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="CIF Input Recipes")
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(0, weight=1)
+
+        editor_frame = ttk.Frame(frame)
+        editor_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        self.cifinput_recipes_editor = SimpleListEditor(
+            editor_frame, [("name", "Name", 140), ("kind_text", "Kind", 90), ("base_layer", "Base Layer", 160)],
+            None,
+            entry_label="Recipe Block",
+            help_text="Real cifinput 'layer|templayer NAME BASE' recipe block header -- one real entry per "
+                      "real block occurrence (a real name can appear more than once). Real op content "
+                      "(right) stays read-only -- this project doesn't model or author real geometry-boolean "
+                      "op semantics well enough to safely let one be added here.",
+            allow_new_delete=False,
+        )
+        self.cifinput_recipes_editor.pack(fill="both", expand=True)
+
+        self.cifinput_recipes_tree = self._make_tab_tree(
+            frame, ("name", "kind", "base_layer", "ops"), (140, 90, 160, 400), column=1,
+        )
+
+    def _make_tab_tree(
+        self, frame: ttk.Frame, columns: tuple[str, ...], widths: tuple[int, ...], column: int,
+    ) -> ttk.Treeview:
+        tree = ttk.Treeview(frame, columns=columns, show="headings")
+        for col, width in zip(columns, widths):
+            tree.heading(col, text=col.replace("_", " ").title())
+            tree.column(col, width=width, anchor="w")
+        tree.grid(row=0, column=column, sticky="nsew")
+        return tree
 
     def _make_tab(self, notebook: ttk.Notebook, title: str, columns: tuple[str, ...], widths: tuple[int, ...]) -> ttk.Treeview:
         frame = ttk.Frame(notebook)
@@ -555,6 +609,7 @@ class MagicTechView(ttk.Frame):
         self.connect_editor.commit_pending_edits()
         self.cifinput_ignore_editor.commit_pending_edits()
         self.cifinput_hints_editor.commit_pending_edits()
+        self.cifinput_recipes_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
@@ -590,6 +645,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_cifinput_layer_hints_by_tech(self) -> dict[str, list[magic_tech_mod.CifInputLayerHint]]:
         return {name: tech.cifinput_layer_hints for name, tech in self.technologies.items()}
+
+    def collect_cifinput_recipes_by_tech(self) -> dict[str, list[magic_tech_mod.CifInputRecipeBlock]]:
+        return {name: tech.cifinput_recipes for name, tech in self.technologies.items()}
 
     def collect_cif_layers_by_tech(self) -> dict[str, list[magic_tech_mod.CifOutputLayerMapping]]:
         return {name: tech.cif_layers for name, tech in self.technologies.items()}
@@ -653,6 +711,7 @@ class MagicTechView(ttk.Frame):
         self.connect_editor.commit_pending_edits()
         self.cifinput_ignore_editor.commit_pending_edits()
         self.cifinput_hints_editor.commit_pending_edits()
+        self.cifinput_recipes_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
@@ -678,6 +737,7 @@ class MagicTechView(ttk.Frame):
             self.connect_editor.set_entries(None)
             self.cifinput_ignore_editor.set_entries(None)
             self.cifinput_hints_editor.set_entries(None)
+            self.cifinput_recipes_editor.set_entries(None)
             self.cif_layers_editor.set_entries(None)
             self.extract_misc_editor.set_entries(None)
             self.extract_plane_order_editor.set_entries(None)
@@ -699,6 +759,7 @@ class MagicTechView(ttk.Frame):
         self.connect_editor.set_entries(tech.connect)
         self.cifinput_ignore_editor.set_entries(tech.cifinput_ignored_layers)
         self.cifinput_hints_editor.set_entries(tech.cifinput_layer_hints)
+        self.cifinput_recipes_editor.set_entries(tech.cifinput_recipes)
         self.cif_layers_editor.set_entries(tech.cif_layers)
         self.extract_misc_editor.set_entries(tech.extract_misc)
         self.extract_plane_order_editor.set_entries(tech.extract_plane_order)
@@ -712,8 +773,8 @@ class MagicTechView(ttk.Frame):
             self.cifinput_recipes_tree.insert(
                 "", "end",
                 values=(
-                    recipe.name, "templayer" if recipe.is_templayer else "layer",
-                    ",".join(recipe.base_layers), ops_text,
+                    recipe.name, recipe.kind_text,
+                    recipe.base_layer, ops_text,
                 ),
             )
         summary = (

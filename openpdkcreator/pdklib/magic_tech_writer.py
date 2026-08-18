@@ -5,22 +5,25 @@ re-reads the real *original* ``.tech`` file fresh from disk (always
 pristine, since export never writes to ``data/``) and patches only the
 real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
-**Connect**, **cifinput**'s own two flat sub-structures (ignored
-layers, layer hints), **cifoutput**'s own flat, editable-in-place
+**Connect**, **cifinput**'s own three sub-structures (ignored layers,
+layer hints, and recipe blocks' own header fields --
+``CifInputRecipeBlock``, the one real *ranged* one, its own real op
+content still read-only), **cifoutput**'s own flat, editable-in-place
 ``calma`` lines, **extract**'s own five sub-structures --
 ``ExtractMiscStatement`` (``contact``/``devresist``/``antenna``/
 ``disconnect``/``substrate``), ``ExtractPlaneOrder`` (``planeorder``),
 ``ExtractResist`` (``resist``), ``ExtractCapCoefficient`` (the four
 ``default*`` directives, all four flat/single-line), and
-``ExtractDevice`` (``device``, the one real *ranged* one) -- and
-**drc**'s own ``MagicAngleCheck`` (``angles``, also ranged), the Magic
-Tech domains with a real form (see ``gui/magic_tech_view.py``'s own
-docstring). Every other real section (cifinput's own recipe blocks/
-``drc``'s own ``width``/``spacing``/``maxwidth`` statements/everything
-else ``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
-there's no editor for them, so nothing to write back; deliberately
-bounded, not attempted for every remaining real sub-tab at once (see
-README's own Future Work note on the remaining gap).
+``ExtractDevice`` (``device``, ranged) -- and **drc**'s own
+``MagicAngleCheck`` (``angles``, ranged) and ``MagicDrcCheck``
+(``width``/``spacing``/``maxwidth``, ranged), the Magic Tech domains
+with a real form (see ``gui/magic_tech_view.py``'s own docstring).
+Every other real section (cifinput's own recipe blocks' own real op
+content/everything else ``magic_tech.py`` doesn't parse) is copied
+verbatim, untouched -- there's no editor for them, so nothing to write
+back; deliberately bounded, not attempted for every remaining real
+sub-tab at once (see README's own Future Work note on the remaining
+gap).
 
 Each real entry in every flat editable domain occupies exactly one
 real line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT``
@@ -77,18 +80,26 @@ which this project doesn't author) -- so ``render_fn(entry, None)``
 actually exercised in practice.
 
 **cifinput's own ignored-layers and layer-hints tables share one real
-``cifinput``...``end`` section with each other** (and with every real
-``layer``/``templayer`` recipe block, still read-only) -- unlike every
-other editable domain above, which each own their own exclusive
-section. Patching them independently, one full section-rewrite per
-sub-structure, would silently discard whichever one ran second (it
-would restart from the real *original* lines and not see the first
-one's own edits). So ``_render_section_patch`` takes a real list of
-*groups* -- ``(entries, all_line_nos, render_fn)`` tuples -- and merges
-every group's own real line numbers into one combined pass over the
-shared section, each dispatched to its own real render function;
+``cifinput``...``end`` section with each other, and now with recipe
+blocks' own header fields too** -- unlike every other editable domain
+above, which each own their own exclusive section. Patching them
+independently, one full section-rewrite per sub-structure, would
+silently discard whichever one ran second (it would restart from the
+real *original* lines and not see the first one's own edits). So
+``_render_section_patch`` takes a real list of *groups* --
+``(entries, all_line_nos, render_fn)`` tuples for a flat, single-line
+sub-structure, plus a separate real list of *range_groups* --
+``(entries, all_ranges, render_fn)`` tuples for a ranged one like
+``CifInputRecipeBlock`` -- and merges every group's own real lines
+(and every range group's own real spans) into one combined pass over
+the shared section, each dispatched to its own real render function;
 every other, single-group domain above just wraps its one real tuple
-in a one-element list, unchanged in every other respect.
+in a one-element list, unchanged in every other respect. A recipe
+block's own real op content stays completely untouched either way --
+``_parse_cifinput_recipes_with_lines`` never claims those lines as
+part of any group's own tracked line numbers, so they fall through as
+an ordinary, verbatim gap the same as any other real, unrecognized
+content sharing this section.
 
 **cifinput and cifoutput are also, structurally, a genuinely different
 case from every other domain here**: neither one's real content lives
@@ -325,6 +336,36 @@ def _render_cifinput_hint_line(entry: magic_tech_mod.CifInputLayerHint, original
     trailing = match.group(8) if match else ""
     datatype_text = "*" if entry.gds_datatype is None else str(entry.gds_datatype)
     return f"{indent}calma{sep0}{entry.name}{sep1}{entry.gds_layer}{sep2}{datatype_text}{trailing}"
+
+
+_CIFINPUT_RECIPE_HEADER_RE = re.compile(r"^(\s*)(layer|templayer)(\s+)(\S+)(\s+)(\S+)\s*$")
+
+
+def _render_cifinput_recipe_range(entry: magic_tech_mod.CifInputRecipeBlock, original_lines: list[str] | None) -> list[str]:
+    """cifinput's own recipe blocks -- a real *ranged* domain, but one
+    where the range's own trailing content (every real op line) is
+    never edited here (see ``CifInputRecipeBlock``'s own docstring for
+    why), only the real header line (``name``/``kind_text``/
+    ``base_layer``) is. This makes the real "preserve verbatim if
+    unchanged" comparison simpler than every other ranged domain's own:
+    it only ever needs to check the header line itself, never the
+    trailing op lines -- if the header is genuinely unchanged, the
+    *entire* real range (header plus every real op line, verbatim,
+    including whatever real trailing blank/comment padding sits before
+    the next real boundary) is returned untouched; if the header
+    changed, only that first real line is regenerated, and every real
+    op line after it is still carried through completely verbatim
+    (they're never touched either way, so there's nothing to lose)."""
+
+    if original_lines is not None:
+        header_match = _CIFINPUT_RECIPE_HEADER_RE.match(original_lines[0])
+        if header_match is not None:
+            indent, kind, sep1, name, sep2, base = header_match.groups()
+            if (kind == entry.kind_text) and (name == entry.name) and (base == entry.base_layer):
+                return list(original_lines)
+            new_header = f"{indent}{entry.kind_text}{sep1}{entry.name}{sep2}{entry.base_layer}"
+            return [new_header, *original_lines[1:]]
+    return [f" {entry.kind_text} {entry.name} {entry.base_layer}"]
 
 
 def _render_cifoutput_calma_line(entry: magic_tech_mod.CifOutputLayerMapping, original_line: str | None) -> str:
@@ -673,7 +714,7 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
                 (tech.cifinput_ignored_layers, tech.all_parsed_cifinput_ignore_line_nos, _render_cifinput_ignore_line),
                 (tech.cifinput_layer_hints, tech.all_parsed_cifinput_hint_line_nos, _render_cifinput_hint_line),
             ],
-            [],
+            [(tech.cifinput_recipes, tech.all_parsed_cifinput_recipe_ranges, _render_cifinput_recipe_range)],
         ),
         (
             tech.cifoutput_section_start_line, tech.cifoutput_section_end_line,
