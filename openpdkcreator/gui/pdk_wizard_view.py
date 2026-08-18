@@ -38,10 +38,20 @@ Ruby, not just metadata -- only for the six ``check_type``s with a
 real, single-method shape this project knows how to emit
 (``min_width``/``min_spacing``/``min_enclosure``/``min_area``/
 ``min_overlap``/``max_length`` -- see ``pdklib/drc_writer.py``'s own
-docstring); every other check type still can't be written back. Every
-remaining domain (Verilog, Liberty,
-CDL/SPICE, ngspice Models, and User Models' own ``.va``/``.v`` files)
-requires a real file to already exist on disk -- hand-place one
+docstring); every other check type still can't be written back. Liberty
+and CDL/SPICE also gained real create-from-scratch support
+(``pdklib/liberty.py``'s ``create_new_liberty_file``, ``pdklib/
+netlist.py``'s ``create_new_cdl_file``/``create_new_spice_file``) --
+unlike every domain listed above, though, neither has a dedicated
+top-level tab of its own; **Create** for these three (Verilog/Liberty/
+CDL-SPICE) lives in the **Library Manager** tab instead (select a
+library/cell, then **Create** next to the missing view), pre-populated
+with that cell's own already-known real pins when another view
+(LEF/xschem symbol/an existing Verilog module) already has them --
+this stage's own gap note below still points here specifically, not
+just "no in-GUI way." Every remaining domain (ngspice Models, and User
+Models' own ``.va``/``.v`` files) requires a real file to already
+exist on disk -- hand-place one
 (copied from a template/reference PDK, or written in an external
 editor) under the matching real path, and this tool can load and edit
 it from there. This is not glossed over: a from-scratch memristor PDK
@@ -174,8 +184,9 @@ def _status_liberty(app):
         return (
             False,
             "No real Liberty (.lib) file found under libs.ref/.",
-            "No in-GUI way to author one from scratch -- hand-write a "
-            ".lib file (or adapt a template) under libs.ref/<family>/lib/.",
+            "No New... action in this stage's own By Cell tab -- Create a "
+            "Liberty view for a cell in the Library Manager tab instead "
+            "(select a library/cell, then Create next to Liberty).",
         )
     return True, f"{n} real .lib file(s) found across libs.ref/*/lib/.", None
 
@@ -186,8 +197,9 @@ def _status_cdl_spice(app):
         return (
             False,
             "No real CDL/SPICE netlist found under libs.ref/.",
-            "No in-GUI way to author one from scratch -- hand-write a "
-            ".cdl/.spice file under libs.ref/<family>/{cdl,spice}/.",
+            "No New... action in this stage's own By Cell tab -- Create a "
+            "CDL or SPICE view for a cell in the Library Manager tab "
+            "instead (select a library/cell, then Create next to CDL/SPICE).",
         )
     return True, f"{n} real .cdl/.spice file(s) found across libs.ref/*/.", None
 

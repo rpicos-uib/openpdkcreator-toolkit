@@ -45,29 +45,35 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   view) -- no real external-tool identity for these, matching
   ``cell_hub_view.py``'s own existing precedent.
 
-**Create** only appears for the seven view kinds with real
+**Create** only appears for the ten view kinds with real
 create-from-scratch support (``pdklib/library_index.py``'s own
 ``CREATABLE_VIEW_KINDS`` -- xschem Symbol/Schematic, Qucs-S
-Symbol/Component, Verilog, Verilog-A, Magic Layout); every other kind
-still gets a real **Add...** button. A created Magic Layout is
-deliberately *not* meant to be edited in this Python GUI -- it writes
-a real, minimal, empty ``.mag`` skeleton (``pdklib/mag.py``'s own
-``create_new_mag_file``, grounded in Magic's own official file-format
-manual and verified live against the real installed Magic binary),
-then **Open in Magic** is where the real drawing happens; Magic's own
-real ``gds write`` is the real path from there to an actual, real GDS. A created xschem/Qucs-S view's real file
-defaults to ``<project_root>/libraries/<library>/<cell>.<ext>`` (a
-real, tracked, but entirely optional convention -- nothing elsewhere
-requires it). A created **Verilog**/**Verilog-A** view instead defaults
-into the already-established ``user_models/{verilog,veriloga}/``
-convention (``pdklib/user_models.py``) -- real, project-authored model
-content, giving it free integration with By Cell's own "User Models"
-column and OSDI-snippet generation. Either way, if the cell being
-created for already has another real/registered view with known real
-pins (LEF, then an xschem symbol, then an existing Verilog/Verilog-A
-module of the same name -- ``pdklib/library_index.py``'s own
-``infer_ports_for_cell``), the new module/port declaration is
-pre-populated with those real pins instead of an empty template.
+Symbol/Component, Verilog, Verilog-A, Magic Layout, CDL, SPICE,
+Liberty); every other kind still gets a real **Add...** button. A
+created Magic Layout is deliberately *not* meant to be edited in this
+Python GUI -- it writes a real, minimal, empty ``.mag`` skeleton
+(``pdklib/mag.py``'s own ``create_new_mag_file``, grounded in Magic's
+own official file-format manual and verified live against the real
+installed Magic binary), then **Open in Magic** is where the real
+drawing happens; Magic's own real ``gds write`` is the real path from
+there to an actual, real GDS. A created xschem/Qucs-S/CDL/SPICE/
+Liberty view's real file defaults to
+``<project_root>/libraries/<library>/<cell>.<ext>`` (a real, tracked,
+but entirely optional convention -- nothing elsewhere requires it). A
+created **Verilog**/**Verilog-A** view instead defaults into the
+already-established ``user_models/{verilog,veriloga}/`` convention
+(``pdklib/user_models.py``) -- real, project-authored model content,
+giving it free integration with By Cell's own "User Models" column and
+OSDI-snippet generation. Either way, if the cell being created for
+already has another real/registered view with known real pins (LEF,
+then an xschem symbol, then an existing Verilog/Verilog-A module of
+the same name -- ``pdklib/library_index.py``'s own
+``infer_ports_for_cell``), the new file's own port/pin declarations
+are pre-populated with those real pins instead of an empty template
+(a real ``*.PININFO`` comment too, for a newly created **CDL** view --
+see ``pdklib/netlist.py``'s own ``create_new_cdl_file``; **SPICE**
+deliberately gets none, matching the real, confirmed convention that
+no real, downloaded SPICE file carries one either).
 
 **Add...** registers a real, *existing* file for any view kind at all
 -- including the six with no real create-from-scratch support -- and
@@ -120,10 +126,12 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .. import eda_tools
 from .. import export as export_mod
+from ..pdklib import liberty as liberty_mod
 from ..pdklib import libman_project as libman_mod
 from ..pdklib import library_index as li_mod
 from ..pdklib import mag as mag_mod
 from ..pdklib import magic_tech as magic_tech_mod
+from ..pdklib import netlist as netlist_mod
 from ..pdklib import qucs_sym as qucs_sym_mod
 from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
@@ -159,7 +167,7 @@ _EXT_FOR_VIEW_KIND: dict[str, str] = {
     "gds": ".gds",
 }
 """Every real view kind's own extension -- used by **Create** (the
-seven ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
+ten ``li_mod.CREATABLE_VIEW_KINDS`` only) and by **Add...**'s own
 file-dialog filter (all twelve, so browsing for an existing LEF/GDS/...
 file to register starts pre-filtered too)."""
 
@@ -204,9 +212,9 @@ def _create_view_file(
     *view_kind* -- only ever called for a key in
     ``li_mod.CREATABLE_VIEW_KINDS``. *ports* (real ``(name,
     direction)`` pairs, from ``li_mod.infer_ports_for_cell``) only
-    matters for Verilog/Verilog-A -- every other real create-from-
-    scratch view here has no real per-cell pin data to seed from.
-    *tech_name* only matters for ``mag`` -- the real Magic technology
+    matters for Verilog/Verilog-A/CDL/SPICE/Liberty -- every other real
+    create-from-scratch view here has no real per-cell pin data to
+    seed from. *tech_name* only matters for ``mag`` -- the real Magic technology
     name written into its own ``tech <name>`` header line."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,6 +232,12 @@ def _create_view_file(
         verilog_mod.create_new_veriloga_file(path, cell_name, ports)
     elif view_kind == "mag":
         mag_mod.create_new_mag_file(path, tech_name)
+    elif view_kind == "cdl":
+        netlist_mod.create_new_cdl_file(path, cell_name, ports)
+    elif view_kind == "spice":
+        netlist_mod.create_new_spice_file(path, cell_name, ports)
+    elif view_kind == "liberty":
+        liberty_mod.create_new_liberty_file(path, cell_name, ports)
     else:
         raise ValueError(f"{view_kind!r} has no real create-from-scratch support")
 
@@ -594,7 +608,7 @@ class LibraryManagerView(ttk.Frame):
             messagebox.showerror("Create", f"{default_path} already exists.", parent=self)
             return
         ports: list[tuple[str, str]] | None = None
-        if view_kind in ("verilog", "veriloga"):
+        if view_kind in ("verilog", "veriloga", "cdl", "spice", "liberty"):
             ports = li_mod.infer_ports_for_cell(
                 self.app.pdk_root, self.project_root, self.current_library, self.current_cell,
             )

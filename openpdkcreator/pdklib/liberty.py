@@ -188,3 +188,42 @@ def find_cells(path: Path) -> list[LibertyCell]:
                     arc.when = value
 
     return cells
+
+
+def create_new_liberty_file(path: Path, cell_name: str, ports: list[tuple[str, str]] | None = None) -> None:
+    """Writes a real, minimal, valid Liberty (.lib) skeleton -- a real
+    top-level ``library (NAME) { cell (NAME) { pin (NAME) { direction
+    : DIR; } ... } }``, one real ``pin`` block per known port
+    (unquoted ``direction``, matching `sg13g2_sram`'s own real,
+    confirmed convention above -- this module's own parser accepts
+    both quoted and unquoted values either way). A port with an
+    unknown direction still gets its own real ``pin`` block, just
+    without a ``direction`` attribute -- the same "don't guess"
+    precedent ``pdklib/verilog.py``'s own ``create_new_verilog_file``
+    already established. *ports* uses the same lowercase
+    ``input``/``output``/``inout`` vocabulary ``pdklib/library_
+    index.py``'s own ``infer_ports_for_cell`` returns -- Liberty's own
+    real attribute values already use it natively, no translation
+    needed (unlike CDL's uppercase ``*.PININFO`` letters -- see
+    ``pdklib/netlist.py``'s own ``create_new_cdl_file``). Real
+    lookup-table timing data (``cell_rise``/``cell_fall``/...) is out
+    of scope everywhere in this project (see this module's own top
+    docstring) -- a freshly created cell here is real, valid, loadable
+    Liberty with no timing arcs yet, the same "structurally real,
+    functionally partial" starting point every other create-from-
+    scratch skeleton in this project already is. Refuses to overwrite
+    an existing real file."""
+
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"library ({path.stem}) {{", f"  cell ({cell_name}) {{"]
+    for name, direction in ports or []:
+        lines.append(f"    pin ({name}) {{")
+        if direction in ("input", "output", "inout"):
+            lines.append(f"      direction : {direction};")
+        lines.append("    }")
+    lines.append("  }")
+    lines.append("}")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")

@@ -82,7 +82,7 @@ VIEW_KIND_LABELS: dict[str, str] = {
 }
 VIEW_KIND_ORDER: tuple[str, ...] = tuple(VIEW_KIND_LABELS.keys())
 """Real create-from-scratch support exists (this session, verified)
-only for these seven -- ``pdklib/cells.py``'s own docstring/every other
+only for these ten -- ``pdklib/cells.py``'s own docstring/every other
 writer's own real ``start_line == 0`` skip explains why the rest
 don't yet. Verilog/Verilog-A were added later than the original four
 xschem/Qucs-S ones -- see ``create_new_verilog_file``/
@@ -95,17 +95,26 @@ view here, a newly-created one is *not* meant to be edited in this
 Python GUI at all, only opened in real Magic to actually draw real
 geometry (the same "Create an empty skeleton, do the real work in the
 real external tool" pattern xschem/Qucs-S Symbol/Schematic already
-established). ``libman_core`` (added still later, ``pdklib/
-libman_project.py``'s own real **Import from LibMan Project...**) is
-different again: a real view whose real file this project can neither
-create *nor open* -- it's LibMan's own real, proprietary Cap'n Proto
-"CORE" binary format (``*.layout.core``/``*.schematic.core``/...),
-which needs LibMan's own real converter toolchain to read at all.
-Tracked by real location only, the same "Add..." precedent every
-other un-openable view kind already has, never silently dropped just
-because this project can't view it."""
+established). ``cdl``/``spice``/``liberty`` (added later still --
+``create_new_cdl_file``/``create_new_spice_file`` in ``pdklib/
+netlist.py``, ``create_new_liberty_file`` in ``pdklib/liberty.py``)
+close the last real "no create path" gaps the PDK Wizard's own legend
+used to flag -- same real pin-inference precedent as Verilog/
+Verilog-A, no dedicated top-level tab of their own either (still only
+surfaced per-cell, through By Cell and here). ``libman_core`` (added
+still later, ``pdklib/libman_project.py``'s own real **Import from
+LibMan Project...**) is different again: a real view whose real file
+this project can neither create *nor open* -- it's LibMan's own real,
+proprietary Cap'n Proto "CORE" binary format (``*.layout.core``/
+``*.schematic.core``/...), which needs LibMan's own real converter
+toolchain to read at all. Tracked by real location only, the same
+"Add..." precedent every other un-openable view kind already has,
+never silently dropped just because this project can't view it."""
 CREATABLE_VIEW_KINDS: frozenset[str] = frozenset(
-    {"xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga", "mag"}
+    {
+        "xschem_symbol", "xschem_schematic", "qucs_symbol", "qucs_component", "verilog", "veriloga", "mag",
+        "cdl", "spice", "liberty",
+    }
 )
 
 
@@ -318,10 +327,13 @@ def _normalize_direction(raw: str) -> str:
 def infer_ports_for_cell(pdk_root: Path, project_root: Path, library: str, cell: str) -> list[tuple[str, str]]:
     """Best-effort real port list (``[(name, direction), ...]``,
     direction one of ``"input"``/``"output"``/``"inout"``/``""``) for
-    *cell*, used to pre-populate a newly **Create**d Verilog/Verilog-A
-    view with that cell's own already-known real pins instead of an
-    empty template -- see ``pdklib/verilog.py``'s own
-    ``create_new_verilog_file``/``create_new_veriloga_file``.
+    *cell*, used to pre-populate a newly **Create**d Verilog/Verilog-A/
+    CDL/SPICE/Liberty view with that cell's own already-known real
+    pins instead of an empty template -- see ``pdklib/verilog.py``'s
+    own ``create_new_verilog_file``/``create_new_veriloga_file``,
+    ``pdklib/netlist.py``'s own ``create_new_cdl_file``/
+    ``create_new_spice_file``, and ``pdklib/liberty.py``'s own
+    ``create_new_liberty_file``.
 
     Tries each of this cell's own already-known real/registered views,
     in priority order, stopping at the first one with a real, non-empty

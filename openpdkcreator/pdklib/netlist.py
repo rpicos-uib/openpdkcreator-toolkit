@@ -55,6 +55,12 @@ _SUBCKT_START_RE = re.compile(r"^\.subckt\s+(\S+)", re.IGNORECASE)
 _ENDS_RE = re.compile(r"^\.ends\b", re.IGNORECASE)
 _PININFO_RE = re.compile(r"^\*\.PININFO\s+(.+)$", re.IGNORECASE)
 _PININFO_LETTER_TO_DIRECTION = {"I": "INPUT", "O": "OUTPUT", "B": "INOUT"}
+_DIRECTION_TO_PININFO_LETTER = {"input": "I", "output": "O", "inout": "B"}
+"""The exact inverse of ``_PININFO_LETTER_TO_DIRECTION`` above, applied
+to a lowercase ``(name, direction)`` pair the way ``pdklib/library_
+index.py``'s own ``infer_ports_for_cell`` returns them (matching
+``pdklib/verilog.py``'s own ``create_new_verilog_file`` vocabulary) --
+used only by ``create_new_cdl_file``'s own ``*.PININFO`` line."""
 
 
 @dataclass
@@ -135,3 +141,56 @@ def find_cells(path: Path) -> list[NetlistCell]:
         i += 1
 
     return cells
+
+
+def _write_netlist_skeleton(
+    path: Path, cell_name: str, ports: list[tuple[str, str]] | None, *, uppercase: bool, pininfo: bool,
+) -> None:
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ports = ports or []
+    subckt_kw, ends_kw = (".SUBCKT", ".ENDS") if uppercase else (".subckt", ".ends")
+    header = " ".join([subckt_kw, cell_name, *(name for name, _direction in ports)])
+    lines = [header]
+    if pininfo:
+        tokens = [
+            f"{name}:{_DIRECTION_TO_PININFO_LETTER[direction]}"
+            for name, direction in ports if direction in _DIRECTION_TO_PININFO_LETTER
+        ]
+        if tokens:
+            lines.append("*.PININFO " + " ".join(tokens))
+    lines.append(ends_kw)
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def create_new_cdl_file(path: Path, cell_name: str, ports: list[tuple[str, str]] | None = None) -> None:
+    """Writes a real, minimal, valid CDL skeleton -- uppercase
+    ``.SUBCKT NAME port...`` / ``.ENDS``, matching this module's own
+    real, confirmed IHP convention (see this module's own top
+    docstring). A real ``*.PININFO`` comment is also written when at
+    least one port's direction is known (``input``/``output``/
+    ``inout``, the same vocabulary ``pdklib/library_index.py``'s own
+    ``infer_ports_for_cell`` returns) -- matching the real, 100%
+    coverage this exact comment already has across every real,
+    downloaded `sg13g2_stdcell`/`sg13g2_io` CDL file, not just an
+    afterthought. A port with an unknown direction is still listed in
+    the header, just left out of ``*.PININFO``, the same "don't guess"
+    precedent ``create_new_verilog_file`` already established. Refuses
+    to overwrite an existing real file."""
+
+    _write_netlist_skeleton(path, cell_name, ports, uppercase=True, pininfo=True)
+
+
+def create_new_spice_file(path: Path, cell_name: str, ports: list[tuple[str, str]] | None = None) -> None:
+    """Writes a real, minimal, valid SPICE skeleton -- lowercase
+    ``.subckt NAME port...`` / ``.ends``, matching this module's own
+    real, confirmed IHP convention. No ``*.PININFO`` comment -- this
+    module's own top docstring already confirms no real, downloaded
+    SPICE file carries one; a freshly created file matches that real
+    convention rather than inventing a CDL-only construct nothing here
+    would ever expect back out of a real SPICE file. Refuses to
+    overwrite an existing real file."""
+
+    _write_netlist_skeleton(path, cell_name, ports, uppercase=False, pininfo=False)

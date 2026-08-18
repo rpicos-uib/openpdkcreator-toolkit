@@ -2397,6 +2397,59 @@ editor yet -- see Future Work.
   for its own duration, since `--env save` otherwise writes into the
   real, shared `saves/`/`shell_env/` trees. Full suite re-run clean
   (60/60).
+- **Create-from-scratch flows for Liberty/CDL-SPICE**, closing the
+  last two "no create path" gaps the PDK Wizard's own legend used to
+  flag. Three new, real `create_new_*` functions, matching each
+  format's own real, confirmed on-disk convention (see each module's
+  own top docstring, grounded in the real, downloaded IHP deck, not
+  assumed): `pdklib/netlist.py`'s `create_new_cdl_file` (uppercase
+  `.SUBCKT`/`.ENDS`, plus a real `*.PININFO` comment when at least one
+  port's direction is known -- the same real, 100%-coverage convention
+  every real `sg13g2_stdcell`/`sg13g2_io` CDL file already has) and
+  `create_new_spice_file` (lowercase `.subckt`/`.ends`, deliberately no
+  `*.PININFO` -- no real, downloaded SPICE file carries one either),
+  and `pdklib/liberty.py`'s `create_new_liberty_file` (a real
+  `library (NAME) { cell (NAME) { pin (NAME) { direction : DIR; } } }`
+  skeleton -- real lookup-table timing data stays out of scope, the
+  same bounded precedent as everywhere else in this project). No
+  dedicated top-level tab was added for either domain -- unlike every
+  other create-from-scratch domain, both stay only per-cell (By Cell
+  for viewing, **Library Manager** for creating), the same real path
+  Verilog/Verilog-A already established: `pdklib/library_index.py`'s
+  `CREATABLE_VIEW_KINDS` grew from seven entries to ten, and
+  `gui/library_manager_view.py`'s existing `_create_view_file`
+  dispatcher (already generic over *ports*, already wired to
+  `infer_ports_for_cell`) needed only three new `elif` branches, not a
+  new mechanism -- the "real new picker UI" the previous version of
+  this Future Work bullet called for turned out to already exist,
+  confirmed by reading `library_manager_view.py` before writing a
+  single line, not assumed missing. A newly created CDL/SPICE/Liberty
+  view therefore gets the exact same real pin pre-population as
+  Verilog/Verilog-A (LEF, then xschem symbol, then an existing
+  same-name module -- `infer_ports_for_cell`'s own existing priority
+  order, unchanged), and defaults to
+  `<project_root>/libraries/<library>/<cell>.<ext>` like every other
+  Library-Manager-created view kind except Verilog/Verilog-A's own
+  `user_models/` default. The **PDK Wizard** tab's own Liberty/CDL-SPICE
+  gap notes were updated to point at this real path (Library Manager's
+  own **Create**) instead of the now-inaccurate "no in-GUI way to
+  author one from scratch" -- still counted as a real gap from each
+  stage's own linked tab (`("Cells", "By Cell")`, which itself has no
+  create button), the same honest distinction `_status_lef` already
+  draws between "some real create support exists" and "fully closed."
+  Verified for real, driven: `tests/test_cdl_spice_liberty_editors.py`
+  (new) -- each `create_new_*` function's own direct output round-trips
+  correctly back through its own real parser (`find_cells` for both
+  CDL/SPICE and Liberty), including the empty-ports case and CDL's
+  real refusal to overwrite an existing file; a full, real GUI flow
+  registers a hand-authored xschem symbol for a project cell, then
+  drives **Create** for all three new view kinds through the real
+  `library_manager_view.LibraryManagerView`, confirming the real pins
+  (`IN`/`OUT`) are correctly pulled from that symbol into each new
+  file (including CDL's own real `*.PININFO` line and SPICE's
+  deliberate lack of one), and that all three land under
+  `libraries/<library>/`, not `user_models/`. Full suite re-run clean
+  (61/61).
 
 ## Future work
 
@@ -2882,22 +2935,13 @@ models, ...), not just read/display layers. Concretely, still open:
   work for a benefit that's mostly just avoiding ~150 lines of
   duplication. Worth re-checking again if the *data models themselves*
   (not just the code around them) start to diverge.
-- **Create-from-scratch flows for Liberty/CDL-SPICE**, surfaced
-  honestly (not glossed over) by the **PDK Wizard** tab's own
-  legend/gap notes: Layers, Magic Tech, LEF (a valid empty library only
-  -- see its own gap note), xschem Symbols/Schematics, Qucs-S
-  Symbols/Components, ngspice Models (see below), and (Library Manager
-  only, see above) Verilog/Verilog-A now all have a real
-  "New..."/**Create File**/**Create** action; these two still need a
-  real starting file already on disk (copied from a template/reference
-  PDK, or hand-written) before this tool can load and edit it -- and,
-  unlike every domain listed above, neither has a dedicated top-level
-  tab of its own yet at all (only surfaced per-cell, through **By
-  Cell**), so closing this gap needs real new picker UI first, not just
-  a `create_new_*` function plus the existing `file_picker_utils.py`
-  toggle. LEF is no longer among them for its own macro-level content
-  -- see **New Macro...** above; `ORIGIN`/`SITE` still aren't modeled
-  on a macro, real, separate future work.
+- **Create-from-scratch flows for Liberty/CDL-SPICE -- done** (see the
+  dedicated changelog entry below): the two domains this bullet used to
+  track are no longer a real gap, closed the same way Verilog/Verilog-A
+  were -- through the **Library Manager** tab's own **Create**, not a
+  new, dedicated top-level tab. LEF is not among them either for its
+  own macro-level content -- see **New Macro...** above; `ORIGIN`/
+  `SITE` still aren't modeled on a macro, real, separate future work.
 - **Real Ruby generation for DRC Rules' remaining three
   `check_type`s** (`max_current_density`/`max_dimension`/
   `density_window`) -- half of the original six are now done (see the
