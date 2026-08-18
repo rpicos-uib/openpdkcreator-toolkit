@@ -141,18 +141,36 @@ with __import__("tempfile").TemporaryDirectory() as tmp:
     assert "TE_CD" not in text
     print("PASS: real, generated KLayout DRC Ruby (all six generatable check_types) is correct and runnable-shaped.")
 
-    # --- Re-import: the generated file should parse back to the 2 real
-    # rules pdklib/drc.py's own extractor already recognizes -- the three
-    # newer shapes (min_area/min_overlap/max_length) are a real,
-    # honest, documented gap on the read side (see drc_writer.py's own
-    # docstring), not silently claimed to round-trip ---
+    # --- Re-import: the generated file should parse back to 4 of the 5
+    # generatable rules -- pdklib/drc.py's own extractor was later
+    # extended to also recognize with_area()/with_length()
+    # (min_area/max_length), once real, direct .output()-feeding call
+    # sites for both were confirmed to exist in the real deck (LBE.b1/
+    # Seal.k). min_overlap alone still doesn't round-trip: real,
+    # direct .overlap() call sites genuinely don't exist anywhere in
+    # this deck (see drc.py's own docstring) -- a real, honest,
+    # one-directional gap, not silently claimed closed ---
     reextracted, skipped = drc_mod.extract_design_rules(PDK_ROOT, custom_path.parent)
     reextracted_ids = {r.rule_id for r in reextracted}
     print("re-extracted rule ids:", reextracted_ids)
-    assert reextracted_ids == {"TE_W", "TE_VIA_ENC"}
-    assert not reextracted_ids & {"TE_AREA", "TE_OVERLAP", "TE_MAXLEN"}
-    print("PASS: exported custom_rules.drc re-imports the 2 real, extractor-recognized rules; the three newer "
-          "shapes honestly do not round-trip back yet (real, separate future work).")
+    assert reextracted_ids == {"TE_W", "TE_VIA_ENC", "TE_AREA", "TE_MAXLEN"}
+    assert "TE_OVERLAP" not in reextracted_ids
+    # check_type is recognized for both new methods; .value stays None
+    # here too, same as it already silently did for TE_W/TE_VIA_ENC --
+    # the extractor's value resolver only ever follows the real deck's
+    # own `var = drc_rules['KEY']` indirection convention, and never
+    # resolved a bare literal `<number>.um`/`.um2` (which is exactly
+    # what a freshly hand-generated custom rule embeds). This is a
+    # real, pre-existing limitation, not something this pass introduced
+    # or is trying to close.
+    re_area = next(r for r in reextracted if r.rule_id == "TE_AREA")
+    assert re_area.check_type == "min_area" and re_area.value is None and re_area.units == "um2"
+    re_maxlen = next(r for r in reextracted if r.rule_id == "TE_MAXLEN")
+    assert re_maxlen.check_type == "max_length" and re_maxlen.value is None and re_maxlen.units == "um"
+    print("PASS: exported custom_rules.drc re-imports 4 of the 5 generatable rules (min_area/max_length now "
+          "round-trip too); min_overlap honestly still doesn't (no real ground truth to extract against). "
+          "Re-extracted .value is None for literal-valued rules -- a pre-existing extractor limitation "
+          "(only drc_rules['KEY']-indirected values resolve), true for TE_W/TE_VIA_ENC too, not new here.")
 
     # --- Live, driven verification: the generated custom_rules.drc is
     # not just plausible-looking text -- it actually runs, cleanly,

@@ -199,9 +199,10 @@ def create_new_lef_file(path: Path) -> None:
     Pair with the LEF Macros sub-tab's own **New Macro...** action to
     add a real, brand-new macro to a file created this way --
     ``lef_writer.py``'s own ``render_lef_file`` renders it as a whole,
-    freshly-generated block on export (``ORIGIN``/``SITE`` still
-    aren't modeled -- real, separate future work -- but ``CLASS``/
-    ``SIZE``/``SYMMETRY``/pins all round-trip)."""
+    freshly-generated block on export (``CLASS``/``ORIGIN``/``SIZE``/
+    ``SYMMETRY``/``SITE``/pins all round-trip -- ``ORIGIN`` set
+    automatically, ``SITE`` prompted, see **New Macro...**'s own
+    docstring in ``gui/lef_view.py``)."""
 
     if path.exists():
         raise FileExistsError(f"{path} already exists")

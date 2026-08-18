@@ -9,12 +9,12 @@ at the full, real, downloaded deck instead of a subset.
 Regex-based, deliberately bounded -- KLayout DRC is a full Ruby DSL,
 genuinely unparseable generically -- to two real, recognizable
 patterns: a line assigning ``<layer_expr>.width()``/``.space()``/
-``.sep()`` to a result variable, or a line assigning
-``<inner_expr>.enclosed(<outer_expr>, value.um, ...)`` to a result
-variable (a real, two-layer enclosure check -- confirmed real and
-common: 22 real occurrences across 13 real files, always in this exact
-``inner.enclosed(outer, value_var.um, mode)`` shape, e.g. real
-``Cnt.c``: ``cont_nsvaricap.enclosed(cnt_c_act, cnt_c_value.um,
+``.sep()``/``.with_area()``/``.with_length()`` to a result variable, or
+a line assigning ``<inner_expr>.enclosed(<outer_expr>, value.um, ...)``
+to a result variable (a real, two-layer enclosure check -- confirmed
+real and common: 22 real occurrences across 13 real files, always in
+this exact ``inner.enclosed(outer, value_var.um, mode)`` shape, e.g.
+real ``Cnt.c``: ``cont_nsvaricap.enclosed(cnt_c_act, cnt_c_value.um,
 euclidian)`` -- mapped to the existing ``min_enclosure`` check type,
 whose own ``Inner layer``/``Outer layer`` roles already match KLayout's
 own real semantics exactly), each traced back to a real
@@ -23,10 +23,43 @@ description)`` call. Every non-matching construct (composite checks,
 unrecognized methods, conditional/looped generation) is counted and
 reported by file:line, never silently dropped.
 
+**``with_area``/``with_length`` added later, once ``pdklib/
+drc_writer.py``'s own ``render_new_rule_block`` started generating
+them (for ``min_area``/``max_length``) and this extractor's own
+lopsided asymmetry became visible**: a hand-authored rule of either
+check_type could be exported as real, runnable Ruby but wouldn't
+round-trip back through re-extraction. **Investigated against the
+real deck before writing the regex, not assumed symmetric with
+``width``/``space``/``enclosed``**: real ``with_area``/``with_length``
+usage turned out to be far more heterogeneous than those three --
+``.ext_with_area([["<", v.um2]])`` (a different, unrelated real method
+entirely), arithmetic value expressions (``v.um + 0.001.um``), a
+``nil`` placeholder in either argument position, and (confirmed real,
+grepped directly) most real call sites feed a *subsequent* chained
+call (typically ``.width(...)``) rather than ``.output()`` directly --
+e.g. real ``M1.g``/``Gat.g`` use ``with_length`` purely as an upstream
+edge-length filter, with the real, exported value actually coming from
+the chained ``.width()`` call (already extracted by the existing
+pattern, with or without this addition). Only two real, direct
+``with_area``/``with_length`` -> ``.output()`` call sites exist
+deck-wide -- ``LBE.b1`` (``min_area``) and ``Seal.k`` (``max_length``)
+-- both now correctly extracted; verified for real, driven: comparing
+the full old-vs-new rule and skip sets confirms zero regressions to
+the original 75 rules, exactly these 2 new real rules added, and
+exactly 6 new, honest "has the call but no matching real ``.output()``"
+skip entries for the real, non-directly-exported occurrences found
+along the way (75/86 -> 77/90 total). ``.overlap()`` was investigated
+the same way and deliberately **not** added: real, direct call sites
+of it don't exist anywhere in this deck -- its only two real
+occurrences both sit inside one generic, parameterized Ruby method
+definition (``self.overlap(other, value)``, real method parameters,
+not concrete real layers/values), so there is no real ground truth to
+extract or verify against.
+
 **A second-round search for a third extractable pattern, real, not
-assumed to be futile**: every one of the 86 real remaining skipped
-constructs was checked for a single-method, single-value shape as
-clean as ``.enclosed()``'s own. None exists: real
+assumed to be futile**: every one of the (then-)86 real remaining
+skipped constructs was checked for a single-method, single-value shape
+as clean as ``.enclosed()``'s own. None exists: real
 ``.without_bbox_width()`` occurs exactly once across the entire real
 deck (not worth a dedicated pattern); the rest are genuinely
 heterogeneous multi-step boolean composition (real, varying
@@ -51,18 +84,21 @@ import re
 from pathlib import Path
 
 from ..models import DesignRule
+from ..schema import CHECK_TYPES
 
 DRC_METHOD_TO_CHECK_TYPE = {
     "width": "min_width",
     "space": "min_spacing",
     "sep": "min_spacing",
     "enclosed": "min_enclosure",
+    "with_area": "min_area",
+    "with_length": "max_length",
 }
 
 _VALUE_ASSIGN_RE = re.compile(r"(\w+)\s*=\s*drc_rules\[['\"](\w+)['\"]\]")
-_CHECK_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.(width|space|sep)\(([^)]*)\)")
+_CHECK_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.(width|space|sep|with_area|with_length)\(([^)]*)\)")
 _ENCLOSURE_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.enclosed\(\s*(\S+?)\s*,\s*([^)]*)\)")
-_VALUE_VAR_IN_ARGS_RE = re.compile(r"(\w+)\.um")
+_VALUE_VAR_IN_ARGS_RE = re.compile(r"(\w+)\.um2?\b")
 _OUTPUT_CALL_RE = re.compile(
     r"(\w+)\.output\(\s*['\"]([^'\"]+)['\"]\s*,\s*(?:\r?\n\s*)?\"([^\"]*)\""
 )
@@ -185,14 +221,15 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
             if check is None:
                 skipped.append(
                     f"{rel}:{line_no}: '{rule_id}' -- .output() on '{result_var}', "
-                    f"which isn't a direct width()/space()/sep()/enclosed() result (a "
-                    f"composite or derived check -- not auto-extracted)"
+                    f"which isn't a direct width()/space()/sep()/enclosed()/with_area()/"
+                    f"with_length() result (a composite or derived check -- not auto-extracted)"
                 )
                 continue
             matched_result_vars.add(result_var)
             layer_expr, method, value_var, check_line, outer_expr = check
             json_key = value_var_to_key.get(value_var) if value_var else None
             value = values_by_key.get(json_key) if json_key else None
+            check_type = DRC_METHOD_TO_CHECK_TYPE[method]
             if method == "enclosed":
                 applies_to = f"{layer_expr} enclosed by {outer_expr} (real KLayout DRC expressions, not resolved to Layers)"
                 why = ("Best-effort extraction from a real .enclosed() check -- verify against "
@@ -206,10 +243,10 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
                 DesignRule(
                     rule_id=rule_id,
                     description=description.split(" : ", 1)[-1] if " : " in description else description,
-                    check_type=DRC_METHOD_TO_CHECK_TYPE[method],
+                    check_type=check_type,
                     applies_to_override=applies_to,
                     value=float(value) if value is not None else None,
-                    units="um",
+                    units=CHECK_TYPES[check_type].default_units,
                     source_provenance=f"{rel}:{check_line} (.output at :{line_no})",
                     why=why,
                     status="placeholder",
@@ -221,8 +258,8 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
                 _, _, _, line_no, _ = checks[result_var]
                 skipped.append(
                     f"{rel}:{line_no}: '{result_var}' has a real width()/space()/sep()/"
-                    f"enclosed() call but no matching .output() found on that exact "
-                    f"variable (not auto-extracted)"
+                    f"enclosed()/with_area()/with_length() call but no matching .output() "
+                    f"found on that exact variable (not auto-extracted)"
                 )
 
     return rules, skipped

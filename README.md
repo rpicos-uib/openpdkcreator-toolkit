@@ -3213,6 +3213,55 @@ editor yet -- see Future Work.
   Macro...** itself sets the real, confirmed-safe origin automatically
   and prompts for site pre-filled with the real, most-common
   suggestion. Full suite re-run clean (73/73).
+- **KLayout DRC rule extractor (`pdklib/drc.py`) now also recognizes
+  `with_area()`/`with_length()`**, closing the `min_area`/`max_length`
+  half of the re-extraction gap the "three more `check_type`s" entry
+  above left open (`min_overlap` is deliberately left closed still --
+  see below). Investigated against the real deck before writing any
+  code, the same discipline as every prior extension: grepped for
+  every real, *direct* `.output()`-feeding call site of `with_area`/
+  `with_length`/`overlap`, since the extractor only ever recognizes a
+  method call that feeds `.output()` directly, not through further
+  Boolean composition. Found exactly two real, direct sites --
+  `LBE.b1` (`with_area`) and `Seal.k` (`with_length`) -- both now
+  extract correctly, verified against the live deck with a `git
+  stash`/pop-driven before/after comparison: the existing real 75
+  rules are byte-for-byte unchanged, and exactly these 2 new rules
+  appear, with 6 new, honest skip entries for other real `with_area`/
+  `with_length`/`overlap` call sites that don't feed `.output()`
+  directly (composed further first) -- newly surfaced transparency,
+  not a regression. `overlap` itself is deliberately **not** extended:
+  zero real, direct `.output()`-feeding `overlap()` call sites exist
+  anywhere in this deck, so there is no real ground truth to verify
+  against -- extending it now would be guessing at a shape, the same
+  "don't guess further" discipline as everywhere else in this project.
+  - **A real, pre-existing gap this surfaced, not introduced**: adding
+    a driven re-extraction assertion on `.value` for the two new rules
+    revealed that the extractor's value resolver only ever follows the
+    real deck's own `var = drc_rules['KEY']` JSON-indirection
+    convention -- it never resolved a bare literal `<number>.um`/
+    `.um2` value, which is exactly what **New Rule...**'s own
+    generated custom rules embed (`render_new_rule_block` has no JSON
+    config file to indirect through). This was already true for the
+    original `min_width`/`min_enclosure` re-extraction and simply never
+    caught, since the existing test only ever checked re-extracted
+    rule *ids*, never `.value`. Confirmed via a minimal repro that a
+    freshly re-extracted `TE_W` (`min_width`, the oldest, most-trusted
+    check_type) also comes back `value=None` for a literal-valued rule
+    -- not specific to `with_area`/`with_length` at all. Left as-is
+    (test updated to assert the real, honest `value is None` outcome)
+    rather than expanded into a materially larger change to the shared
+    value-resolution path used by every check_type; genuinely separate,
+    future work if ever needed.
+  - Verified for real, driven: `tests/test_drc_generate.py` (extended)
+    -- re-extraction now recognizes `TE_AREA`/`TE_MAXLEN` alongside the
+    original two, `TE_OVERLAP` still honestly doesn't, and `check_type`/
+    `units` resolve correctly for both new rules even though `value`
+    doesn't (documented above, true for the pre-existing two as well).
+    `tests/test_drc_writer.py` re-run against the real deck: 77 real
+    rules now extracted (was 75), 90 composite constructs skipped (was
+    84 -- the 6 new honest skips), no other rule or file changed. Full
+    suite re-run clean.
 
 ## Future work
 

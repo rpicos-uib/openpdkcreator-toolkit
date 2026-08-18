@@ -253,16 +253,19 @@ def render_new_rule_block(rule: DesignRule, layers_by_name: dict[str, Layer]) ->
     ``5_16_metal1.drc``'s own real
     ``m1_g_l1.with_length(m1_g_length.um + 0.001.um, nil)``) before
     writing a single line of generation code, the same discipline as
-    everywhere else in this project. **A real, honest gap, not silently
-    closed**: unlike the original three, these three don't feed
-    straight into ``.output()`` anywhere in the real deck the simple
-    way ``width()``/``space()``/``enclosed()`` do (confirmed by
-    grepping for it) -- ``pdklib/drc.py``'s own extractor still only
-    recognizes the original three coming the other way, so a
-    min_area/min_overlap/max_length rule generated here does not yet
-    round-trip back through re-extraction the way the original three
-    do. Extending the extractor for these three is real, separate,
-    future work (see the README's own Future Work section)."""
+    everywhere else in this project. ``pdklib/drc.py``'s own extractor
+    was later extended to recognize ``with_area``/``with_length`` too
+    (real, direct ``.output()``-feeding call sites do exist for both --
+    ``LBE.b1``/``Seal.k`` -- see that module's own docstring), so a
+    ``min_area``/``max_length`` rule generated here now round-trips
+    back through re-extraction the same way the original three do.
+    ``min_overlap`` alone still doesn't: real, direct ``.overlap()``
+    call sites genuinely don't exist anywhere in this deck (its only
+    two real occurrences sit inside one generic, parameterized Ruby
+    method definition, not a concrete real rule) -- extending the
+    extractor for it would have nothing real to extract, so this
+    remains a real, honest, one-directional gap for ``min_overlap``
+    specifically, not silently closed."""
 
     if rule.check_type not in _GENERATABLE_CHECK_TYPES:
         return [], f"check_type {rule.check_type!r} has no real Ruby-generation pattern yet"
