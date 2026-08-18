@@ -624,11 +624,48 @@ class ExtractCapCoefficient:
     for a given ``directive`` has the exact same real token count
     (confirmed by direct inspection, not assumed), so ``args``/
     ``values`` split at a fixed, real, per-directive position -- see
-    ``_EXTRACT_CAP_DIRECTIVES``."""
+    ``_EXTRACT_CAP_DIRECTIVES``. Real entries can repeat across
+    different real PVT-corner ``variants`` blocks, the same real fact
+    ``ExtractResist``/``ExtractMiscStatement``'s own ``contact`` rows
+    already document (confirmed real: IHP's own
+    ``defaultsidewall allpoly active`` appears three times with three
+    different real value pairs)."""
 
     directive: str
     args: tuple[str, ...]
     values: tuple[float, ...]
+    line_no: int = 0
+    """Same real, source-mapped line tracking as
+    ``ExtractResist.line_no`` (see ``_safe_prefix_line_count``)."""
+
+    @property
+    def args_text(self) -> str:
+        """A plain-string view of ``args`` -- same real reason
+        ``ExtractMiscStatement.args_text`` exists."""
+
+        return " ".join(self.args)
+
+    @args_text.setter
+    def args_text(self, value: str) -> None:
+        self.args = tuple(value.split())
+
+    @property
+    def values_text(self) -> str:
+        """A plain-string view of ``values`` -- same real reason
+        ``ExtractPlaneOrder.order_text`` exists, generalized to more
+        than one real number. Comma-separated for readability, matching
+        the read-only rendering this domain already had before gaining
+        an editor."""
+
+        return ", ".join(f"{v:g}" for v in self.values)
+
+    @values_text.setter
+    def values_text(self, value: str) -> None:
+        tokens = value.replace(",", " ").split()
+        try:
+            self.values = tuple(float(token) for token in tokens)
+        except ValueError:
+            pass
 
 
 @dataclass
@@ -856,38 +893,42 @@ class MagicTechnology:
     all_parsed_extract_misc_line_nos: list[int] = field(default_factory=list)
     all_parsed_extract_plane_order_line_nos: list[int] = field(default_factory=list)
     all_parsed_extract_resist_line_nos: list[int] = field(default_factory=list)
+    all_parsed_extract_cap_coefficient_line_nos: list[int] = field(default_factory=list)
     extract_section_start_line: int = 0
     extract_section_end_line: int = 0
-    """Real bookkeeping for the ``extract`` section's own three flat,
+    """Real bookkeeping for the ``extract`` section's own four flat,
     editable sub-structures, ``ExtractMiscStatement`` (``contact``/
     ``devresist``/``antenna``/``disconnect``/``substrate``),
-    ``ExtractPlaneOrder`` (``planeorder``), and ``ExtractResist``
-    (``resist``) -- **structurally the same real "spliced in from a
-    separate real file" situation as cifinput/cifoutput above**: the
-    real ``extract`` section doesn't live in ``ihp-sg13g2.tech`` itself,
-    it's spliced in from ``ihp-sg13g2-extract.tech`` via ``include``
-    (confirmed real: that fragment file has no real ``include`` line of
-    its own, so its own content is safely, fully mappable when parsed
-    directly -- same resolution as cifinput/cifoutput, no new mechanism
-    needed). All three sub-structures share these same section bounds
-    (one real ``extract``...``end`` block) the same way cifinput's own
+    ``ExtractPlaneOrder`` (``planeorder``), ``ExtractResist``
+    (``resist``), and ``ExtractCapCoefficient`` (the four
+    ``default*`` directives) -- **structurally the same real "spliced
+    in from a separate real file" situation as cifinput/cifoutput
+    above**: the real ``extract`` section doesn't live in
+    ``ihp-sg13g2.tech`` itself, it's spliced in from
+    ``ihp-sg13g2-extract.tech`` via ``include`` (confirmed real: that
+    fragment file has no real ``include`` line of its own, so its own
+    content is safely, fully mappable when parsed directly -- same
+    resolution as cifinput/cifoutput, no new mechanism needed). All
+    four sub-structures share these same section bounds (one real
+    ``extract``...``end`` block) the same way cifinput's own
     ignored-layers/layer-hints tables already share one section -- see
     ``pdklib/magic_tech_writer.py``'s own docstring for how write-back
     handles a section with more than one independently-tracked group.
-    Every other real extract-section construct this parser also
-    recognizes (the four cap-coefficient directives/``device``) shares
-    this same section but stays read-only -- see this module's own
-    docstring for why (real backslash-continued lines for ``device``
-    make it genuinely less uniform than these three domains' own flat,
-    single-line shape). ``resist`` itself can repeat once per real
+    The only real extract-section construct this parser also
+    recognizes but still leaves read-only is ``device`` -- see this
+    module's own docstring for why (real backslash-continued lines
+    make it genuinely less uniform than these four domains' own flat,
+    single-line shape). ``resist`` and ``ExtractCapCoefficient``'s own
+    ``default*`` directives can each repeat once per real
     ``variants (...)`` corner block with a different value each time
-    (confirmed real: IHP's own ``hvndiffres/active`` appears three
-    times) -- modeled the same way ``ExtractMiscStatement``'s own
-    repeated ``contact`` rows already are, as independent,
-    individually-tracked rows, no attempt to resolve which corner a
-    given row belongs to; ``planeorder`` alone is confirmed real to sit
-    before the section's own first real ``variants (...)`` line, so it
-    never has this real per-corner repeat."""
+    (confirmed real: IHP's own ``hvndiffres/active`` and
+    ``defaultsidewall allpoly active`` both appear three times) --
+    modeled the same way ``ExtractMiscStatement``'s own repeated
+    ``contact`` rows already are, as independent, individually-tracked
+    rows, no attempt to resolve which corner a given row belongs to;
+    ``planeorder`` alone is confirmed real to sit before the section's
+    own first real ``variants (...)`` line, so it never has this real
+    per-corner repeat."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -1412,24 +1453,33 @@ def _parse_extract_plane_order_with_lines(lines: list[str], safe_through: int):
     return _scan_single_line_section(lines, "extract", safe_through, _parse_plane_order_line)
 
 
-def _parse_extract_cap_coefficients(lines: list[str]) -> list[ExtractCapCoefficient]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        arg_count = _EXTRACT_CAP_DIRECTIVES.get(parts[0])
-        if arg_count is None or len(parts) <= arg_count:
-            continue
-        args = tuple(parts[1 : 1 + arg_count])
-        value_tokens = parts[1 + arg_count :]
-        try:
-            values = tuple(float(token) for token in value_tokens)
-        except ValueError:
-            continue
-        entries.append(ExtractCapCoefficient(directive=parts[0], args=args, values=values))
-    return entries
+def _parse_cap_coefficient_line(stripped: str) -> ExtractCapCoefficient | None:
+    parts = stripped.split()
+    if not parts:
+        return None
+    arg_count = _EXTRACT_CAP_DIRECTIVES.get(parts[0])
+    if arg_count is None or len(parts) <= arg_count:
+        return None
+    args = tuple(parts[1 : 1 + arg_count])
+    value_tokens = parts[1 + arg_count :]
+    try:
+        values = tuple(float(token) for token in value_tokens)
+    except ValueError:
+        return None
+    return ExtractCapCoefficient(directive=parts[0], args=args, values=values)
+
+
+def _parse_extract_cap_coefficients_with_lines(lines: list[str], safe_through: int):
+    """Same real ``_scan_single_line_section`` machinery
+    ``_parse_extract_misc_with_lines``/``_parse_extract_plane_order_
+    with_lines``/``_parse_extract_resist_with_lines`` use on this same
+    shared ``extract`` section -- every real line that isn't one of the
+    four ``default*`` cap-coefficient directives (``planeorder``/
+    ``resist``/``device``/``contact``/... lines, ``variants`` lines,
+    comments) simply doesn't match ``_parse_cap_coefficient_line`` and
+    falls through as an untracked, verbatim gap at write-back time."""
+
+    return _scan_single_line_section(lines, "extract", safe_through, _parse_cap_coefficient_line)
 
 
 def _parse_extract_devices(lines: list[str]) -> list[ExtractDevice]:
@@ -1535,7 +1585,6 @@ def parse_tech_file(path: Path) -> MagicTechnology:
         _parse_connect_with_lines(lines, safe_through)
     )
     tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
-    tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))
     tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
     (
         tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
@@ -1547,11 +1596,14 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.extract_resist, tech.all_parsed_extract_resist_line_nos, _extract_start3, _extract_end3 = (
         _parse_extract_resist_with_lines(lines, safe_through)
     )
-    # _extract_start2/_extract_end2/_extract_start3/_extract_end3 are
-    # the exact same real section bounds as above (one shared
-    # extract...end block) -- discarded, not asserted equal, same
-    # "don't guess, but don't over-verify either" discipline cifinput's
-    # own two sub-structures already use.
+    tech.extract_cap_coefficients, tech.all_parsed_extract_cap_coefficient_line_nos, _extract_start4, _extract_end4 = (
+        _parse_extract_cap_coefficients_with_lines(lines, safe_through)
+    )
+    # _extract_start2/_extract_end2/_extract_start3/_extract_end3/
+    # _extract_start4/_extract_end4 are the exact same real section
+    # bounds as above (one shared extract...end block) -- discarded,
+    # not asserted equal, same "don't guess, but don't over-verify
+    # either" discipline cifinput's own two sub-structures already use.
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)

@@ -29,9 +29,9 @@ see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
 flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
-Misc**/**Extract**'s own **Plane order** and **Sheet resistance**
-sub-panes are editable -- Types keeps its own hand-written list + form
-pane (a real
+Misc**/**Extract Coefficients**/**Extract**'s own **Plane order** and
+**Sheet resistance** sub-panes are editable -- Types keeps its own
+hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
 instead (flat, plain-string-field dataclasses, a clean fit for one
@@ -109,8 +109,17 @@ real group sharing that same ``extract`` section -- unlike
 ``variants(...)`` corner block (the same real fact ``contact``
 shares), handled the same independently-editable-row way; its own
 ``int``-typed ``milliohms_per_square`` field is exposed via
-``milliohms_text``. Every other remaining domain stays read-only (each
-would
+``milliohms_text``. **Extract Coefficients** (``ExtractCapCoefficient``
+-- real `default*` parasitic-capacitance directives) is the fourth
+real group sharing that section: unlike the other three, its own
+trailing content is a variable-length blob (per-directive token
+count, split into a real ``args`` tuple and a real ``values`` float
+tuple), exposed to this generic editor through two properties,
+``args_text``/``values_text`` -- the same "expose a non-string field
+as a plain string" pattern, just applied twice to one entry. A real
+`default*` entry can also repeat once per real ``variants(...)``
+corner block, the same real fact ``resist``/``contact`` share. Every
+other remaining domain stays read-only (each would
 need its own real editor design -- the genuinely harder mini-DSL
 sections aren't a clean fit for any existing editor shape; see
 README's own Future Work). Editing is in-memory, same as
@@ -228,7 +237,17 @@ class MagicTechView(ttk.Frame):
             (80, 220, 80, 100, 300),
         )
         self._build_extract_tab(sub)
-        self._build_extract_coefficients_tab(sub)
+        self.extract_coeff_editor = self._build_simple_editor(
+            sub, "Extract Coefficients",
+            [("directive", "Directive", 140), ("args_text", "Args", 220), ("values_text", "Values", 160)],
+            lambda: magic_tech_mod.ExtractCapCoefficient(directive="defaultareacap", args=(), values=()),
+            entry_label="Cap Coefficient",
+            help_text="Real extract-section 'default*' parasitic-capacitance coefficient line "
+                      "('defaultoverlap'/'defaultsideoverlap'/'defaultareacap'/'defaultperimeter'/"
+                      "'defaultsidewall'). Argument semantics aren't asserted -- edited raw and positional. "
+                      "A real entry can repeat once per real variants(...) corner block -- each row here is "
+                      "its own independently-editable real line, not resolved to a specific corner.",
+        )
         self._build_extract_devices_tab(sub)
         self.extract_misc_editor = self._build_simple_editor(
             sub, "Extract Misc", [("directive", "Directive", 110), ("args_text", "Args", 500)],
@@ -271,10 +290,6 @@ class MagicTechView(ttk.Frame):
             help_text="Real extract-section 'planeorder NAME ORDER' line.",
         )
         self.extract_plane_order_editor.pack(fill="both", expand=True)
-
-    def _build_extract_coefficients_tab(self, notebook: ttk.Notebook):
-        columns = ("directive", "args", "values")
-        self.extract_coeff_tree = self._make_tab(notebook, "Extract Coefficients", columns, (140, 260, 160))
 
     def _build_extract_devices_tab(self, notebook: ttk.Notebook):
         columns = ("devclass", "model", "type_name", "rest")
@@ -457,6 +472,7 @@ class MagicTechView(ttk.Frame):
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
         self.extract_resist_editor.commit_pending_edits()
+        self.extract_coeff_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -496,6 +512,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_extract_resist_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractResist]]:
         return {name: tech.extract_resist for name, tech in self.technologies.items()}
+
+    def collect_extract_cap_coefficients_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractCapCoefficient]]:
+        return {name: tech.extract_cap_coefficients for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -539,10 +558,11 @@ class MagicTechView(ttk.Frame):
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
         self.extract_resist_editor.commit_pending_edits()
+        self.extract_coeff_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
-            self.extract_coeff_tree, self.extract_devices_tree,
+            self.extract_devices_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -562,6 +582,7 @@ class MagicTechView(ttk.Frame):
             self.extract_misc_editor.set_entries(None)
             self.extract_plane_order_editor.set_entries(None)
             self.extract_resist_editor.set_entries(None)
+            self.extract_coeff_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -579,6 +600,7 @@ class MagicTechView(ttk.Frame):
         self.extract_misc_editor.set_entries(tech.extract_misc)
         self.extract_plane_order_editor.set_entries(tech.extract_plane_order)
         self.extract_resist_editor.set_entries(tech.extract_resist)
+        self.extract_coeff_editor.set_entries(tech.extract_cap_coefficients)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -602,9 +624,6 @@ class MagicTechView(ttk.Frame):
                 "", "end",
                 values=("angles", angle_check.layer, f"{angle_check.degrees}°", "", angle_check.message),
             )
-        for coeff in tech.extract_cap_coefficients:
-            values_text = ", ".join(f"{v:g}" for v in coeff.values)
-            self.extract_coeff_tree.insert("", "end", values=(coeff.directive, " ".join(coeff.args), values_text))
         for device in tech.extract_devices:
             self.extract_devices_tree.insert(
                 "", "end", values=(device.devclass, device.model, device.type_name, " ".join(device.rest)),

@@ -2894,6 +2894,55 @@ editor yet -- see Future Work.
   `ihp-sg13g2.tech`'s own export byte-identical.
   `tests/test_magic_new_tabs.py` updated for the `Treeview` ->
   `SimpleListEditor` swap. Full suite re-run clean (67/67).
+- **Magic Tech write-back extended to extract's own `ExtractCapCoefficient`
+  lines** (real `default*` parasitic-capacitance directives:
+  `defaultoverlap`/`defaultsideoverlap`/`defaultareacap`/
+  `defaultperimeter`/`defaultsidewall`) -- the twelfth editable domain,
+  and `extract`'s fourth real, independently-tracked sub-structure
+  sharing its section with `ExtractMiscStatement`/`ExtractPlaneOrder`/
+  `ExtractResist`. **Editable despite unknown argument semantics, same
+  discipline as `ComposeStatement`/`ExtractMiscStatement`**: this
+  domain's own docstring already documented that argument meaning
+  (which token is "over" vs "under", or what a trailing number
+  represents) was never asserted, only positional splitting at a
+  real, per-directive, confirmed-fixed leading-arg count -- editability
+  needs no semantic understanding, just the same raw, positional
+  round-trip every other "don't guess further" domain here already
+  uses. `ExtractCapCoefficient` gained `line_no` and *two* properties,
+  `args_text`/`values_text`, since its own real trailing content splits
+  into two separately-typed tuples (`args: tuple[str, ...]`,
+  `values: tuple[float, ...]`) rather than one -- the first domain here
+  needing two string-view properties on one entry, not one.
+  **A real, confirmed structural fact reused directly**: a real
+  `default*` entry can also repeat once per real `variants (...)`
+  corner block with a different value each time (e.g. IHP's own
+  `defaultsidewall allpoly active` appears three times: `11.722/-0.023`,
+  `12.642/-0.013`, `10.828/-0.032`) -- the same shape `resist`/`contact`
+  already established a write-back pattern for. **A real formatting
+  wrinkle unique to this domain**: unlike `resist`/`planeorder`'s fixed
+  two-token shape, a cap-coefficient line's own trailing `args`/`values`
+  is variable-length (per-directive token count) and, like `contact`,
+  sometimes column-aligned with more than one real space (confirmed
+  real: IHP's own
+  `defaultoverlap     allpoly active pwell well  87.433`) -- its own
+  render function reuses the same diff-first "keep the original text
+  verbatim if the real, parsed `args`/`values` are genuinely unchanged"
+  approach `_render_style_line`/`_render_extract_misc_line` already
+  established, rather than the always-reuse-captured-separators
+  approach the two fixed-token domains use. The read-only "Extract
+  Coefficients" `Treeview` was replaced in place with an embedded
+  `SimpleListEditor`. Verified for real, driven:
+  `tests/test_magic_extract_cap_coefficients.py` (new) -- all 506 real
+  entries load, line-tracked; the three real
+  `defaultsidewall allpoly active` corner rows load as distinct rows
+  with three distinct real value pairs; no-edit export of
+  `ihp-sg13g2-extract.tech` stays byte-identical now that four groups
+  share the section's own patch pass; in-GUI `args_text`/`values_text`
+  edits and New/Delete round-trip correctly; the edit survives
+  `File > Save Edits` and a simulated relaunch; a real write-back lands
+  the edited value in `ihp-sg13g2-extract.tech` specifically, leaving
+  `ihp-sg13g2.tech`'s own export byte-identical. Full suite re-run
+  clean (68/68).
 
 ## Future work
 
@@ -2915,13 +2964,14 @@ models, ...), not just read/display layers. Concretely, still open:
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
   `extract`'s own `contact`/`devresist`/`antenna`/`disconnect`/
-  `substrate` statements, its own `planeorder` lines, and its own
-  `resist` lines are now editable with real write-back too (see the
-  dedicated changelog entries above); cap-coefficients/`device` in the
-  same section stay read-only (real backslash-continued lines for
-  `device`, and no local, authoritative source to confirm cap-
-  coefficient argument semantics against, less uniform than these
-  three domains' own flat shape).
+  `substrate` statements, its own `planeorder` lines, its own `resist`
+  lines, and its own `default*` cap-coefficient lines are now editable
+  with real write-back too (see the dedicated changelog entries
+  above) -- editable despite unknown argument semantics, same "don't
+  guess further, edit raw and positional" discipline
+  `ComposeStatement` already established. `device` alone stays
+  read-only in this same section (real backslash-continued lines make
+  it genuinely less uniform than these four domains' own flat shape).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

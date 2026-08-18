@@ -7,14 +7,14 @@ real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
 **Connect**, **cifinput**'s own two flat sub-structures (ignored
 layers, layer hints), **cifoutput**'s own flat, editable-in-place
-``calma`` lines, and **extract**'s own three flat sub-structures,
+``calma`` lines, and **extract**'s own four flat sub-structures,
 ``ExtractMiscStatement`` (``contact``/``devresist``/``antenna``/
 ``disconnect``/``substrate``), ``ExtractPlaneOrder`` (``planeorder``),
-and ``ExtractResist`` (``resist``), the Magic Tech domains with a real
-form (see ``gui/magic_tech_view.py``'s own docstring). Every other
-real section (cifinput's own recipe blocks/drc/every *other* real
-extract-section construct -- cap-coefficients/``device``/everything
-else ``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
+``ExtractResist`` (``resist``), and ``ExtractCapCoefficient`` (the four
+``default*`` directives), the Magic Tech domains with a real form (see
+``gui/magic_tech_view.py``'s own docstring). Every other real section
+(cifinput's own recipe blocks/drc/``device``/everything else
+``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
 there's no editor for them, so nothing to write back; deliberately
 bounded, not attempted for every remaining real sub-tab at once (see
 README's own Future Work note on the remaining gap).
@@ -37,8 +37,9 @@ line_no``/``ContactEntry.line_no``/``AliasEntry.line_no``/
 ``StyleEntry.line_no``/``ComposeStatement.line_no``/``ConnectRule.
 line_no``/``CifInputIgnoredLayer.line_no``/``CifInputLayerHint.
 line_no``/``CifOutputLayerMapping.line_no``/``ExtractMiscStatement.
-line_no``/``ExtractPlaneOrder.line_no``/``ExtractResist.line_no``
-(tracked at parse time, only when safely mappable back to
+line_no``/``ExtractPlaneOrder.line_no``/``ExtractResist.line_no``/
+``ExtractCapCoefficient.line_no`` (tracked at parse time, only when
+safely mappable back to
 real file line numbers -- see ``_safe_prefix_line_count``'s own
 docstring) are used exactly the way
 ``pdklib/lef.py``'s ``LefPin.start_line``/``LefMacro.
@@ -109,29 +110,39 @@ header of its own, so both used to be silently filtered out of the
 Technology picker entirely (see ``gui/magic_tech_view.py``'s own
 docstring for the real fallback-naming fix).
 
-**extract's own three flat sub-structures, ``ExtractMiscStatement``,
-``ExtractPlaneOrder``, and ``ExtractResist``, are, structurally, the
-same "spliced in from a separate real file" case as cifinput/cifoutput
-above** -- real content lives in ``ihp-sg13g2-extract.tech``, included
-into ``ihp-sg13g2.tech`` -- **and share one real ``extract``...``end``
-section with each other and with plenty of other, still-read-only
-extract content** (cap-coefficient/``device`` lines, real
-``variants (...)`` corner-scoping lines, comments), the same "one
-section, more than one independently-tracked group" shape cifinput's
-own ignored-layers/layer-hints tables already established: all of that
-untouched content simply never matches ``_parse_extract_misc_line``/
-``_parse_plane_order_line``/``_parse_resist_line``, so it falls through
-``_render_section_patch``'s existing "copy any untracked line
-verbatim" gap logic for free. **A real ``contact`` or ``resist`` line
-can also repeat across more than one real ``variants`` corner block
-with a different real value each time** (confirmed real for both) --
-handled the same way ``CifOutputLayerMapping``'s own repeated
-``DNWELL`` rows already are: each real occurrence is its own real
-line, independently patched by its own real ``line_no``, with no
-attempt to resolve which corner a given row belongs to. ``planeorder``
-has no such wrinkle -- confirmed real to sit entirely before the
-section's own first real ``variants (...)`` line, so every real name
-is unique, one row each.
+**extract's own four flat sub-structures, ``ExtractMiscStatement``,
+``ExtractPlaneOrder``, ``ExtractResist``, and ``ExtractCapCoefficient``,
+are, structurally, the same "spliced in from a separate real file"
+case as cifinput/cifoutput above** -- real content lives in
+``ihp-sg13g2-extract.tech``, included into ``ihp-sg13g2.tech`` --
+**and share one real ``extract``...``end`` section with each other and
+with the one remaining, still-read-only extract content** (``device``
+lines, real ``variants (...)`` corner-scoping lines, comments), the
+same "one section, more than one independently-tracked group" shape
+cifinput's own ignored-layers/layer-hints tables already established:
+all of that untouched content simply never matches
+``_parse_extract_misc_line``/``_parse_plane_order_line``/
+``_parse_resist_line``/``_parse_cap_coefficient_line``, so it falls
+through ``_render_section_patch``'s existing "copy any untracked line
+verbatim" gap logic for free. **A real ``contact``, ``resist``, or
+cap-coefficient line can also repeat across more than one real
+``variants`` corner block with a different real value each time**
+(confirmed real for all three) -- handled the same way
+``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows already are:
+each real occurrence is its own real line, independently patched by
+its own real ``line_no``, with no attempt to resolve which corner a
+given row belongs to. ``planeorder`` has no such wrinkle -- confirmed
+real to sit entirely before the section's own first real
+``variants (...)`` line, so every real name is unique, one row each.
+**A real formatting wrinkle unique to cap-coefficients**: unlike
+``resist``/``planeorder``'s own fixed two-token shape,
+``ExtractCapCoefficient``'s own trailing ``args``/``values`` is a
+variable-length blob (per-directive token count), so its own render
+function uses the same diff-first "reuse the original text verbatim if
+genuinely unchanged" approach ``_render_style_line``/
+``_render_extract_misc_line`` already established, rather than the
+always-reuse-captured-separators approach the two fixed-token domains
+use.
 
 All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
@@ -171,6 +182,7 @@ _CIFOUTPUT_CALMA_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s*)$")
 _EXTRACT_MISC_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 _PLANEORDER_LINE_RE = re.compile(r"^(\s*)planeorder(\s+)(\S+)(\s+)(\d+)\s*$")
 _RESIST_LINE_RE = re.compile(r"^(\s*)resist(\s+)(\S+)(\s+)(-?\d+)\s*$")
+_EXTRACT_CAP_COEFF_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -372,6 +384,42 @@ def _render_resist_line(entry: magic_tech_mod.ExtractResist, original_line: str 
     return f"{indent}resist{sep0}{entry.layer_spec}{sep1}{entry.milliohms_per_square}"
 
 
+def _render_cap_coefficient_line(entry: magic_tech_mod.ExtractCapCoefficient, original_line: str | None) -> str:
+    """A real cap-coefficient line's own trailing ``args``/``values``
+    tokens are also sometimes column-aligned with more than one space
+    (confirmed real: IHP's own
+    ``defaultoverlap     allpoly active pwell well  87.433``) -- the
+    same diff-first approach ``_render_style_line``/
+    ``_render_extract_misc_line`` already use for a variable-length
+    blob: if the real, parsed ``args``/``values`` are genuinely
+    unchanged from the original line, its real original whitespace is
+    preserved verbatim; only a real, deliberate edit gets freshly,
+    normally single-spaced (values via plain ``str()``, since there's
+    no real original formatting worth preserving for a value that
+    actually changed)."""
+
+    match = _EXTRACT_CAP_COEFF_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else " "
+    separator = match.group(3) if match else " "
+    rest_original = match.group(4) if match else None
+    unchanged = False
+    if rest_original is not None:
+        parts = rest_original.split()
+        arg_count = len(entry.args)
+        orig_args = tuple(parts[:arg_count])
+        try:
+            orig_values = tuple(float(token) for token in parts[arg_count:])
+        except ValueError:
+            orig_values = None
+        unchanged = orig_args == entry.args and orig_values == entry.values
+    if unchanged:
+        rest = rest_original
+    else:
+        tokens = list(entry.args) + [str(v) for v in entry.values]
+        rest = " ".join(tokens)
+    return f"{indent}{entry.directive}{separator}{rest}"
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
 ) -> list[str]:
@@ -447,6 +495,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
                 (tech.extract_misc, tech.all_parsed_extract_misc_line_nos, _render_extract_misc_line),
                 (tech.extract_plane_order, tech.all_parsed_extract_plane_order_line_nos, _render_plane_order_line),
                 (tech.extract_resist, tech.all_parsed_extract_resist_line_nos, _render_resist_line),
+                (
+                    tech.extract_cap_coefficients, tech.all_parsed_extract_cap_coefficient_line_nos,
+                    _render_cap_coefficient_line,
+                ),
             ],
         ),
     ]
