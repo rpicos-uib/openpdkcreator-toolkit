@@ -2450,6 +2450,55 @@ editor yet -- see Future Work.
   deliberate lack of one), and that all three land under
   `libraries/<library>/`, not `user_models/`. Full suite re-run clean
   (61/61).
+- **Magic Tech write-back extended to Styles** -- the fifth editable
+  domain, alongside Types/Planes/Contacts/Aliases (124 real entries in
+  IHP's own `ihp-sg13g2.tech`). `StyleEntry` gained the same real
+  `line_no` tracking as the other four (`pdklib/magic_tech.py`'s new
+  `_parse_style_line`/`_parse_styles_with_lines`, reusing the existing
+  shared `_scan_single_line_section` scanner unchanged), and
+  `pdklib/magic_tech_writer.py` gained a fifth `_render_section_patch`
+  region. A real structural difference from the other four surfaced
+  Styles' own one real quirk: a `styles` section opens with one
+  real, non-entry `styletype NAME` header line -- handled for free by
+  `_scan_single_line_section`'s existing "not a real entry, copy the
+  line verbatim" gap logic (`_parse_style_line` returns `None` for it),
+  not a special case. A second, real, found-not-assumed bug while
+  wiring this up: `StyleEntry.style_names` is the one editable field
+  here that's a real, variable-length list rather than a scalar, and
+  IHP's own real file genuinely column-aligns it with more than one
+  space between names (`nfet      ntransistor    ntransistor_stripes`)
+  -- a first, naive single-space `" ".join(...)` re-render collapsed
+  that real spacing even on a completely unedited entry, caught
+  immediately by this project's own no-edit-must-be-byte-identical
+  check (`tests/test_magic_tech_writer.py`, already covering every
+  domain generically). Fixed the same way `pdklib/liberty_writer.py`
+  already handles its own per-field diffing: `_render_style_line` now
+  compares the real style-name list against a fresh split of the
+  original line first, and only re-joins with a single space when the
+  list itself is genuinely different -- an untouched entry's real
+  original inter-name whitespace is preserved exactly, only a real,
+  deliberate edit gets freshly (and honestly) normalized spacing. The
+  GUI side reuses the existing generic `gui/simple_list_editor.py`
+  (`SimpleListEditor`) rather than a fifth hand-copy or a new "list
+  field" capability added to that shared component: `StyleEntry` gained
+  a `style_names_text` property (a plain, space-joined string
+  getter/setter over the real `style_names` list) that the editor's
+  own `getattr`/`setattr`-based field access already works with
+  unmodified -- the same real "expose a list field as one delimited
+  string" shape `AliasEntry.members_raw` already uses directly (that
+  one just never needed splitting back into a real list). Persists
+  across a relaunch the same way Planes/Contacts/Aliases do
+  (`project_io.py`'s new `magic_styles`). Verified for real, driven:
+  `tests/test_magic_planes_contacts_aliases.py` (extended) -- 124 real
+  rows load; in-GUI edit/New/Delete Style; edits survive Save Edits and
+  a simulated relaunch; a real `main.py export-magic-types` write-back
+  afterward contains the edited style-name list; the real, non-entry
+  `styletype mos` header line still comes through byte-for-byte
+  verbatim. `tests/test_magic_tech_writer.py` re-confirms both real
+  `.tech` files with a real `styles` section (`ihp-sg13g2.tech` and
+  `ihp-sg13g2-GDS.tech`, the latter with no real `include` line at all)
+  still export byte-identical with zero edits, catching the exact real
+  bug above. Full suite re-run clean (61/61).
 
 ## Future work
 
@@ -2563,13 +2612,13 @@ models, ...), not just read/display layers. Concretely, still open:
   survives `File > Save Edits` and a simulated relaunch, and a real
   `main.py export-magic-types` write-back afterward contains exactly
   those edited values. **Deliberately still out of scope this pass**
-  (documented honestly, not silently dropped): Styles (124 real
-  entries, a real `type_name -> list[style_names]` shape less uniform
-  than the other three) and the much harder mini-DSL sections
-  (`cifoutput`/`cifinput`/`compose`/`connect`/`drc`/`extract`, eleven
-  real sub-tabs combined) -- none of these fit the "one flat entry per
-  line" shape this pass's shared machinery relies on; each would need
-  its own real editor design, real separate future work.
+  (documented honestly, not silently dropped): the much harder
+  mini-DSL sections (`cifoutput`/`cifinput`/`compose`/`connect`/`drc`/
+  `extract`, eleven real sub-tabs combined) -- none of these fit the
+  "one flat entry per line" shape this pass's shared machinery relies
+  on; each would need its own real editor design, real separate future
+  work. (Styles, once also in this list, is done -- see the dedicated
+  changelog entry below.)
 - "Pre-pointed" Magic/KLayout launch guidance is back in
   `eda_tools.py`, pointed at real files this project has since
   downloaded and read: Magic launches with IHP's own real, official

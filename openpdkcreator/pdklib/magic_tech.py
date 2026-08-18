@@ -233,6 +233,29 @@ class AliasEntry:
 class StyleEntry:
     type_name: str
     style_names: list[str] = field(default_factory=list)
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``) -- used by ``pdklib/magic_tech_
+    writer.py`` to patch this entry's own real line in place."""
+
+    @property
+    def style_names_text(self) -> str:
+        """A plain, space-joined string view of ``style_names`` -- the
+        real GUI form field this dataclass's own list field can't be
+        edited through directly (``gui/simple_list_editor.py``'s
+        ``SimpleListEditor`` only knows plain string fields via
+        ``getattr``/``setattr``, the same reason ``AliasEntry`` keeps
+        its own real members as a single raw string rather than a real
+        list -- see that dataclass's own docstring). The list itself
+        stays the real, structured field every other consumer
+        (``pdklib/magic_tech_writer.py``'s own ``_render_style_line``)
+        reads and writes."""
+
+        return " ".join(self.style_names)
+
+    @style_names_text.setter
+    def style_names_text(self, value: str) -> None:
+        self.style_names = value.split()
 
 
 @dataclass
@@ -535,6 +558,18 @@ class MagicTechnology:
     not assumed: all three sections sit in ``ihp-sg13g2.tech`` well
     before its first real ``include`` line, the same safely-mappable
     real region ``types`` itself already relies on."""
+    all_parsed_style_line_nos: list[int] = field(default_factory=list)
+    styles_section_start_line: int = 0
+    styles_section_end_line: int = 0
+    """Same real bookkeeping, for ``styles`` -- also confirmed to sit
+    well before the first real ``include`` line in both real ``.tech``
+    files that have one (``ihp-sg13g2.tech`` and ``ihp-sg13g2-GDS.
+    tech``, the latter with no real ``include`` line at all). Unlike
+    Planes/Contacts/Aliases, a real ``styles`` section also carries one
+    real, non-entry ``styletype NAME`` header line right after its own
+    opening keyword -- handled for free by ``_scan_single_line_section``
+    's own generic "not a real entry, copy verbatim" gap logic (see
+    ``_parse_style_line`` below), not a special case."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -799,17 +834,17 @@ def _parse_aliases_with_lines(lines: list[str], safe_through: int):
     return _scan_single_line_section(lines, "aliases", safe_through, _parse_alias_line)
 
 
-def _parse_styles(lines: list[str]) -> list[StyleEntry]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith("styletype"):
-            continue
-        parts = stripped.split()
-        if len(parts) < 2:
-            continue
-        entries.append(StyleEntry(type_name=parts[0], style_names=parts[1:]))
-    return entries
+def _parse_style_line(stripped: str) -> StyleEntry | None:
+    if stripped.startswith("styletype"):
+        return None  # a real section-level header, not an entry -- left as a verbatim gap.
+    parts = stripped.split()
+    if len(parts) < 2:
+        return None
+    return StyleEntry(type_name=parts[0], style_names=parts[1:])
+
+
+def _parse_styles_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "styles", safe_through, _parse_style_line)
 
 
 def _parse_cifoutput_layers(lines: list[str]) -> list[CifLayer]:
@@ -1099,7 +1134,9 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.aliases, tech.all_parsed_alias_line_nos, tech.aliases_section_start_line, tech.aliases_section_end_line = (
         _parse_aliases_with_lines(lines, safe_through)
     )
-    tech.styles = _parse_styles(sections.get("styles", []))
+    tech.styles, tech.all_parsed_style_line_nos, tech.styles_section_start_line, tech.styles_section_end_line = (
+        _parse_styles_with_lines(lines, safe_through)
+    )
     tech.cif_layers = _parse_cifoutput_layers(sections.get("cifoutput", []))
     tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))
     tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))

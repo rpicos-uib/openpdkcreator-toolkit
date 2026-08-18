@@ -39,7 +39,7 @@ from pathlib import Path
 import yaml
 
 from .pdklib.lef import LefPin, LefPort
-from .pdklib.magic_tech import AliasEntry, ContactEntry, PlaneEntry, TypeEntry
+from .pdklib.magic_tech import AliasEntry, ContactEntry, PlaneEntry, StyleEntry, TypeEntry
 from .models import DesignRule, Layer
 
 SAVE_DIR = Path(__file__).resolve().parents[1] / "saves"
@@ -58,11 +58,12 @@ def save_state(
     magic_planes: dict[str, list[PlaneEntry]] | None = None,
     magic_contacts: dict[str, list[ContactEntry]] | None = None,
     magic_aliases: dict[str, list[AliasEntry]] | None = None,
+    magic_styles: dict[str, list[StyleEntry]] | None = None,
     layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
-    *magic_planes*/*magic_contacts*/*magic_aliases*: the same real
-    shape, one dict per newly-editable Magic Tech domain (see
+    *magic_planes*/*magic_contacts*/*magic_aliases*/*magic_styles*: the
+    same real shape, one dict per newly-editable Magic Tech domain (see
     ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
@@ -101,6 +102,10 @@ def save_state(
             tech_name: [dataclasses.asdict(a) for a in aliases]
             for tech_name, aliases in (magic_aliases or {}).items()
         },
+        "magic_styles": {
+            tech_name: [dataclasses.asdict(s) for s in styles]
+            for tech_name, styles in (magic_styles or {}).items()
+        },
         "lef_pins": {
             lef_path: {
                 macro_name: [dataclasses.asdict(pin) for pin in pins]
@@ -126,6 +131,7 @@ class LoadedState:
     magic_planes: dict[str, list[PlaneEntry]] = dataclasses.field(default_factory=dict)
     magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
     magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
+    magic_styles: dict[str, list[StyleEntry]] = dataclasses.field(default_factory=dict)
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
@@ -157,6 +163,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [AliasEntry(**a) for a in aliases]
         for tech_name, aliases in data.get("magic_aliases", {}).items()
     }
+    magic_styles = {
+        tech_name: [StyleEntry(**s) for s in styles]
+        for tech_name, styles in data.get("magic_styles", {}).items()
+    }
     lef_pins = {
         lef_path: {
             macro_name: [_load_lef_pin(p) for p in pins]
@@ -172,6 +182,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
         magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
+        magic_styles=magic_styles,
         layers=layers,
     )
 

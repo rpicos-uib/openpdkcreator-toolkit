@@ -12,22 +12,28 @@ Recipes**, plus **Compose**/**Connect**/**DRC (Magic)**/**Extract**/
 ``cifinput``/``compose``/``connect``/``drc``/``extract`` section
 content -- see ``pdklib/magic_tech.py``'s own docstring for exactly
 what's extracted from each and why). **Types**/**Planes**/
-**Contacts**/**Aliases** are editable -- Types keeps its own
-hand-written list + form pane (a real comma-split aliases list, a
-boolean obsolete combo); Planes/Contacts/Aliases share one generic,
-reusable `simple_list_editor.SimpleListEditor` instead (flat,
+**Contacts**/**Aliases**/**Styles** are editable -- Types keeps its
+own hand-written list + form pane (a real comma-split aliases list, a
+boolean obsolete combo); Planes/Contacts/Aliases/Styles share one
+generic, reusable `simple_list_editor.SimpleListEditor` instead (flat,
 plain-string-field dataclasses, a clean fit for one shared
-implementation rather than three hand-copies of the same
+implementation rather than four hand-copies of the same
 commit-on-switch pattern ``LayersView``/``RulesView``/``LefView``
-already use). Every other domain stays read-only for now (each would
-need its own real editor design -- Styles' own real
-`type_name -> list[style_names]` shape and the harder mini-DSL
-sections aren't a clean fit for either existing editor shape; see
-README's own Future Work). Editing is in-memory, same as DRC Rules/
-LEF pins, with native write-back into the real ``.tech`` file via
-``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
+already use) -- Styles' own real `type_name -> list[style_names]`
+list field is exposed to this string-only editor through
+``pdklib/magic_tech.py``'s own ``StyleEntry.style_names_text``
+property (space-joined getter/setter over the real list), the same
+real "expose a list field as one delimited string for the generic
+editor" shape ``AliasEntry.members_raw`` already uses directly (that
+one just never needed the split back into a real list, since nothing
+here resolves alias membership further). Every other domain stays
+read-only for now (each would need its own real editor design -- the
+harder mini-DSL sections aren't a clean fit for either existing editor
+shape; see README's own Future Work). Editing is in-memory, same as
+DRC Rules/LEF pins, with native write-back into the real ``.tech``
+file via ``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
-label, this now writes back all four editable domains at once, not
+label, this now writes back all five editable domains at once, not
 just Types). "View File" opens the real, underlying ``.tech`` file
 directly (``file_view_dialog.view_file_dialog``), which *can* be
 edited, as raw text.
@@ -99,7 +105,12 @@ class MagicTechView(ttk.Frame):
             entry_label="Alias",
             help_text="Real Magic .tech alias: 'name member1,member2,...'.",
         )
-        self.styles_tree = self._make_tab(sub, "Styles", ("type_name", "style_names"), (160, 560))
+        self.styles_editor = self._build_simple_editor(
+            sub, "Styles", [("type_name", "Type Name", 200), ("style_names_text", "Style Names (space-separated)", 460)],
+            lambda: magic_tech_mod.StyleEntry(type_name="newtype", style_names=[]),
+            entry_label="Style",
+            help_text="Real Magic .tech style: 'type_name style1 style2 ...'.",
+        )
         self.cif_tree = self._make_tab(sub, "CIF Layers", ("name", "gds_pairs"), (200, 400))
         self._build_cifinput_tab(sub)
         self.cifinput_recipes_tree = self._make_tab(
@@ -303,6 +314,7 @@ class MagicTechView(ttk.Frame):
         self.planes_editor.commit_pending_edits()
         self.contacts_editor.commit_pending_edits()
         self.aliases_editor.commit_pending_edits()
+        self.styles_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -315,6 +327,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_aliases_by_tech(self) -> dict[str, list[magic_tech_mod.AliasEntry]]:
         return {name: tech.aliases for name, tech in self.technologies.items()}
+
+    def collect_styles_by_tech(self) -> dict[str, list[magic_tech_mod.StyleEntry]]:
+        return {name: tech.styles for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -339,8 +354,9 @@ class MagicTechView(ttk.Frame):
         self.planes_editor.commit_pending_edits()
         self.contacts_editor.commit_pending_edits()
         self.aliases_editor.commit_pending_edits()
+        self.styles_editor.commit_pending_edits()
         for tree in (
-            self.styles_tree, self.cif_tree,
+            self.cif_tree,
             self.cifinput_ignore_tree, self.cifinput_hints_tree, self.cifinput_recipes_tree,
             self.compose_tree, self.connect_tree, self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
@@ -355,6 +371,7 @@ class MagicTechView(ttk.Frame):
             self.planes_editor.set_entries(None)
             self.contacts_editor.set_entries(None)
             self.aliases_editor.set_entries(None)
+            self.styles_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -363,8 +380,7 @@ class MagicTechView(ttk.Frame):
         self._refresh_types()
         self.contacts_editor.set_entries(tech.contacts)
         self.aliases_editor.set_entries(tech.aliases)
-        for style in tech.styles:
-            self.styles_tree.insert("", "end", values=(style.type_name, ", ".join(style.style_names)))
+        self.styles_editor.set_entries(tech.styles)
         for cif_layer in tech.cif_layers:
             pairs = ", ".join(f"{layer}/{datatype}" for layer, datatype in cif_layer.gds_pairs)
             self.cif_tree.insert("", "end", values=(cif_layer.name, pairs))

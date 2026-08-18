@@ -19,9 +19,11 @@ root.update()
 print("planes rows:", len(mtv.planes_editor.tree.get_children()))
 print("contacts rows:", len(mtv.contacts_editor.tree.get_children()))
 print("aliases rows:", len(mtv.aliases_editor.tree.get_children()))
+print("styles rows:", len(mtv.styles_editor.tree.get_children()))
 assert len(mtv.planes_editor.tree.get_children()) == 14
 assert len(mtv.contacts_editor.tree.get_children()) == 26
 assert len(mtv.aliases_editor.tree.get_children()) == 60
+assert len(mtv.styles_editor.tree.get_children()) == 124
 
 # Edit the first plane's short_code via the form.
 mtv.planes_editor.tree.selection_set(mtv.planes_editor.tree.get_children()[0])
@@ -45,6 +47,17 @@ mtv.planes_editor.delete_entry()
 root.update()
 assert len(mtv.planes_editor.tree.get_children()) == before_count
 
+# New Style / Delete Style
+before_style_count = len(mtv.styles_editor.tree.get_children())
+mtv.styles_editor.new_entry()
+root.update()
+assert len(mtv.styles_editor.tree.get_children()) == before_style_count + 1
+new_style = mtv.styles_editor.current_entry
+assert new_style.line_no == 0
+mtv.styles_editor.delete_entry()
+root.update()
+assert len(mtv.styles_editor.tree.get_children()) == before_style_count
+
 # Edit a contact and an alias too.
 mtv.contacts_editor.tree.selection_set(mtv.contacts_editor.tree.get_children()[0])
 mtv.contacts_editor._on_select()
@@ -58,7 +71,20 @@ mtv.aliases_editor.field_vars["members_raw"].set("nwell,pwell")
 root.update()
 assert mtv.aliases_editor.current_entry.members_raw == "nwell,pwell"
 
-print("PASS: in-GUI edit/new/delete for Planes/Contacts/Aliases.")
+# Styles: the real list[str] style_names field is exposed to this
+# generic, string-only editor through StyleEntry's own
+# style_names_text property (space-joined getter/setter) -- edited the
+# same way as every other field here, but round-trips back into a real
+# list, not just a string.
+mtv.styles_editor.tree.selection_set(mtv.styles_editor.tree.get_children()[0])
+mtv.styles_editor._on_select()
+mtv.styles_editor.field_vars["style_names_text"].set("cwell extraStyle")
+root.update()
+assert mtv.styles_editor.current_entry.style_names == ["cwell", "extraStyle"]
+style_row_values = mtv.styles_editor.tree.item(mtv.styles_editor.tree.get_children()[0])["values"]
+assert style_row_values[1] == "cwell extraStyle"
+
+print("PASS: in-GUI edit/new/delete for Planes/Contacts/Aliases/Styles.")
 
 # -- Save Edits / relaunch persistence -------------------------------
 app._save_project()
@@ -67,6 +93,7 @@ root.update()
 edited_plane_name = mtv.planes_editor.entries[0].name
 edited_contact = (mtv.contacts_editor.entries[0].contact_type, mtv.contacts_editor.entries[0].layer2)
 edited_alias_name = mtv.aliases_editor.entries[0].name
+edited_style_name = mtv.styles_editor.entries[0].type_name
 
 # Simulate an app relaunch by constructing a fresh App against the same pdk_root.
 root.destroy()
@@ -91,7 +118,11 @@ reloaded_alias = next(a for a in mtv2.aliases_editor.entries if a.name == edited
 print("reloaded alias members_raw:", reloaded_alias.members_raw)
 assert reloaded_alias.members_raw == "nwell,pwell"
 
-print("PASS: Planes/Contacts/Aliases edits survive Save Edits + simulated relaunch.")
+reloaded_style = next(s for s in mtv2.styles_editor.entries if s.type_name == edited_style_name)
+print("reloaded style style_names:", reloaded_style.style_names)
+assert reloaded_style.style_names == ["cwell", "extraStyle"]
+
+print("PASS: Planes/Contacts/Aliases/Styles edits survive Save Edits + simulated relaunch.")
 
 # -- Real write-back export ------------------------------------------
 import tempfile
@@ -106,7 +137,16 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "ZZ" in text
     assert "metal9" in text
     assert "nwell,pwell" in text
-    print("PASS: real .tech write-back contains the edited plane/contact/alias values.")
+    assert "cwell extraStyle" in text
+    print("PASS: real .tech write-back contains the edited plane/contact/alias/style values.")
+
+    # -- The real, non-entry 'styletype mos' header line right after
+    # the styles section's own opening keyword still comes through
+    # completely verbatim -- confirms _render_section_patch's generic
+    # "copy any untracked line as-is" gap logic really does cover
+    # Styles' one real structural quirk, not just guessed to. ---
+    assert " styletype mos" in text
+    print("PASS: the real, non-entry 'styletype mos' header line comes through byte-for-byte verbatim.")
 
 root2.destroy()
 print("ALL PASS")
