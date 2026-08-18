@@ -352,6 +352,41 @@ class ComposeStatement:
 
     verb: str
     args: tuple[str, str, str]
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``)."""
+
+    @property
+    def arg1(self) -> str:
+        """A plain-string view of ``args[0]`` -- the real GUI form
+        field this dataclass's own fixed 3-tuple can't be edited
+        through directly (``gui/simple_list_editor.py``'s
+        ``SimpleListEditor`` only knows plain string fields via
+        ``getattr``/``setattr``, the same real reason ``StyleEntry``
+        exposes its own list field through ``style_names_text``
+        instead of editing it directly)."""
+
+        return self.args[0]
+
+    @arg1.setter
+    def arg1(self, value: str) -> None:
+        self.args = (value, self.args[1], self.args[2])
+
+    @property
+    def arg2(self) -> str:
+        return self.args[1]
+
+    @arg2.setter
+    def arg2(self, value: str) -> None:
+        self.args = (self.args[0], value, self.args[2])
+
+    @property
+    def arg3(self) -> str:
+        return self.args[2]
+
+    @arg3.setter
+    def arg3(self, value: str) -> None:
+        self.args = (self.args[0], self.args[1], value)
 
 
 @dataclass
@@ -363,6 +398,9 @@ class ConnectRule:
 
     types_a: str
     types_b: str
+    line_no: int = 0
+    """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
+    (see ``_safe_prefix_line_count``)."""
 
 
 @dataclass
@@ -570,6 +608,19 @@ class MagicTechnology:
     opening keyword -- handled for free by ``_scan_single_line_section``
     's own generic "not a real entry, copy verbatim" gap logic (see
     ``_parse_style_line`` below), not a special case."""
+    all_parsed_compose_line_nos: list[int] = field(default_factory=list)
+    compose_section_start_line: int = 0
+    compose_section_end_line: int = 0
+    all_parsed_connect_line_nos: list[int] = field(default_factory=list)
+    connect_section_start_line: int = 0
+    connect_section_end_line: int = 0
+    """Same real bookkeeping, for ``compose``/``connect`` -- confirmed
+    real, not assumed: both sections (535-591/597-621 in IHP's own real
+    ``ihp-sg13g2.tech``) also sit well before its first real ``include``
+    line, the same safely-mappable region every other editable domain
+    already relies on. Both are flat, one-real-line-per-entry sections
+    (``verb arg1 arg2 arg3`` / ``types_a types_b``) -- no special-case
+    gap logic needed the way ``styles`` needs for its own header line."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -928,30 +979,26 @@ def _parse_cifinput_recipes(lines: list[str]) -> list[CifInputRecipe]:
     return [by_name[name] for name in order]
 
 
-def _parse_compose(lines: list[str]) -> list[ComposeStatement]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        if len(parts) != 4 or parts[0] not in _COMPOSE_VERBS:
-            continue
-        entries.append(ComposeStatement(verb=parts[0], args=(parts[1], parts[2], parts[3])))
-    return entries
+def _parse_compose_line(stripped: str) -> ComposeStatement | None:
+    parts = stripped.split()
+    if len(parts) != 4 or parts[0] not in _COMPOSE_VERBS:
+        return None
+    return ComposeStatement(verb=parts[0], args=(parts[1], parts[2], parts[3]))
 
 
-def _parse_connect(lines: list[str]) -> list[ConnectRule]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        if len(parts) != 2:
-            continue
-        entries.append(ConnectRule(types_a=parts[0], types_b=parts[1]))
-    return entries
+def _parse_compose_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "compose", safe_through, _parse_compose_line)
+
+
+def _parse_connect_line(stripped: str) -> ConnectRule | None:
+    parts = stripped.split()
+    if len(parts) != 2:
+        return None
+    return ConnectRule(types_a=parts[0], types_b=parts[1])
+
+
+def _parse_connect_with_lines(lines: list[str], safe_through: int):
+    return _scan_single_line_section(lines, "connect", safe_through, _parse_connect_line)
 
 
 def _join_backslash_continuations(lines: list[str]) -> list[str]:
@@ -1141,8 +1188,12 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.cifinput_ignored_layers = _parse_cifinput_ignored_layers(sections.get("cifinput", []))
     tech.cifinput_layer_hints = _parse_cifinput_layer_hints(sections.get("cifinput", []))
     tech.cifinput_recipes = _parse_cifinput_recipes(sections.get("cifinput", []))
-    tech.compose = _parse_compose(sections.get("compose", []))
-    tech.connect = _parse_connect(sections.get("connect", []))
+    tech.compose, tech.all_parsed_compose_line_nos, tech.compose_section_start_line, tech.compose_section_end_line = (
+        _parse_compose_with_lines(lines, safe_through)
+    )
+    tech.connect, tech.all_parsed_connect_line_nos, tech.connect_section_start_line, tech.connect_section_end_line = (
+        _parse_connect_with_lines(lines, safe_through)
+    )
     tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.extract_resist = _parse_extract_resist(sections.get("extract", []))
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))

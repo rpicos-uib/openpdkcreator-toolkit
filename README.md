@@ -2499,6 +2499,61 @@ editor yet -- see Future Work.
   `ihp-sg13g2-GDS.tech`, the latter with no real `include` line at all)
   still export byte-identical with zero edits, catching the exact real
   bug above. Full suite re-run clean (61/61).
+- **Magic Tech write-back extended to Compose/Connect** -- the sixth
+  and seventh editable domains, closing what was originally grouped
+  with the "much harder mini-DSL sections" in this bullet's own
+  earlier text. **Actually reading `ComposeStatement`/`ConnectRule`
+  closely, not just trusting their old grouping, found they're both
+  exactly as flat as Planes/Contacts/Aliases**: every real `compose`
+  line is a fixed 4-token `verb arg1 arg2 arg3` (535-591 in IHP's own
+  `ihp-sg13g2.tech`), every real `connect` line a fixed 2-token
+  `types_a types_b` (597-621) -- both sit well before the file's first
+  real `include` line, the same safely-mappable region every other
+  editable domain already relies on, and neither carries a real
+  non-entry header line the way `styles` does. `pdklib/magic_tech.py`
+  gained `_parse_compose_line`/`_parse_compose_with_lines` and
+  `_parse_connect_line`/`_parse_connect_with_lines`, both thin wrappers
+  around the existing, unmodified `_scan_single_line_section` scanner
+  -- no new parsing machinery needed. `pdklib/magic_tech_writer.py`
+  gained two more `_render_section_patch` regions: Compose's own
+  four-token line reuses `_render_contact_line`'s exact real approach
+  (capture each real original separator, always reuse it verbatim
+  regardless of which token changed -- safe here, unlike Styles'
+  own bug, since every token slot is fixed and none of them packs a
+  variable-length list); Connect needed nothing more than
+  `_render_alias_line`'s own shape (`name`, separator, one raw `rest`
+  string) since `types_a`/`types_b` are already plain strings, not
+  lists. The GUI side reuses `SimpleListEditor` again: `ConnectRule`
+  needed no new property at all (both fields already plain strings);
+  `ComposeStatement`'s own fixed `args` 3-tuple gained `arg1`/`arg2`/
+  `arg3` properties (getters/setters over the tuple), the same real
+  "expose a non-string field as a plain string for the generic editor"
+  shape `StyleEntry.style_names_text` already established. One real,
+  necessary adaptation in `project_io.py`: `yaml.safe_dump` has no
+  default representer for a plain Python tuple, so `magic_compose`'s
+  own serialization casts `args` to a real list before dumping (and
+  back to a tuple on load) -- found by reasoning about the real
+  serialization path before writing it, not by a failed test. Persists
+  across a relaunch via `project_io.py`'s new `magic_compose`/
+  `magic_connect`, same as every other domain. A pre-existing test
+  (`test_magic_new_tabs.py`) referenced the old, now-removed read-only
+  `compose_tree`/`connect_tree` widgets directly; updated to the new
+  `compose_editor.tree`/`connect_editor.tree` paths, same real
+  underlying Treeview. Verified for real, driven:
+  `tests/test_magic_planes_contacts_aliases.py` (extended) -- 39 real
+  Compose rows and 20 real Connect rows load; in-GUI edit (including a
+  Compose `arg2` edit through its own property) /New/Delete for both;
+  edits survive Save Edits and a simulated relaunch; a real `main.py
+  export-magic-types` write-back afterward contains the edited values.
+  `tests/test_magic_tech_writer.py` re-confirms both real `.tech`
+  files still export byte-identical with zero edits -- Compose/Connect
+  needed no Styles-style whitespace-preservation fix, confirmed rather
+  than assumed, since both are genuinely fixed-token-count lines with
+  no variable-length blob to collapse. Full suite re-run clean
+  (61/61). Verified live via noVNC too: both new tabs show a real
+  list+form editor identical in shape to Planes/Contacts/Aliases, and
+  a live field edit (Compose's own Arg 2) persists correctly across a
+  sub-tab switch.
 
 ## Future work
 
@@ -2612,13 +2667,15 @@ models, ...), not just read/display layers. Concretely, still open:
   survives `File > Save Edits` and a simulated relaunch, and a real
   `main.py export-magic-types` write-back afterward contains exactly
   those edited values. **Deliberately still out of scope this pass**
-  (documented honestly, not silently dropped): the much harder
-  mini-DSL sections (`cifoutput`/`cifinput`/`compose`/`connect`/`drc`/
-  `extract`, eleven real sub-tabs combined) -- none of these fit the
-  "one flat entry per line" shape this pass's shared machinery relies
-  on; each would need its own real editor design, real separate future
-  work. (Styles, once also in this list, is done -- see the dedicated
-  changelog entry below.)
+  (documented honestly, not silently dropped): the genuinely harder
+  mini-DSL sections (`cifoutput`/`cifinput`/`drc`/`extract`, nine real
+  sub-tabs combined) -- none of these fit the "one flat entry per line"
+  shape this pass's shared machinery relies on; each would need its
+  own real editor design, real separate future work. (Styles/Compose/
+  Connect, once also in this list, are done -- see the dedicated
+  changelog entries below; Compose/Connect turned out to be exactly as
+  flat as Planes/Contacts/Aliases once actually read closely, not the
+  harder shape they were originally grouped with.)
 - "Pre-pointed" Magic/KLayout launch guidance is back in
   `eda_tools.py`, pointed at real files this project has since
   downloaded and read: Magic launches with IHP's own real, official

@@ -729,6 +729,8 @@ class App(ttk.Frame):
             magic_contacts=self.magic_tech_view.collect_contacts_by_tech(),
             magic_aliases=self.magic_tech_view.collect_aliases_by_tech(),
             magic_styles=self.magic_tech_view.collect_styles_by_tech(),
+            magic_compose=self.magic_tech_view.collect_compose_by_tech(),
+            magic_connect=self.magic_tech_view.collect_connect_by_tech(),
             layers=self._layers_by_lyp_path(),
         )
         self.status.set(f"Saved edits to {path}")
@@ -1135,6 +1137,14 @@ class App(ttk.Frame):
                 tech = self.magic_tech_view.technologies.get(tech_name)
                 if tech is not None:
                     tech.styles = styles
+            for tech_name, statements in saved.magic_compose.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.compose = statements
+            for tech_name, rules in saved.magic_connect.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.connect = rules
             self.magic_tech_view._refresh_all()
             self.apply_saved_lef_pin_overrides(saved.lef_pins)
             self.lef_view._refresh_all()

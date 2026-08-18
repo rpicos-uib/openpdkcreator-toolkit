@@ -39,7 +39,7 @@ from pathlib import Path
 import yaml
 
 from .pdklib.lef import LefPin, LefPort
-from .pdklib.magic_tech import AliasEntry, ContactEntry, PlaneEntry, StyleEntry, TypeEntry
+from .pdklib.magic_tech import AliasEntry, ComposeStatement, ConnectRule, ContactEntry, PlaneEntry, StyleEntry, TypeEntry
 from .models import DesignRule, Layer
 
 SAVE_DIR = Path(__file__).resolve().parents[1] / "saves"
@@ -59,10 +59,13 @@ def save_state(
     magic_contacts: dict[str, list[ContactEntry]] | None = None,
     magic_aliases: dict[str, list[AliasEntry]] | None = None,
     magic_styles: dict[str, list[StyleEntry]] | None = None,
+    magic_compose: dict[str, list[ComposeStatement]] | None = None,
+    magic_connect: dict[str, list[ConnectRule]] | None = None,
     layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
-    *magic_planes*/*magic_contacts*/*magic_aliases*/*magic_styles*: the
+    *magic_planes*/*magic_contacts*/*magic_aliases*/*magic_styles*/
+    *magic_compose*/*magic_connect*: the
     same real shape, one dict per newly-editable Magic Tech domain (see
     ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
@@ -106,6 +109,19 @@ def save_state(
             tech_name: [dataclasses.asdict(s) for s in styles]
             for tech_name, styles in (magic_styles or {}).items()
         },
+        "magic_compose": {
+            # args is a real, fixed 3-tuple -- yaml.safe_dump has no
+            # default representer for a plain tuple (only list/dict/
+            # scalars), so it's cast to a list here, same real reason
+            # ComposeStatement.arg1/arg2/arg3 exist as properties for
+            # the GUI editor rather than editing the tuple in place.
+            tech_name: [{**dataclasses.asdict(c), "args": list(c.args)} for c in statements]
+            for tech_name, statements in (magic_compose or {}).items()
+        },
+        "magic_connect": {
+            tech_name: [dataclasses.asdict(r) for r in rules]
+            for tech_name, rules in (magic_connect or {}).items()
+        },
         "lef_pins": {
             lef_path: {
                 macro_name: [dataclasses.asdict(pin) for pin in pins]
@@ -132,6 +148,8 @@ class LoadedState:
     magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
     magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
     magic_styles: dict[str, list[StyleEntry]] = dataclasses.field(default_factory=dict)
+    magic_compose: dict[str, list[ComposeStatement]] = dataclasses.field(default_factory=dict)
+    magic_connect: dict[str, list[ConnectRule]] = dataclasses.field(default_factory=dict)
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
@@ -167,6 +185,14 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [StyleEntry(**s) for s in styles]
         for tech_name, styles in data.get("magic_styles", {}).items()
     }
+    magic_compose = {
+        tech_name: [ComposeStatement(**{**c, "args": tuple(c["args"])}) for c in statements]
+        for tech_name, statements in data.get("magic_compose", {}).items()
+    }
+    magic_connect = {
+        tech_name: [ConnectRule(**r) for r in rules]
+        for tech_name, rules in data.get("magic_connect", {}).items()
+    }
     lef_pins = {
         lef_path: {
             macro_name: [_load_lef_pin(p) for p in pins]
@@ -182,7 +208,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
         magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
-        magic_styles=magic_styles,
+        magic_styles=magic_styles, magic_compose=magic_compose, magic_connect=magic_connect,
         layers=layers,
     )
 
