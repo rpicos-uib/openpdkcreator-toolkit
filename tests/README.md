@@ -62,6 +62,32 @@ real tracked project content) at the start and remove them at the
 end -- each is fully self-contained, runnable independently, in any
 order, repeatedly.
 
+## Recorded full-suite runs
+
+`results/` holds occasional, dated, full-suite run logs -- a real,
+committed record of "the whole suite passed, on this date, and here's
+every real `PASS:` line from every test," not just the terse
+`run_all.sh` summary (which only prints a failing test's own last few
+lines, nothing at all on success). Not automated or regenerated on
+every run -- added deliberately, by hand, when a record is worth
+keeping (e.g. after a significant batch of changes). To make one:
+
+```bash
+podman exec -e DISPLAY=:1 <container-name> bash -lc '
+cd /foss/designs
+rm -f /tmp/test_*.py.log
+bash tests/run_all.sh
+for f in tests/test_*.py; do
+  echo ""; echo "### $(basename "$f")"
+  cat "/tmp/$(basename "$f").log"
+done
+' > tests/results/run_all_YYYY-MM-DD.log
+```
+
+`results/run_all_2026-08-18.log` is the first one -- 58/58 passing,
+captured right after this project's own menu-restructuring/multi-
+project-directory work (see the main README's own changelog).
+
 ## Adding a new test
 
 Match the existing shape: a plain script, not a pytest `test_...()`
