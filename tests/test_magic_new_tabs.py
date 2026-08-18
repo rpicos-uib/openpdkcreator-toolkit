@@ -18,7 +18,7 @@ root.update()
 
 assert len(mtv.compose_editor.tree.get_children()) == 39, len(mtv.compose_editor.tree.get_children())
 assert len(mtv.connect_editor.tree.get_children()) == 20, len(mtv.connect_editor.tree.get_children())
-assert len(mtv.drc_tree.get_children()) == 192, len(mtv.drc_tree.get_children())  # width/spacing/maxwidth only -- angles moved to drc_angles_editor
+assert len(mtv.drc_checks_editor.tree.get_children()) == 192, len(mtv.drc_checks_editor.tree.get_children())  # width/spacing/maxwidth
 assert len(mtv.drc_angles_editor.tree.get_children()) == 17, len(mtv.drc_angles_editor.tree.get_children())
 assert len(mtv.extract_resist_editor.tree.get_children()) == 30, len(mtv.extract_resist_editor.tree.get_children())
 assert len(mtv.extract_plane_order_editor.tree.get_children()) == 14, len(mtv.extract_plane_order_editor.tree.get_children())
@@ -30,9 +30,9 @@ print("compose row 0:", row)
 assert row[0] == "compose"
 
 drc_row = None
-for iid in mtv.drc_tree.get_children():
-    values = mtv.drc_tree.item(iid)["values"]
-    if "Act.a" in str(values[3]):
+for iid in mtv.drc_checks_editor.tree.get_children():
+    values = mtv.drc_checks_editor.tree.item(iid)["values"]
+    if "Act.a" in str(values[4]):
         drc_row = values
         break
 print("drc Act.a row:", drc_row)

@@ -153,9 +153,9 @@ _CIFINPUT_IGNORE_RE = re.compile(r"^\s*ignore\s+(\S+)")
 _CIFINPUT_CALMA_RE = re.compile(r"^\s*calma\s+(\S+)\s+(\d+)\s+(\d+|\*)")
 _CIFINPUT_RECIPE_START_RE = re.compile(r"^\s*(layer|templayer)\s+(\S+)\s+(\S+)\s*$")
 _COMPOSE_VERBS = ("compose", "decompose", "paint")
-_WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
-_SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
-_MAXWIDTH_RE = re.compile(r'^maxwidth\s+(\S+)\s+(-?\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
+_WIDTH_RE = re.compile(r'^width\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
+_SPACING_RE = re.compile(r'^spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
+_MAXWIDTH_RE = re.compile(r'^maxwidth\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
 _ANGLES_RE = re.compile(r'^angles\s+(\S+)\s+(\d+)\s+(?:\S+\s+)*"([^"]*)"\s*$')
 _TRAILING_PARENS_RE = re.compile(r"\(([^()]+)\)\s*$")
 _RESIST_RE = re.compile(r"^resist\s+(\S+)\s+(-?\d+)\s*$")
@@ -508,22 +508,88 @@ class ConnectRule:
 
 @dataclass
 class MagicDrcCheck:
-    """One real 'width'/'spacing' statement from the drc section --
-    see this module's own docstring for the real, empirically-confirmed
-    value -> micron conversion and real match-rate numbers."""
+    """One real 'width'/'spacing'/'maxwidth' statement from the drc
+    section -- see this module's own docstring for the real,
+    empirically-confirmed value -> micron conversion and real
+    match-rate numbers. **Editable, with a real prerequisite fixed
+    first**: a real, confirmed `mode`/exception-list filler token (or
+    tokens) routinely sits between the numeric value and the quoted
+    message (e.g. `touching_ok`/`touching_illegal`/`surround_ok`/
+    `bend_ok`/`both`, sometimes followed by a real comma-separated
+    exception layer list) -- previously matched by a non-capturing
+    regex group and silently discarded, never modeled anywhere. Making
+    this domain editable without capturing that content first would
+    have silently dropped it on any edit; ``filler_raw`` below closes
+    that gap."""
 
     check_type: str
-    """"width" or "spacing"."""
+    """"width", "spacing", or "maxwidth"."""
     layer_args: list[list[str]]
-    """One raw, comma-split real Magic type-list for "width"; two for
-    "spacing" (layer1, layer2)."""
+    """One raw, comma-split real Magic type-list for "width"/
+    "maxwidth"; two for "spacing" (layer1, layer2)."""
     value_um: float
     message: str
     rule_ids_raw: str | None
     """Raw text of a trailing '(...)' in the message, when present
     (e.g. "NW.b", or a real compound case like "Sal.c + Sal.d") --
     kept as one raw string, not split, since a compound case doesn't
-    cleanly separate into independent rule IDs without guessing."""
+    cleanly separate into independent rule IDs without guessing.
+    Read-only derived from ``message`` (which already contains this
+    same text) -- editing ``message`` is the one real way to change a
+    rule ID, so this field is never separately written back."""
+    filler_raw: str = ""
+    """The real, raw `mode`/exception-list text between the numeric
+    value and the quoted message, stripped of trailing whitespace, or
+    ``""`` when a real line has none (some do, e.g. every real
+    `spacing dnwell dnwell ...` line goes straight to `touching_ok`
+    with no further exception list). Kept fully raw and positional,
+    same 'don't guess further semantics' discipline as
+    ``ComposeStatement``/``ExtractMiscStatement`` -- this project
+    doesn't assert what a given mode keyword means or which layers in
+    an exception list play which role."""
+    start_line: int = 0
+    end_line: int = 0
+    """The real, 1-indexed line range this entry's own real source
+    spans (both inclusive) -- real `width`/`spacing`/`maxwidth` lines
+    wrap across physical lines far more often than `device`/`angles`
+    do (confirmed real: a real backslash continuation can split
+    anywhere -- mid layer-list, before the filler, or right before the
+    quoted message), so every entry here is range-tracked the same way
+    regardless of whether a given real line happens to wrap. Same real
+    range-tracking shape as ``ExtractDevice.start_line``/``end_line``
+    (see that dataclass's own docstring for why a range, not a single
+    ``line_no``)."""
+
+    @property
+    def layers_text(self) -> str:
+        """A plain-string view of ``layer_args`` -- one comma-joined
+        real type-list per group, ` | `-separated between groups (one
+        group for width/maxwidth, two for spacing) -- the same real
+        shape the read-only Treeview already rendered this as before
+        this domain gained an editor."""
+
+        return " | ".join(",".join(group) for group in self.layer_args)
+
+    @layers_text.setter
+    def layers_text(self, value: str) -> None:
+        self.layer_args = [group.split(",") for group in value.split(" | ")]
+
+    @property
+    def value_text(self) -> str:
+        """A plain-string view of ``value_um`` -- same real reason
+        ``ExtractResist.milliohms_text`` exists. The real, empirically-
+        confirmed ``/1000`` file-unit-to-micron conversion (see this
+        module's own docstring) is reversed at write-back time, in
+        ``pdklib/magic_tech_writer.py``, not here."""
+
+        return f"{self.value_um:g}"
+
+    @value_text.setter
+    def value_text(self, value: str) -> None:
+        try:
+            self.value_um = float(value)
+        except ValueError:
+            pass
 
 
 @dataclass
@@ -1003,21 +1069,27 @@ class MagicTechnology:
     its own independent, individually-ranged entry, same as
     ``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows."""
     all_parsed_drc_angle_ranges: list[tuple[int, int]] = field(default_factory=list)
+    all_parsed_drc_check_ranges: list[tuple[int, int]] = field(default_factory=list)
     drc_section_start_line: int = 0
     drc_section_end_line: int = 0
     """Same real range-based bookkeeping as
     ``all_parsed_extract_device_ranges``/``extract_section_start_line``/
     ``extract_section_end_line`` above, for the real ``drc`` section's
-    own real ``angles`` statements (``MagicAngleCheck``) --
-    structurally the same real "spliced in from a separate real file"
-    situation (``ihp-sg13g2-drc.tech``, confirmed real: no ``include``
-    line of its own, spans lines 23-970 there). ``MagicDrcCheck``'s own
-    ``width``/``spacing``/``maxwidth`` statements share this same
-    section but stay read-only for now -- see ``MagicAngleCheck``'s
-    own docstring for why (a real, currently-unmodeled ``mode``/
-    exception-list filler these three lines routinely carry, unlike
-    ``angles``, would be silently dropped by an edit until that content
-    is captured into a real field first)."""
+    own real ``angles`` statements (``MagicAngleCheck``) and
+    ``width``/``spacing``/``maxwidth`` statements (``MagicDrcCheck``,
+    now that ``filler_raw`` closes the real gap that kept it read-only
+    -- see that dataclass's own docstring) -- structurally the same
+    real "spliced in from a separate real file" situation
+    (``ihp-sg13g2-drc.tech``, confirmed real: no ``include`` line of
+    its own, spans lines 23-970 there). Both real sub-structures share
+    this same section, the same "one section, more than one
+    independently-tracked group" shape ``extract``'s own five
+    sub-structures already established. Every real drc-section
+    construct this parser recognizes is now editable -- this section
+    has no remaining read-only content of its own (real
+    `surround`/`edge4way`/`variants`/... constructs remain entirely
+    unparsed, not merely read-only -- see this module's own docstring
+    for why)."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -1463,36 +1535,36 @@ def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[Magic
             if match is None:
                 skipped.append(stripped)
                 continue
-            layers_raw, value, message = match.groups()
+            layers_raw, value, filler, message = match.groups()
             id_match = _TRAILING_PARENS_RE.search(message)
             checks.append(MagicDrcCheck(
                 check_type="width", layer_args=[layers_raw.split(",")],
                 value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
-                rule_ids_raw=id_match.group(1) if id_match else None,
+                rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
             ))
         elif stripped.startswith("spacing "):
             match = _SPACING_RE.match(stripped)
             if match is None:
                 skipped.append(stripped)
                 continue
-            layer1, layer2, value, message = match.groups()
+            layer1, layer2, value, filler, message = match.groups()
             id_match = _TRAILING_PARENS_RE.search(message)
             checks.append(MagicDrcCheck(
                 check_type="spacing", layer_args=[layer1.split(","), layer2.split(",")],
                 value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
-                rule_ids_raw=id_match.group(1) if id_match else None,
+                rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
             ))
         elif stripped.startswith("maxwidth "):
             match = _MAXWIDTH_RE.match(stripped)
             if match is None:
                 skipped.append(stripped)
                 continue
-            layers_raw, value, message = match.groups()
+            layers_raw, value, filler, message = match.groups()
             id_match = _TRAILING_PARENS_RE.search(message)
             checks.append(MagicDrcCheck(
                 check_type="maxwidth", layer_args=[layers_raw.split(",")],
                 value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
-                rule_ids_raw=id_match.group(1) if id_match else None,
+                rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
             ))
         elif stripped.startswith("angles "):
             match = _ANGLES_RE.match(stripped)
@@ -1502,6 +1574,116 @@ def _parse_drc_checks(lines: list[str]) -> tuple[list[MagicDrcCheck], list[Magic
             layer, degrees, message = match.groups()
             angle_checks.append(MagicAngleCheck(layer=layer, degrees=int(degrees), message=message))
     return checks, angle_checks, skipped
+
+
+def _parse_drc_check_text(joined: str) -> MagicDrcCheck | None:
+    if joined.startswith("width "):
+        match = _WIDTH_RE.match(joined)
+        if match is None:
+            return None
+        layers_raw, value, filler, message = match.groups()
+        id_match = _TRAILING_PARENS_RE.search(message)
+        return MagicDrcCheck(
+            check_type="width", layer_args=[layers_raw.split(",")],
+            value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
+            rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
+        )
+    if joined.startswith("spacing "):
+        match = _SPACING_RE.match(joined)
+        if match is None:
+            return None
+        layer1, layer2, value, filler, message = match.groups()
+        id_match = _TRAILING_PARENS_RE.search(message)
+        return MagicDrcCheck(
+            check_type="spacing", layer_args=[layer1.split(","), layer2.split(",")],
+            value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
+            rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
+        )
+    if joined.startswith("maxwidth "):
+        match = _MAXWIDTH_RE.match(joined)
+        if match is None:
+            return None
+        layers_raw, value, filler, message = match.groups()
+        id_match = _TRAILING_PARENS_RE.search(message)
+        return MagicDrcCheck(
+            check_type="maxwidth", layer_args=[layers_raw.split(",")],
+            value_um=int(value) / _DRC_VALUE_TO_MICRONS, message=message,
+            rule_ids_raw=id_match.group(1) if id_match else None, filler_raw=filler.strip(),
+        )
+    return None
+
+
+def _parse_drc_checks_with_lines(lines: list[str], safe_through: int):
+    """Real, range-tracked scan for ``width``/``spacing``/``maxwidth``
+    -- the same real accumulator shape
+    ``_parse_drc_angles_with_lines``/``_parse_extract_devices_with_lines``
+    use, generalized to try all three real keywords (rather than one)
+    per pending accumulation, since **a real backslash continuation
+    here can split anywhere** -- mid layer-list, before the real
+    `mode`/exception-list filler, or right before the quoted message
+    (confirmed real, not assumed: e.g. a real
+    `spacing difffill ndc,pdc,...,hvpsc \\` line wraps *inside* its own
+    second real layer-list, not at a fixed position the way
+    `device`/`angles` always wrap right before their own trailing
+    content). Every other real drc-section line (`surround`/
+    `edge4way`/`variants`/... and their own real continuations,
+    comments) simply isn't one of these three keywords and is never
+    touched here, real read-only content copied verbatim at write-back
+    time via ``_render_section_patch``'s existing gap logic. Returns
+    (entries, all_ranges, section_start, section_end)."""
+
+    entries: list[MagicDrcCheck] = []
+    all_ranges: list[tuple[int, int]] = []
+    section_start = section_end = 0
+    in_section = False
+    pending: dict | None = None  # {"start": line_no, "text": str}
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+
+        if pending is not None:
+            piece = stripped[:-1].rstrip() if stripped.endswith("\\") else stripped
+            pending["text"] += " " + piece
+            if not stripped.endswith("\\"):
+                entry = _parse_drc_check_text(pending["text"])
+                safe_start = pending["start"] if pending["start"] and line_no <= safe_through else 0
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+                pending = None
+            continue
+
+        if not in_section:
+            if stripped == "drc":
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        if stripped.startswith(("width ", "spacing ", "maxwidth ")):
+            safe_start = line_no if section_start and line_no <= safe_through else 0
+            if stripped.endswith("\\"):
+                pending = {"start": safe_start, "text": stripped[:-1].rstrip()}
+            else:
+                entry = _parse_drc_check_text(stripped)
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+
+    return entries, all_ranges, section_start, section_end
 
 
 def _parse_angle_text(joined: str) -> MagicAngleCheck | None:
@@ -1809,15 +1991,21 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.connect, tech.all_parsed_connect_line_nos, tech.connect_section_start_line, tech.connect_section_end_line = (
         _parse_connect_with_lines(lines, safe_through)
     )
-    tech.drc_checks, _discarded_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
+    _discarded_checks, _discarded_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.drc_angle_checks, tech.all_parsed_drc_angle_ranges, tech.drc_section_start_line, tech.drc_section_end_line = (
         _parse_drc_angles_with_lines(lines, safe_through)
     )
-    # _discarded_angle_checks: _parse_drc_checks's own angle_checks
-    # return value is superseded here by the real, range-tracked
-    # _parse_drc_angles_with_lines above -- kept for its own
-    # width/spacing/maxwidth statistics (drc_skipped) only, same "don't
-    # guess, but don't over-verify either" discipline elsewhere.
+    tech.drc_checks, tech.all_parsed_drc_check_ranges, _drc_start2, _drc_end2 = (
+        _parse_drc_checks_with_lines(lines, safe_through)
+    )
+    # _discarded_checks/_discarded_angle_checks: _parse_drc_checks's
+    # own return values are superseded here by the real, range-tracked
+    # _parse_drc_checks_with_lines/_parse_drc_angles_with_lines above --
+    # kept for its own width/spacing/maxwidth/angles statistics
+    # (drc_skipped) only, same "don't guess, but don't over-verify
+    # either" discipline elsewhere. _drc_start2/_drc_end2 are the exact
+    # same real section bounds already captured above -- discarded, not
+    # asserted equal, same reasoning as extract's own repeated groups.
     (
         tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
         tech.extract_section_start_line, tech.extract_section_end_line,

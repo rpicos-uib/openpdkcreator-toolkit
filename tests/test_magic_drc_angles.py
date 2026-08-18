@@ -17,7 +17,7 @@ tech = mt.parse_tech_file(DRC_PATH)
 print("angle checks:", len(tech.drc_angle_checks))
 assert len(tech.drc_angle_checks) == 17
 assert all(a.start_line > 0 for a in tech.drc_angle_checks)
-assert len(tech.drc_checks) == 192  # width/spacing/maxwidth, still read-only, unaffected
+assert len(tech.drc_checks) == 192  # width/spacing/maxwidth, also range-tracked, unaffected by this test's own angle edits
 assert tech.drc_section_start_line == 23
 assert tech.drc_section_end_line == 970
 
@@ -42,7 +42,7 @@ original = DRC_PATH.read_text(encoding="utf-8", errors="replace")
 if not original.endswith("\n"):
     original += "\n"
 assert rendered == original
-print("PASS: no-edit export of ihp-sg13g2-drc.tech is byte-identical, including the still-read-only width/spacing/maxwidth content.")
+print("PASS: no-edit export of ihp-sg13g2-drc.tech is byte-identical, including the also-editable width/spacing/maxwidth content.")
 
 combined_path = PDK_ROOT / "libs.tech" / "magic" / "ihp-sg13g2.tech"
 combined_tech = mt.parse_tech_file(combined_path)
@@ -86,8 +86,8 @@ root.update()
 
 print("DRC angles rows:", len(mtv.drc_angles_editor.tree.get_children()))
 assert len(mtv.drc_angles_editor.tree.get_children()) == 17
-print("DRC width/spacing/maxwidth rows (read-only):", len(mtv.drc_tree.get_children()))
-assert len(mtv.drc_tree.get_children()) == 192
+print("DRC width/spacing/maxwidth rows:", len(mtv.drc_checks_editor.tree.get_children()))
+assert len(mtv.drc_checks_editor.tree.get_children()) == 192
 
 mtv.drc_angles_editor.tree.selection_set(mtv.drc_angles_editor.tree.get_children()[0])
 mtv.drc_angles_editor._on_select()

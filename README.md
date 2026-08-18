@@ -3051,6 +3051,67 @@ editor yet -- see Future Work.
   write-back lands the edited value in `ihp-sg13g2-drc.tech`
   specifically. `tests/test_magic_new_tabs.py` updated for the
   angles-now-in-its-own-editor split. Full suite re-run clean (70/70).
+- **Magic Tech write-back extended to `drc`'s own `width`/`spacing`/
+  `maxwidth` statements** (`MagicDrcCheck`) -- the fifteenth editable
+  domain, closing the real gap the previous changelog entry
+  deliberately left open. **The real prerequisite that entry called
+  out was fixed first, not skipped**: `MagicDrcCheck` gained a new
+  `filler_raw` field capturing the real `mode`/exception-list text
+  between the numeric value and the quoted message (previously matched
+  by a non-capturing regex group and silently discarded) -- confirmed
+  real and substantial, not a rare edge case: 133 of the real 192
+  entries carry one (`touching_ok`/`touching_illegal`/`surround_ok`/
+  `bend_ok`/`bend_illegal`/`both`/`corner_ok`/`manhattan_dist`,
+  sometimes followed by a real comma-separated exception layer list).
+  `_WIDTH_RE`/`_SPACING_RE`/`_MAXWIDTH_RE` (`pdklib/magic_tech.py`)
+  each gained a capturing group for it. **A real, found-not-assumed
+  structural fact drove the write-back design**: unlike `device`/
+  `angles`, whose own real backslash continuations always split right
+  before the same fixed trailing content, a real `width`/`spacing`/
+  `maxwidth` continuation can split *anywhere* -- confirmed real: a
+  real `spacing difffill ndc,pdc,...,hvpsc \\` line wraps *inside* its
+  own second real layer-list, not before the filler or message -- so
+  every entry is range-tracked (`start_line`/`end_line`) regardless of
+  whether a given real line happens to wrap, not just the ones
+  confirmed to. 70 of the real 192 entries do wrap (a real backslash
+  continuation), far more than `device`'s 5/50 or `angles`'s 1/17. A
+  new `_parse_drc_checks_with_lines` tries all three real keywords per
+  pending accumulation, reusing the exact accumulator shape
+  `_parse_drc_angles_with_lines` established. `layer_args`/`value_um`
+  are exposed to the generic editor via `layers_text` (one comma-list
+  for width/maxwidth, ` | `-separated two for spacing) and
+  `value_text`; `rule_ids_raw` stays deliberately non-editable (it's a
+  read-only-derived copy of text `message` already contains -- editing
+  `message` is the one real way to change a rule ID, avoiding a real
+  two-fields-can-drift-apart hazard). `pdklib/magic_tech_writer.py`'s
+  new `_render_drc_check_range` reverses the real, empirically-
+  confirmed `/1000` value scaling back to the raw file integer on
+  write (the one place in this module that conversion runs in
+  reverse) and reuses the same diff-first "preserve verbatim if
+  genuinely unchanged, else collapse to one fresh line" approach every
+  other ranged domain here uses. **A real, found-and-fixed gap from
+  this same work session**: `magic_drc_checks`
+  (`project_io.py`/`gui/app.py`) was initially missed from the
+  save/relaunch persistence wiring -- caught immediately by this
+  domain's own driven persistence test failing, not silently shipped.
+  Verified for real, driven: `tests/test_magic_drc_checks.py` (new) --
+  all 192 real entries load, correctly split 65/101/26 by type, all
+  range-tracked; 70 real wraps and 133 real filler-carrying lines both
+  captured exactly; a real continuation confirmed to split mid
+  layer-list still parses correctly; no-edit export of
+  `ihp-sg13g2-drc.tech` stays byte-identical; `ihp-sg13g2.tech`'s own
+  export stays byte-identical too; editing a real, wrapped,
+  filler-carrying entry preserves the filler and collapses it to one
+  fresh line while every *other* real wrap stays untouched; in-GUI
+  `filler_raw`/`value_text` edit/New/Delete round-trip correctly; the
+  edit survives `File > Save Edits` and a simulated relaunch (once the
+  persistence gap above was fixed); a real write-back lands the edited
+  value in `ihp-sg13g2-drc.tech` specifically.
+  `tests/test_magic_new_tabs.py`/`tests/test_magic_drc_angles.py`
+  updated for the `Treeview` -> `SimpleListEditor` swap. Every real
+  drc-section construct this parser recognizes is now editable -- both
+  `extract` and `drc` have no remaining read-only content of their own.
+  Full suite re-run clean (71/71).
 
 ## Future work
 
@@ -3084,16 +3145,18 @@ models, ...), not just read/display layers. Concretely, still open:
   more than one real physical line via backslash continuation) --
   every real construct this parser recognizes in `extract` is now
   editable, no read-only content remains in that section. `drc`'s own
-  `angles` statements are also now editable (`MagicAngleCheck`, the
-  same real ranged-domain shape `ExtractDevice` established, reused
-  directly with zero further changes to the shared write-back
-  machinery); `width`/`spacing`/`maxwidth` in that same section stay
-  deliberately read-only -- a real, confirmed `mode`/exception-list
-  filler those three routinely carry (`touching_ok`/
-  `touching_illegal`/`surround_ok`/a comma-separated exception layer
-  list) isn't captured into any field yet, so editing one today would
-  silently discard real content; capturing that filler first is real,
-  separate future work before those three can safely follow.
+  `angles` statements and its own `width`/`spacing`/`maxwidth`
+  statements are also now editable (`MagicAngleCheck`/`MagicDrcCheck`,
+  the same real ranged-domain shape `ExtractDevice` established) -- the
+  real `mode`/exception-list filler `width`/`spacing`/`maxwidth`
+  routinely carry (`touching_ok`/`touching_illegal`/`surround_ok`/a
+  comma-separated exception layer list) is now captured into a real
+  `filler_raw` field first, closing the gap that used to keep those
+  three read-only. Every real construct both `extract` and `drc`
+  parse is now editable -- no read-only content remains in either
+  section (real `surround`/`edge4way`/`variants`/`widespacing`/
+  `cifwidth`/`cifspacing`/... constructs are still entirely unparsed,
+  not merely read-only -- see the bullet above for why).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

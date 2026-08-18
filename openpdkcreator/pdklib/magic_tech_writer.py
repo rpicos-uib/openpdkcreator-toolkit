@@ -486,13 +486,13 @@ _ANGLES_LINE_RE = re.compile(r'^\s*angles\s+(\S+)\s+(\d+)\s+(?:\S+\s+)*"([^"]*)"
 
 
 def _render_angle_range(entry: magic_tech_mod.MagicAngleCheck, original_lines: list[str] | None) -> list[str]:
-    """The only real drc-section domain made editable so far (see
-    ``MagicAngleCheck``'s own docstring for why the other three,
-    ``width``/``spacing``/``maxwidth``, aren't yet) -- and, like
-    ``ExtractDevice``, a real *ranged* domain: one of the real 17
-    ``angles`` lines (``allm7``) wraps across two real physical lines
-    via a trailing ``\\`` continuation. Same real "preserve verbatim if
-    genuinely unchanged, else collapse to one fresh line" approach
+    """The first real drc-section domain made editable (see
+    ``MagicAngleCheck``'s own docstring for why it was safe before
+    ``width``/``spacing``/``maxwidth``) -- and, like ``ExtractDevice``,
+    a real *ranged* domain: one of the real 17 ``angles`` lines
+    (``allm7``) wraps across two real physical lines via a trailing
+    ``\\`` continuation. Same real "preserve verbatim if genuinely
+    unchanged, else collapse to one fresh line" approach
     ``_render_device_range`` already established."""
 
     if original_lines is not None:
@@ -503,6 +503,74 @@ def _render_angle_range(entry: magic_tech_mod.MagicAngleCheck, original_lines: l
             if (layer, int(degrees), message) == (entry.layer, entry.degrees, entry.message):
                 return list(original_lines)
     return [f' angles {entry.layer} {entry.degrees} "{entry.message}"']
+
+
+# Same real, empirically-confirmed file-unit-to-micron factor
+# pdklib/magic_tech.py's own _DRC_VALUE_TO_MICRONS uses -- duplicated
+# locally rather than reaching into that module's own private constant
+# across files, same reasoning _join_ranged_lines already documents.
+_DRC_VALUE_TO_MICRONS = 1000.0
+_WIDTH_LINE_RE = re.compile(r'^\s*width\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
+_SPACING_LINE_RE = re.compile(r'^\s*spacing\s+(\S+)\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
+_MAXWIDTH_LINE_RE = re.compile(r'^\s*maxwidth\s+(\S+)\s+(-?\d+)\s+((?:\S+\s+)*)"([^"]*)"\s*$')
+
+
+def _reparse_drc_check_range(joined: str):
+    """Real, local re-parse of a joined drc-check range's own text,
+    for diff-first comparison only -- mirrors
+    ``pdklib/magic_tech.py``'s own ``_parse_drc_check_text``,
+    reimplemented locally rather than reaching into that module's own
+    private helper across files. Returns
+    ``(check_type, layer_args, value_int, filler, message)`` or
+    ``None``."""
+
+    if joined.startswith("width "):
+        match = _WIDTH_LINE_RE.match(joined)
+        if match is None:
+            return None
+        layers_raw, value, filler, message = match.groups()
+        return "width", [layers_raw.split(",")], int(value), filler.strip(), message
+    if joined.startswith("spacing "):
+        match = _SPACING_LINE_RE.match(joined)
+        if match is None:
+            return None
+        layer1, layer2, value, filler, message = match.groups()
+        return "spacing", [layer1.split(","), layer2.split(",")], int(value), filler.strip(), message
+    if joined.startswith("maxwidth "):
+        match = _MAXWIDTH_LINE_RE.match(joined)
+        if match is None:
+            return None
+        layers_raw, value, filler, message = match.groups()
+        return "maxwidth", [layers_raw.split(",")], int(value), filler.strip(), message
+    return None
+
+
+def _render_drc_check_range(entry: magic_tech_mod.MagicDrcCheck, original_lines: list[str] | None) -> list[str]:
+    """``width``/``spacing``/``maxwidth`` -- the drc section's second
+    real ranged domain, and a real, genuinely messier shape than
+    ``angles``/``ExtractDevice``: a real backslash continuation here
+    can split anywhere (mid layer-list, before the real ``mode``/
+    exception-list filler, or right before the quoted message), not
+    always right before the same fixed trailing content, so every
+    entry is range-tracked regardless of whether it happens to wrap
+    (see ``MagicDrcCheck.start_line``'s own docstring). Same real
+    "preserve verbatim if genuinely unchanged, else collapse to one
+    fresh line" approach every other ranged domain here uses -- the
+    real, empirically-confirmed ``/1000`` value scaling is reversed
+    here (multiply back to the real raw file integer), the one real
+    place in this module that conversion runs in reverse."""
+
+    if original_lines is not None:
+        joined = _join_ranged_lines(original_lines)
+        parsed = _reparse_drc_check_range(joined)
+        if parsed is not None:
+            current_value_int = round(entry.value_um * _DRC_VALUE_TO_MICRONS)
+            if parsed == (entry.check_type, entry.layer_args, current_value_int, entry.filler_raw, entry.message):
+                return list(original_lines)
+    value_int = round(entry.value_um * _DRC_VALUE_TO_MICRONS)
+    layers_part = " ".join(",".join(group) for group in entry.layer_args)
+    filler_part = f" {entry.filler_raw}" if entry.filler_raw else ""
+    return [f' {entry.check_type} {layers_part} {value_int}{filler_part} "{entry.message}"']
 
 
 def _render_section_patch(
@@ -628,7 +696,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
         (
             tech.drc_section_start_line, tech.drc_section_end_line,
             [],
-            [(tech.drc_angle_checks, tech.all_parsed_drc_angle_ranges, _render_angle_range)],
+            [
+                (tech.drc_angle_checks, tech.all_parsed_drc_angle_ranges, _render_angle_range),
+                (tech.drc_checks, tech.all_parsed_drc_check_ranges, _render_drc_check_range),
+            ],
         ),
     ]
     active_sections = sorted(

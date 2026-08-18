@@ -302,12 +302,12 @@ class MagicTechView(ttk.Frame):
 
     def _build_drc_tab(self, notebook: ttk.Notebook):
         """Real ``width``/``spacing``/``maxwidth``/``angles`` DRC
-        statements from the ``drc`` section -- only ``angles`` is
-        editable (see ``MagicAngleCheck``'s own docstring, in
-        ``pdklib/magic_tech.py``, for why the other three aren't yet:
-        a real, currently-unmodeled ``mode``/exception-list filler
-        those three routinely carry would be silently dropped by an
-        edit)."""
+        statements from the ``drc`` section -- both are now editable
+        (see ``MagicDrcCheck``'s own docstring, in
+        ``pdklib/magic_tech.py``, for the real ``mode``/exception-list
+        filler that had to be captured into ``filler_raw`` first, and
+        ``MagicAngleCheck``'s own for why ``angles`` needed no such
+        prerequisite)."""
 
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="DRC (Magic)")
@@ -315,20 +315,28 @@ class MagicTechView(ttk.Frame):
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(1, weight=1)
 
-        ttk.Label(frame, text="width/spacing/maxwidth (read-only):").grid(
+        ttk.Label(frame, text="width/spacing/maxwidth:").grid(
             row=0, column=0, sticky="w", padx=(0, 4)
         )
-        self.drc_tree = ttk.Treeview(
-            frame, columns=("check_type", "layers", "value_um", "rule_ids", "message"), show="headings",
+        checks_frame = ttk.Frame(frame)
+        checks_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+        self.drc_checks_editor = SimpleListEditor(
+            checks_frame,
+            [("check_type", "Check Type", 80), ("layers_text", "Layers", 200), ("value_text", "Value Um", 70),
+             ("filler_raw", "Mode/Exceptions", 160), ("message", "Message", 280)],
+            lambda: magic_tech_mod.MagicDrcCheck(
+                check_type="width", layer_args=[["newlayer"]], value_um=0.0, message="new message",
+                rule_ids_raw=None,
+            ),
+            entry_label="DRC Check",
+            help_text="Real drc-section 'width|spacing|maxwidth LAYERS VALUE [mode] \"MESSAGE\"' statement. "
+                      "'Layers' is one comma-separated real type-list for width/maxwidth, two ' | '-separated "
+                      "lists for spacing. 'Mode/Exceptions' is the real, raw mode/exception-list text between "
+                      "the value and the message (e.g. 'touching_ok') -- edited raw and positional, argument "
+                      "semantics aren't asserted. A real rule ID lives inside the message's own trailing "
+                      "'(...)' -- edit the message directly to change it.",
         )
-        for col, label, width in zip(
-            ("check_type", "layers", "value_um", "rule_ids", "message"),
-            ("Check Type", "Layers", "Value Um", "Rule Ids", "Message"),
-            (80, 220, 80, 100, 300),
-        ):
-            self.drc_tree.heading(col, text=label)
-            self.drc_tree.column(col, width=width, anchor="w")
-        self.drc_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+        self.drc_checks_editor.pack(fill="both", expand=True)
 
         ttk.Label(frame, text="angles:").grid(row=0, column=1, sticky="w")
         angles_frame = ttk.Frame(frame)
@@ -554,6 +562,7 @@ class MagicTechView(ttk.Frame):
         self.extract_coeff_editor.commit_pending_edits()
         self.extract_devices_editor.commit_pending_edits()
         self.drc_angles_editor.commit_pending_edits()
+        self.drc_checks_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -603,6 +612,9 @@ class MagicTechView(ttk.Frame):
     def collect_drc_angle_checks_by_tech(self) -> dict[str, list[magic_tech_mod.MagicAngleCheck]]:
         return {name: tech.drc_angle_checks for name, tech in self.technologies.items()}
 
+    def collect_drc_checks_by_tech(self) -> dict[str, list[magic_tech_mod.MagicDrcCheck]]:
+        return {name: tech.drc_checks for name, tech in self.technologies.items()}
+
     # -- data ---------------------------------------------------------------
 
     def load(self):
@@ -648,9 +660,9 @@ class MagicTechView(ttk.Frame):
         self.extract_coeff_editor.commit_pending_edits()
         self.extract_devices_editor.commit_pending_edits()
         self.drc_angles_editor.commit_pending_edits()
+        self.drc_checks_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
-            self.drc_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -673,6 +685,7 @@ class MagicTechView(ttk.Frame):
             self.extract_coeff_editor.set_entries(None)
             self.extract_devices_editor.set_entries(None)
             self.drc_angles_editor.set_entries(None)
+            self.drc_checks_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -693,6 +706,7 @@ class MagicTechView(ttk.Frame):
         self.extract_coeff_editor.set_entries(tech.extract_cap_coefficients)
         self.extract_devices_editor.set_entries(tech.extract_devices)
         self.drc_angles_editor.set_entries(tech.drc_angle_checks)
+        self.drc_checks_editor.set_entries(tech.drc_checks)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -702,13 +716,6 @@ class MagicTechView(ttk.Frame):
                     ",".join(recipe.base_layers), ops_text,
                 ),
             )
-        for check in tech.drc_checks:
-            layers_text = " | ".join(",".join(group) for group in check.layer_args)
-            self.drc_tree.insert(
-                "", "end",
-                values=(check.check_type, layers_text, f"{check.value_um:g}", check.rule_ids_raw or "", check.message),
-            )
-
         summary = (
             f"format {tech.format} | v{tech.version} -- {tech.description} | "
             f"planes:{len(tech.planes)} types:{len(tech.types)} contacts:{len(tech.contacts)} "
