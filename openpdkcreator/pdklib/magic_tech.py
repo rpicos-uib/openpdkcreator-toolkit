@@ -556,6 +556,40 @@ class ExtractResist:
 
 
 @dataclass
+class ExtractPlaneOrder:
+    """One real 'planeorder <name> <int>' line from the extract
+    section -- unlike ``ExtractResist``/``ExtractMiscStatement``'s own
+    ``contact`` entries, confirmed real to sit *before* the section's
+    first real ``variants (...)`` line (no real repeat-per-corner
+    wrinkle here), the same flat, single-occurrence-per-name shape
+    ``PlaneEntry`` already has."""
+
+    name: str
+    order: int
+    line_no: int = 0
+    """Same real, source-mapped line tracking as
+    ``ExtractMiscStatement.line_no`` (see ``_safe_prefix_line_count``)."""
+
+    @property
+    def order_text(self) -> str:
+        """A plain-string view of ``order`` -- the real GUI form field
+        this dataclass's own ``int`` field can't be edited through
+        directly, same real reason ``CifInputLayerHint`` exposes
+        ``gds_layer_text`` instead of its own ``int`` field. Invalid
+        mid-edit text is simply ignored (keeps the last real, valid
+        value), same discipline as that property."""
+
+        return str(self.order)
+
+    @order_text.setter
+    def order_text(self, value: str) -> None:
+        try:
+            self.order = int(value)
+        except ValueError:
+            pass
+
+
+@dataclass
 class ExtractCapCoefficient:
     """One real 'defaultoverlap'/'defaultsideoverlap'/'defaultareacap'/
     'defaultperimeter'/'defaultsidewall' line from the extract
@@ -682,7 +716,7 @@ class MagicTechnology:
     attempted and isn't listed here -- see this module's own
     docstring."""
     extract_resist: list[ExtractResist] = field(default_factory=list)
-    extract_plane_order: list[tuple[str, int]] = field(default_factory=list)
+    extract_plane_order: list[ExtractPlaneOrder] = field(default_factory=list)
     extract_cap_coefficients: list[ExtractCapCoefficient] = field(default_factory=list)
     """Real defaultoverlap/defaultsideoverlap/defaultareacap/
     defaultperimeter/defaultsidewall lines -- see
@@ -800,25 +834,35 @@ class MagicTechnology:
     directly, correctly ``0`` when parsed as part of ``ihp-sg13g2.tech``
     's own combined view."""
     all_parsed_extract_misc_line_nos: list[int] = field(default_factory=list)
-    extract_misc_section_start_line: int = 0
-    extract_misc_section_end_line: int = 0
-    """Same real bookkeeping, for extract-section ``contact``/
-    ``devresist``/``antenna``/``disconnect``/``substrate`` statements
-    (``ExtractMiscStatement``) -- **structurally the same real
-    "spliced in from a separate real file" situation as cifinput/
+    all_parsed_extract_plane_order_line_nos: list[int] = field(default_factory=list)
+    extract_section_start_line: int = 0
+    extract_section_end_line: int = 0
+    """Real bookkeeping for the ``extract`` section's own two flat,
+    editable sub-structures, ``ExtractMiscStatement`` (``contact``/
+    ``devresist``/``antenna``/``disconnect``/``substrate``) and
+    ``ExtractPlaneOrder`` (``planeorder``) -- **structurally the same
+    real "spliced in from a separate real file" situation as cifinput/
     cifoutput above**: the real ``extract`` section doesn't live in
     ``ihp-sg13g2.tech`` itself, it's spliced in from
     ``ihp-sg13g2-extract.tech`` via ``include`` (confirmed real: that
     fragment file has no real ``include`` line of its own, so its own
     content is safely, fully mappable when parsed directly -- same
-    resolution as cifinput/cifoutput, no new mechanism needed). Every
-    other real extract-section construct this parser also recognizes
-    (``resist``/``order``/the four cap-coefficient directives/
+    resolution as cifinput/cifoutput, no new mechanism needed). Both
+    sub-structures share these same section bounds (one real
+    ``extract``...``end`` block) the same way cifinput's own ignored-
+    layers/layer-hints tables already share one section -- see
+    ``pdklib/magic_tech_writer.py``'s own docstring for how write-back
+    handles a section with more than one independently-tracked group.
+    Every other real extract-section construct this parser also
+    recognizes (``resist``/the four cap-coefficient directives/
     ``device``) shares this same section but stays read-only -- see
     this module's own docstring for why (real ``variants`` PVT-corner
-    scoping and, for ``device``, real backslash-continued lines, make
-    those genuinely less uniform than this domain's own flat,
-    single-line shape)."""
+    scoping for ``resist``, and, for ``device``, real backslash-
+    continued lines, make those genuinely less uniform than these two
+    domains' own flat, single-line shape; ``planeorder`` itself is
+    confirmed real to sit before the section's own first real
+    ``variants (...)`` line, so it never has ``resist``'s own real
+    per-corner repeat)."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -1315,14 +1359,23 @@ def _parse_extract_resist(lines: list[str]) -> list[ExtractResist]:
     return entries
 
 
-def _parse_extract_plane_order(lines: list[str]) -> list[tuple[str, int]]:
-    entries = []
-    for line in lines:
-        match = _PLANEORDER_RE.match(line.strip())
-        if match is None:
-            continue
-        entries.append((match.group(1), int(match.group(2))))
-    return entries
+def _parse_plane_order_line(stripped: str) -> ExtractPlaneOrder | None:
+    match = _PLANEORDER_RE.match(stripped)
+    if match is None:
+        return None
+    return ExtractPlaneOrder(name=match.group(1), order=int(match.group(2)))
+
+
+def _parse_extract_plane_order_with_lines(lines: list[str], safe_through: int):
+    """Same real ``_scan_single_line_section`` machinery
+    ``_parse_extract_misc_with_lines`` uses on this same shared
+    ``extract`` section -- every real line that isn't a ``planeorder``
+    statement (``resist``/cap-coefficient/``device``/``contact``/...
+    lines, ``variants`` lines, comments) simply doesn't match
+    ``_parse_plane_order_line`` and falls through as an untracked,
+    verbatim gap at write-back time."""
+
+    return _scan_single_line_section(lines, "extract", safe_through, _parse_plane_order_line)
 
 
 def _parse_extract_cap_coefficients(lines: list[str]) -> list[ExtractCapCoefficient]:
@@ -1449,13 +1502,19 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     )
     tech.drc_checks, tech.drc_angle_checks, tech.drc_skipped = _parse_drc_checks(sections.get("drc", []))
     tech.extract_resist = _parse_extract_resist(sections.get("extract", []))
-    tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
     tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))
     tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
     (
         tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
-        tech.extract_misc_section_start_line, tech.extract_misc_section_end_line,
+        tech.extract_section_start_line, tech.extract_section_end_line,
     ) = _parse_extract_misc_with_lines(lines, safe_through)
+    tech.extract_plane_order, tech.all_parsed_extract_plane_order_line_nos, _extract_start2, _extract_end2 = (
+        _parse_extract_plane_order_with_lines(lines, safe_through)
+    )
+    # _extract_start2/_extract_end2 are the exact same real section
+    # bounds as above (one shared extract...end block) -- discarded,
+    # not asserted equal, same "don't guess, but don't over-verify
+    # either" discipline cifinput's own two sub-structures already use.
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)

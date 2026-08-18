@@ -29,7 +29,8 @@ see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
 flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
-Misc** are editable -- Types keeps its own hand-written list + form pane (a real
+Misc**/**Extract**'s own **Plane order** sub-pane are editable -- Types
+keeps its own hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
 instead (flat, plain-string-field dataclasses, a clean fit for one
@@ -92,7 +93,15 @@ line can repeat once per real ``variants(...)`` PVT-corner block with a
 different value each time (the same real fact ``resist`` shares, still
 undocumented as a check here) -- each real occurrence is just its own
 independently-editable row, no attempt made to resolve which corner it
-belongs to. Every other remaining domain stays read-only (each would
+belongs to. **Extract**'s own **Plane order** sub-pane
+(``ExtractPlaneOrder`` -- real ``planeorder NAME ORDER`` lines) is
+editable the same way, sharing that same real ``extract`` section with
+Extract Misc -- confirmed real to sit entirely before the section's
+own first real ``variants (...)`` line, so (unlike ``contact``) it
+never has a real per-corner repeat; its own ``int``-typed ``order``
+field is exposed via ``order_text``, the same "expose a non-string
+field as a plain string" pattern as everywhere else in this module.
+Every other remaining domain stays read-only (each would
 need its own real editor design -- the genuinely harder mini-DSL
 sections aren't a clean fit for any existing editor shape; see
 README's own Future Work). Editing is in-memory, same as
@@ -239,12 +248,15 @@ class MagicTechView(ttk.Frame):
         self.extract_resist_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
 
         ttk.Label(frame, text="Plane order:").grid(row=0, column=1, sticky="w")
-        order_columns = ("name", "order")
-        self.extract_plane_order_tree = ttk.Treeview(frame, columns=order_columns, show="headings")
-        for col, width in zip(order_columns, (160, 60)):
-            self.extract_plane_order_tree.heading(col, text=col.title())
-            self.extract_plane_order_tree.column(col, width=width, anchor="w")
-        self.extract_plane_order_tree.grid(row=1, column=1, sticky="nsew")
+        order_frame = ttk.Frame(frame)
+        order_frame.grid(row=1, column=1, sticky="nsew")
+        self.extract_plane_order_editor = SimpleListEditor(
+            order_frame, [("name", "Name", 140), ("order_text", "Order", 60)],
+            lambda: magic_tech_mod.ExtractPlaneOrder(name="newplane", order=0),
+            entry_label="Plane Order Entry",
+            help_text="Real extract-section 'planeorder NAME ORDER' line.",
+        )
+        self.extract_plane_order_editor.pack(fill="both", expand=True)
 
     def _build_extract_coefficients_tab(self, notebook: ttk.Notebook):
         columns = ("directive", "args", "values")
@@ -429,6 +441,7 @@ class MagicTechView(ttk.Frame):
         self.cifinput_hints_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
+        self.extract_plane_order_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -462,6 +475,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_extract_misc_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractMiscStatement]]:
         return {name: tech.extract_misc for name, tech in self.technologies.items()}
+
+    def collect_extract_plane_order_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractPlaneOrder]]:
+        return {name: tech.extract_plane_order for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -503,10 +519,11 @@ class MagicTechView(ttk.Frame):
         self.cifinput_hints_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
+        self.extract_plane_order_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
-            self.extract_resist_tree, self.extract_plane_order_tree,
+            self.extract_resist_tree,
             self.extract_coeff_tree, self.extract_devices_tree,
         ):
             for row in tree.get_children():
@@ -525,6 +542,7 @@ class MagicTechView(ttk.Frame):
             self.cifinput_hints_editor.set_entries(None)
             self.cif_layers_editor.set_entries(None)
             self.extract_misc_editor.set_entries(None)
+            self.extract_plane_order_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -540,6 +558,7 @@ class MagicTechView(ttk.Frame):
         self.cifinput_hints_editor.set_entries(tech.cifinput_layer_hints)
         self.cif_layers_editor.set_entries(tech.cif_layers)
         self.extract_misc_editor.set_entries(tech.extract_misc)
+        self.extract_plane_order_editor.set_entries(tech.extract_plane_order)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -565,8 +584,6 @@ class MagicTechView(ttk.Frame):
             )
         for resist in tech.extract_resist:
             self.extract_resist_tree.insert("", "end", values=(resist.layer_spec, resist.milliohms_per_square))
-        for name, order in tech.extract_plane_order:
-            self.extract_plane_order_tree.insert("", "end", values=(name, order))
         for coeff in tech.extract_cap_coefficients:
             values_text = ", ".join(f"{v:g}" for v in coeff.values)
             self.extract_coeff_tree.insert("", "end", values=(coeff.directive, " ".join(coeff.args), values_text))
@@ -584,7 +601,8 @@ class MagicTechView(ttk.Frame):
             f"extract_resist:{len(tech.extract_resist)} "
             f"extract_cap_coefficients:{len(tech.extract_cap_coefficients)} "
             f"extract_devices:{len(tech.extract_devices)} "
-            f"extract_misc:{len(tech.extract_misc)}"
+            f"extract_misc:{len(tech.extract_misc)} "
+            f"extract_plane_order:{len(tech.extract_plane_order)}"
         )
         if tech.included_files:
             summary += f" | includes: {', '.join(tech.included_files)}"

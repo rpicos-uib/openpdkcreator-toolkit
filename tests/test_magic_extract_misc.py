@@ -17,8 +17,8 @@ tech = mt.parse_tech_file(EXTRACT_PATH)
 print("extract_misc entries:", len(tech.extract_misc))
 assert len(tech.extract_misc) > 0
 assert all(e.line_no > 0 for e in tech.extract_misc)
-assert tech.extract_misc_section_start_line > 0
-assert tech.extract_misc_section_end_line > tech.extract_misc_section_start_line
+assert tech.extract_section_start_line > 0
+assert tech.extract_section_end_line > tech.extract_section_start_line
 directives_present = {e.directive for e in tech.extract_misc}
 assert directives_present <= {"contact", "devresist", "antenna", "disconnect", "substrate"}
 print("PASS: real extract-section misc statements are now line-tracked when the fragment file is parsed directly.")
@@ -38,8 +38,8 @@ print("PASS: a real 'contact' name repeated across variants(...) corners is kept
 # come back 0, not guessed.
 combined_path = PDK_ROOT / "libs.tech" / "magic" / "ihp-sg13g2.tech"
 combined_tech = mt.parse_tech_file(combined_path)
-assert combined_tech.extract_misc_section_start_line == 0
-assert combined_tech.extract_misc_section_end_line == 0
+assert combined_tech.extract_section_start_line == 0
+assert combined_tech.extract_section_end_line == 0
 print("PASS: parsed as part of ihp-sg13g2.tech's own combined view, extract_misc's section bounds are correctly 0.")
 
 # --- No-edit export of the real fragment file is byte-identical ---

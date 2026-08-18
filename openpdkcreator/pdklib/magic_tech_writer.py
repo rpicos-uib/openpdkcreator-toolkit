@@ -7,16 +7,17 @@ real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
 **Connect**, **cifinput**'s own two flat sub-structures (ignored
 layers, layer hints), **cifoutput**'s own flat, editable-in-place
-``calma`` lines, and **extract**'s own flat ``ExtractMiscStatement``
-lines (``contact``/``devresist``/``antenna``/``disconnect``/
-``substrate``), the Magic Tech domains with a real form (see
-``gui/magic_tech_view.py``'s own docstring). Every other real section
-(cifinput's own recipe blocks/drc/every *other* real extract-section
-construct -- ``resist``/``order``/cap-coefficients/``device``/
-everything else ``magic_tech.py`` doesn't parse) is copied verbatim,
-untouched -- there's no editor for them, so nothing to write back;
-deliberately bounded, not attempted for every remaining real sub-tab
-at once (see README's own Future Work note on the remaining gap).
+``calma`` lines, and **extract**'s own two flat sub-structures,
+``ExtractMiscStatement`` (``contact``/``devresist``/``antenna``/
+``disconnect``/``substrate``) and ``ExtractPlaneOrder`` (``planeorder``),
+the Magic Tech domains with a real form (see ``gui/magic_tech_view.py``'s
+own docstring). Every other real section (cifinput's own recipe
+blocks/drc/every *other* real extract-section construct --
+``resist``/cap-coefficients/``device``/everything else
+``magic_tech.py`` doesn't parse) is copied verbatim, untouched --
+there's no editor for them, so nothing to write back; deliberately
+bounded, not attempted for every remaining real sub-tab at once (see
+README's own Future Work note on the remaining gap).
 
 Each real entry in every flat editable domain occupies exactly one
 real line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT``
@@ -36,7 +37,8 @@ line_no``/``ContactEntry.line_no``/``AliasEntry.line_no``/
 ``StyleEntry.line_no``/``ComposeStatement.line_no``/``ConnectRule.
 line_no``/``CifInputIgnoredLayer.line_no``/``CifInputLayerHint.
 line_no``/``CifOutputLayerMapping.line_no``/``ExtractMiscStatement.
-line_no`` (tracked at parse time, only when safely mappable back to
+line_no``/``ExtractPlaneOrder.line_no`` (tracked at parse time, only
+when safely mappable back to
 real file line numbers -- see ``_safe_prefix_line_count``'s own
 docstring) are used exactly the way
 ``pdklib/lef.py``'s ``LefPin.start_line``/``LefMacro.
@@ -107,25 +109,29 @@ header of its own, so both used to be silently filtered out of the
 Technology picker entirely (see ``gui/magic_tech_view.py``'s own
 docstring for the real fallback-naming fix).
 
-**extract's own ``ExtractMiscStatement`` lines are, structurally, the
-same "spliced in from a separate real file" case as cifinput/
-cifoutput above** -- real content lives in ``ihp-sg13g2-extract.tech``,
-included into ``ihp-sg13g2.tech`` -- **and, unlike either of those two,
-also share their real section with plenty of other, still-read-only
-extract content** (``resist``/``order``/cap-coefficient/``device``
-lines, real ``variants (...)`` corner-scoping lines, comments): all of
-that simply never matches ``_parse_extract_misc_line``, so it falls
-through ``_render_section_patch``'s existing "copy any untracked line
-verbatim" gap logic for free, the same way cifinput's own untouched
-recipe blocks already do alongside its two editable sub-structures
-sharing that section. **A real ``contact`` line can also repeat across
-more than one real ``variants`` corner block with a different real
-value each time** (confirmed real, the same structural fact
-``ExtractResist`` documents for ``resist``) -- handled the same way
-``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows already are:
-each real occurrence is its own real line, independently patched by
-its own real ``line_no``, with no attempt to resolve which corner a
-given row belongs to.
+**extract's own two flat sub-structures, ``ExtractMiscStatement`` and
+``ExtractPlaneOrder``, are, structurally, the same "spliced in from a
+separate real file" case as cifinput/cifoutput above** -- real content
+lives in ``ihp-sg13g2-extract.tech``, included into ``ihp-sg13g2.tech``
+-- **and share one real ``extract``...``end`` section both with each
+other and with plenty of other, still-read-only extract content**
+(``resist``/cap-coefficient/``device`` lines, real ``variants (...)``
+corner-scoping lines, comments), the same "one section, more than one
+independently-tracked group" shape cifinput's own ignored-layers/
+layer-hints tables already established: all of that untouched content
+simply never matches ``_parse_extract_misc_line``/
+``_parse_plane_order_line``, so it falls through
+``_render_section_patch``'s existing "copy any untracked line
+verbatim" gap logic for free. **A real ``contact`` line can also
+repeat across more than one real ``variants`` corner block with a
+different real value each time** (confirmed real, the same structural
+fact ``ExtractResist`` documents for ``resist``) -- handled the same
+way ``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows already
+are: each real occurrence is its own real line, independently patched
+by its own real ``line_no``, with no attempt to resolve which corner a
+given row belongs to. ``planeorder`` has no such wrinkle -- confirmed
+real to sit entirely before the section's own first real
+``variants (...)`` line, so every real name is unique, one row each.
 
 All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
@@ -163,6 +169,7 @@ _CIFINPUT_IGNORE_LINE_RE = re.compile(r"^(\s*)ignore(\s+)(\S+)(\s*)$")
 _CIFINPUT_HINT_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)(\s*)$")
 _CIFOUTPUT_CALMA_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s*)$")
 _EXTRACT_MISC_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
+_PLANEORDER_LINE_RE = re.compile(r"^(\s*)planeorder(\s+)(\S+)(\s+)(\d+)\s*$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -331,6 +338,21 @@ def _render_extract_misc_line(entry: magic_tech_mod.ExtractMiscStatement, origin
     return f"{indent}{entry.directive}{separator}{rest}"
 
 
+def _render_plane_order_line(entry: magic_tech_mod.ExtractPlaneOrder, original_line: str | None) -> str:
+    """Fixed two-token shape after the real ``planeorder`` keyword
+    (name, order) -- confirmed real to never carry the multi-space
+    column alignment `contact`'s own lines sometimes do, so the same
+    always-reuse-original-separators approach `_render_contact_line`/
+    `_render_compose_line` use is safe here too, no diff-first handling
+    needed."""
+
+    match = _PLANEORDER_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else " "
+    sep0 = match.group(2) if match else " "
+    sep1 = match.group(4) if match else " "
+    return f"{indent}planeorder{sep0}{entry.name}{sep1}{entry.order}"
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
 ) -> list[str]:
@@ -401,8 +423,11 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
             [(tech.cif_layers, tech.all_parsed_cif_layer_line_nos, _render_cifoutput_calma_line)],
         ),
         (
-            tech.extract_misc_section_start_line, tech.extract_misc_section_end_line,
-            [(tech.extract_misc, tech.all_parsed_extract_misc_line_nos, _render_extract_misc_line)],
+            tech.extract_section_start_line, tech.extract_section_end_line,
+            [
+                (tech.extract_misc, tech.all_parsed_extract_misc_line_nos, _render_extract_misc_line),
+                (tech.extract_plane_order, tech.all_parsed_extract_plane_order_line_nos, _render_plane_order_line),
+            ],
         ),
     ]
     active_sections = sorted(

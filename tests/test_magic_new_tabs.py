@@ -20,7 +20,7 @@ assert len(mtv.compose_editor.tree.get_children()) == 39, len(mtv.compose_editor
 assert len(mtv.connect_editor.tree.get_children()) == 20, len(mtv.connect_editor.tree.get_children())
 assert len(mtv.drc_tree.get_children()) == 209, len(mtv.drc_tree.get_children())  # 192 width/spacing/maxwidth + 17 angles
 assert len(mtv.extract_resist_tree.get_children()) == 30, len(mtv.extract_resist_tree.get_children())
-assert len(mtv.extract_plane_order_tree.get_children()) == 14, len(mtv.extract_plane_order_tree.get_children())
+assert len(mtv.extract_plane_order_editor.tree.get_children()) == 14, len(mtv.extract_plane_order_editor.tree.get_children())
 print("PASS: all 5 new tabs populated with the expected real counts.")
 
 # spot-check one real row's rendered values

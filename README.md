@@ -2812,6 +2812,49 @@ editor yet -- see Future Work.
   `main.py export-magic-types`-equivalent write-back lands the edited
   value in `ihp-sg13g2-extract.tech` specifically. Full suite re-run
   clean (65/65).
+- **Magic Tech write-back extended to extract's own `ExtractPlaneOrder`
+  lines** (real `planeorder NAME ORDER` statements) -- the tenth
+  editable domain, and `extract`'s own second real, independently-
+  tracked sub-structure sharing a section with `ExtractMiscStatement`
+  (the same "one section, more than one group" shape cifinput's own
+  ignored-layers/layer-hints tables already established). **A real,
+  confirmed structural fact made this genuinely simpler than
+  `ExtractMiscStatement`'s own `contact` entries**: every real
+  `planeorder` line sits *before* the section's own first real
+  `variants (...)` line, confirmed by direct inspection -- so, unlike
+  `contact`, no real name ever repeats across PVT corners; 14 real
+  entries, 14 unique names. `extract_plane_order` changed from a bare
+  `list[tuple[str, int]]` to a proper `ExtractPlaneOrder` dataclass
+  (`name`/`order`/`line_no`), with an `order_text` property exposing
+  its own `int` field to the generic string-only editor -- the same
+  pattern `CifInputLayerHint.gds_layer_text` already established.
+  **A real naming fix along the way**: the field pair that had been
+  named `extract_misc_section_start_line`/`extract_misc_section_end_line`
+  was actually always the generic `extract` section's own bounds, not
+  specific to `ExtractMiscStatement` -- renamed to
+  `extract_section_start_line`/`extract_section_end_line` now that a
+  second group genuinely needs to reference the same real boundary,
+  the same way `cifinput_section_start_line`/`cifinput_section_end_line`
+  were never named after just one of its own two sub-structures.
+  `pdklib/magic_tech_writer.py`'s `render_tech_file` now passes both
+  groups together for the shared `extract` section, merged into one
+  real, combined patch pass exactly the way cifinput's own two groups
+  already are. The read-only "Plane order" `Treeview` in the **Extract**
+  tab (alongside the still-read-only **Sheet resistance** pane) was
+  replaced in place with an embedded `SimpleListEditor`. Verified for
+  real, driven: `tests/test_magic_extract_plane_order.py` (new) -- all
+  14 real entries load, line-tracked, confirmed unique; parsed as part
+  of `ihp-sg13g2.tech`'s own combined view, entries still parse
+  correctly with `line_no` correctly `0`; no-edit export of
+  `ihp-sg13g2-extract.tech` stays byte-identical now that two groups
+  share the section's own patch pass; an in-GUI `order_text` edit/New/
+  Delete round-trips correctly; the edit survives `File > Save Edits`
+  and a simulated relaunch; a real write-back lands the edited value in
+  `ihp-sg13g2-extract.tech` specifically, leaving `ihp-sg13g2.tech`'s
+  own export byte-identical. `tests/test_magic_extract_misc.py`/
+  `tests/test_magic_new_tabs.py` updated for the section-bounds field
+  rename and the `Treeview` -> `SimpleListEditor` swap. Full suite
+  re-run clean (66/66).
 
 ## Future work
 
@@ -2833,11 +2876,12 @@ models, ...), not just read/display layers. Concretely, still open:
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
   `extract`'s own `contact`/`devresist`/`antenna`/`disconnect`/
-  `substrate` statements are now editable with real write-back too
-  (see the dedicated changelog entry above); `resist`/`order`/cap-
-  coefficients/`device` in the same section stay read-only (real
-  `variants` PVT-corner scoping for `resist`, real backslash-continued
-  lines for `device`, less uniform than this domain's own flat shape).
+  `substrate` statements and its own `planeorder` lines are now
+  editable with real write-back too (see the dedicated changelog
+  entries above); `resist`/cap-coefficients/`device` in the same
+  section stay read-only (real `variants` PVT-corner scoping for
+  `resist`, real backslash-continued lines for `device`, less uniform
+  than these two domains' own flat shape).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --
