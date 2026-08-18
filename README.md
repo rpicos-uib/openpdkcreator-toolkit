@@ -2855,6 +2855,45 @@ editor yet -- see Future Work.
   `tests/test_magic_new_tabs.py` updated for the section-bounds field
   rename and the `Treeview` -> `SimpleListEditor` swap. Full suite
   re-run clean (66/66).
+- **Magic Tech write-back extended to extract's own `ExtractResist`
+  lines** (real `resist LAYER_SPEC VALUE` statements, milliohms/square)
+  -- the eleventh editable domain, and `extract`'s third real,
+  independently-tracked sub-structure sharing its section with
+  `ExtractMiscStatement`/`ExtractPlaneOrder`. **A real, confirmed
+  structural fact reused directly, not re-derived**: `ExtractResist`'s
+  own docstring had already documented that a real `resist` layer can
+  repeat once per real `variants (...)` corner block with a different
+  value each time (e.g. IHP's own `hvndiffres/active` appears three
+  times: 67000/79000/55000) -- the exact same shape `ExtractMiscStatement`'s
+  own repeated `contact` rows already established a write-back pattern
+  for, so this domain needed no new per-corner handling, just the same
+  independent, individually-line-tracked rows. `ExtractResist` gained
+  `line_no` and a `milliohms_text` property, the same pattern
+  `ExtractPlaneOrder.order_text` established one changelog entry ago.
+  **A real formatting wrinkle `ExtractPlaneOrder` didn't have**:
+  real `resist` lines do carry multi-space/tab column alignment
+  (confirmed real: IHP's own `resist (allm5)/metal5    \t  88`, a
+  mixed-whitespace separator) -- handled for free by the same
+  always-reuse-the-original-line's-own-captured-separator approach
+  `_render_contact_line`/`_render_plane_order_line` already use (no
+  diff-first logic needed, since it's a fixed two-token line, not a
+  variable-length list). `pdklib/magic_tech_writer.py`'s own shared
+  `extract` section patch now merges three groups in one combined pass.
+  The read-only "Sheet resistance" `Treeview` (the **Extract** tab's
+  other, until-now-untouched half, alongside **Plane order**) was
+  replaced in place with an embedded `SimpleListEditor`. Verified for
+  real, driven: `tests/test_magic_extract_resist.py` (new) -- all 30
+  real entries load, line-tracked; the three real
+  `hvndiffres/active` corner rows load as distinct, independently-
+  editable rows with three distinct real values; no-edit export of
+  `ihp-sg13g2-extract.tech` stays byte-identical now that three groups
+  share the section's own patch pass; an in-GUI `milliohms_text`
+  edit/New/Delete round-trips correctly; the edit survives
+  `File > Save Edits` and a simulated relaunch; a real write-back lands
+  the edited value in `ihp-sg13g2-extract.tech` specifically, leaving
+  `ihp-sg13g2.tech`'s own export byte-identical.
+  `tests/test_magic_new_tabs.py` updated for the `Treeview` ->
+  `SimpleListEditor` swap. Full suite re-run clean (67/67).
 
 ## Future work
 
@@ -2876,12 +2915,13 @@ models, ...), not just read/display layers. Concretely, still open:
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
   `extract`'s own `contact`/`devresist`/`antenna`/`disconnect`/
-  `substrate` statements and its own `planeorder` lines are now
-  editable with real write-back too (see the dedicated changelog
-  entries above); `resist`/cap-coefficients/`device` in the same
-  section stay read-only (real `variants` PVT-corner scoping for
-  `resist`, real backslash-continued lines for `device`, less uniform
-  than these two domains' own flat shape).
+  `substrate` statements, its own `planeorder` lines, and its own
+  `resist` lines are now editable with real write-back too (see the
+  dedicated changelog entries above); cap-coefficients/`device` in the
+  same section stay read-only (real backslash-continued lines for
+  `device`, and no local, authoritative source to confirm cap-
+  coefficient argument semantics against, less uniform than these
+  three domains' own flat shape).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

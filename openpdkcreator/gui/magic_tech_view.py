@@ -29,8 +29,9 @@ see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
 flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
-Misc**/**Extract**'s own **Plane order** sub-pane are editable -- Types
-keeps its own hand-written list + form pane (a real
+Misc**/**Extract**'s own **Plane order** and **Sheet resistance**
+sub-panes are editable -- Types keeps its own hand-written list + form
+pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
 instead (flat, plain-string-field dataclasses, a clean fit for one
@@ -101,7 +102,15 @@ own first real ``variants (...)`` line, so (unlike ``contact``) it
 never has a real per-corner repeat; its own ``int``-typed ``order``
 field is exposed via ``order_text``, the same "expose a non-string
 field as a plain string" pattern as everywhere else in this module.
-Every other remaining domain stays read-only (each would
+**Extract**'s own **Sheet resistance** sub-pane (``ExtractResist`` --
+real ``resist LAYER_SPEC VALUE`` lines) is also editable, the third
+real group sharing that same ``extract`` section -- unlike
+``planeorder``, a real ``resist`` line *does* repeat once per real
+``variants(...)`` corner block (the same real fact ``contact``
+shares), handled the same independently-editable-row way; its own
+``int``-typed ``milliohms_per_square`` field is exposed via
+``milliohms_text``. Every other remaining domain stays read-only (each
+would
 need its own real editor design -- the genuinely harder mini-DSL
 sections aren't a clean fit for any existing editor shape; see
 README's own Future Work). Editing is in-memory, same as
@@ -240,12 +249,17 @@ class MagicTechView(ttk.Frame):
         ttk.Label(frame, text="Sheet resistance (real per-layer, milliohms/square):").grid(
             row=0, column=0, sticky="w", padx=(0, 4)
         )
-        resist_columns = ("layer_spec", "milliohms_per_square")
-        self.extract_resist_tree = ttk.Treeview(frame, columns=resist_columns, show="headings")
-        for col, width in zip(resist_columns, (260, 180)):
-            self.extract_resist_tree.heading(col, text=col.replace("_", " ").title())
-            self.extract_resist_tree.column(col, width=width, anchor="w")
-        self.extract_resist_tree.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+        resist_frame = ttk.Frame(frame)
+        resist_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
+        self.extract_resist_editor = SimpleListEditor(
+            resist_frame, [("layer_spec", "Layer Spec", 220), ("milliohms_text", "milliohms/sq", 100)],
+            lambda: magic_tech_mod.ExtractResist(layer_spec="(newlayer)/metal1", milliohms_per_square=0),
+            entry_label="Resist Entry",
+            help_text="Real extract-section 'resist LAYER_SPEC VALUE' line (milliohms/square). "
+                      "A real layer can repeat once per real variants(...) corner block -- each row "
+                      "here is its own independently-editable real line, not resolved to a specific corner.",
+        )
+        self.extract_resist_editor.pack(fill="both", expand=True)
 
         ttk.Label(frame, text="Plane order:").grid(row=0, column=1, sticky="w")
         order_frame = ttk.Frame(frame)
@@ -442,6 +456,7 @@ class MagicTechView(ttk.Frame):
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
+        self.extract_resist_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -478,6 +493,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_extract_plane_order_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractPlaneOrder]]:
         return {name: tech.extract_plane_order for name, tech in self.technologies.items()}
+
+    def collect_extract_resist_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractResist]]:
+        return {name: tech.extract_resist for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -520,10 +538,10 @@ class MagicTechView(ttk.Frame):
         self.cif_layers_editor.commit_pending_edits()
         self.extract_misc_editor.commit_pending_edits()
         self.extract_plane_order_editor.commit_pending_edits()
+        self.extract_resist_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
-            self.extract_resist_tree,
             self.extract_coeff_tree, self.extract_devices_tree,
         ):
             for row in tree.get_children():
@@ -543,6 +561,7 @@ class MagicTechView(ttk.Frame):
             self.cif_layers_editor.set_entries(None)
             self.extract_misc_editor.set_entries(None)
             self.extract_plane_order_editor.set_entries(None)
+            self.extract_resist_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -559,6 +578,7 @@ class MagicTechView(ttk.Frame):
         self.cif_layers_editor.set_entries(tech.cif_layers)
         self.extract_misc_editor.set_entries(tech.extract_misc)
         self.extract_plane_order_editor.set_entries(tech.extract_plane_order)
+        self.extract_resist_editor.set_entries(tech.extract_resist)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -582,8 +602,6 @@ class MagicTechView(ttk.Frame):
                 "", "end",
                 values=("angles", angle_check.layer, f"{angle_check.degrees}°", "", angle_check.message),
             )
-        for resist in tech.extract_resist:
-            self.extract_resist_tree.insert("", "end", values=(resist.layer_spec, resist.milliohms_per_square))
         for coeff in tech.extract_cap_coefficients:
             values_text = ", ".join(f"{v:g}" for v in coeff.values)
             self.extract_coeff_tree.insert("", "end", values=(coeff.directive, " ".join(coeff.args), values_text))

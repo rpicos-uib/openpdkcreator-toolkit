@@ -41,7 +41,7 @@ import yaml
 from .pdklib.lef import LefPin, LefPort
 from .pdklib.magic_tech import (
     AliasEntry, CifInputIgnoredLayer, CifInputLayerHint, CifOutputLayerMapping, ComposeStatement, ConnectRule,
-    ContactEntry, ExtractMiscStatement, ExtractPlaneOrder, PlaneEntry, StyleEntry, TypeEntry,
+    ContactEntry, ExtractMiscStatement, ExtractPlaneOrder, ExtractResist, PlaneEntry, StyleEntry, TypeEntry,
 )
 from .models import DesignRule, Layer
 
@@ -69,13 +69,15 @@ def save_state(
     magic_cif_layers: dict[str, list[CifOutputLayerMapping]] | None = None,
     magic_extract_misc: dict[str, list[ExtractMiscStatement]] | None = None,
     magic_extract_plane_order: dict[str, list[ExtractPlaneOrder]] | None = None,
+    magic_extract_resist: dict[str, list[ExtractResist]] | None = None,
     layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
     *magic_planes*/*magic_contacts*/*magic_aliases*/*magic_styles*/
     *magic_compose*/*magic_connect*/*magic_cifinput_ignored_layers*/
     *magic_cifinput_layer_hints*/*magic_cif_layers*/
-    *magic_extract_misc*/*magic_extract_plane_order*: the
+    *magic_extract_misc*/*magic_extract_plane_order*/
+    *magic_extract_resist*: the
     same real shape, one dict per newly-editable Magic Tech domain (see
     ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
@@ -156,6 +158,10 @@ def save_state(
             tech_name: [dataclasses.asdict(o) for o in orders]
             for tech_name, orders in (magic_extract_plane_order or {}).items()
         },
+        "magic_extract_resist": {
+            tech_name: [dataclasses.asdict(r) for r in entries]
+            for tech_name, entries in (magic_extract_resist or {}).items()
+        },
         "lef_pins": {
             lef_path: {
                 macro_name: [dataclasses.asdict(pin) for pin in pins]
@@ -189,6 +195,7 @@ class LoadedState:
     magic_cif_layers: dict[str, list[CifOutputLayerMapping]] = dataclasses.field(default_factory=dict)
     magic_extract_misc: dict[str, list[ExtractMiscStatement]] = dataclasses.field(default_factory=dict)
     magic_extract_plane_order: dict[str, list[ExtractPlaneOrder]] = dataclasses.field(default_factory=dict)
+    magic_extract_resist: dict[str, list[ExtractResist]] = dataclasses.field(default_factory=dict)
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
@@ -252,6 +259,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [ExtractPlaneOrder(**o) for o in orders]
         for tech_name, orders in data.get("magic_extract_plane_order", {}).items()
     }
+    magic_extract_resist = {
+        tech_name: [ExtractResist(**r) for r in entries]
+        for tech_name, entries in data.get("magic_extract_resist", {}).items()
+    }
     lef_pins = {
         lef_path: {
             macro_name: [_load_lef_pin(p) for p in pins]
@@ -273,6 +284,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         magic_cif_layers=magic_cif_layers,
         magic_extract_misc=magic_extract_misc,
         magic_extract_plane_order=magic_extract_plane_order,
+        magic_extract_resist=magic_extract_resist,
         layers=layers,
     )
 
