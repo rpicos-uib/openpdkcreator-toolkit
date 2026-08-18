@@ -734,6 +734,7 @@ class App(ttk.Frame):
             magic_cifinput_ignored_layers=self.magic_tech_view.collect_cifinput_ignored_layers_by_tech(),
             magic_cifinput_layer_hints=self.magic_tech_view.collect_cifinput_layer_hints_by_tech(),
             magic_cif_layers=self.magic_tech_view.collect_cif_layers_by_tech(),
+            magic_extract_misc=self.magic_tech_view.collect_extract_misc_by_tech(),
             layers=self._layers_by_lyp_path(),
         )
         self.status.set(f"Saved edits to {path}")
@@ -1160,6 +1161,10 @@ class App(ttk.Frame):
                 tech = self.magic_tech_view.technologies.get(tech_name)
                 if tech is not None:
                     tech.cif_layers = mappings
+            for tech_name, statements in saved.magic_extract_misc.items():
+                tech = self.magic_tech_view.technologies.get(tech_name)
+                if tech is not None:
+                    tech.extract_misc = statements
             self.magic_tech_view._refresh_all()
             self.apply_saved_lef_pin_overrides(saved.lef_pins)
             self.lef_view._refresh_all()

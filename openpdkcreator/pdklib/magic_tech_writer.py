@@ -6,14 +6,17 @@ pristine, since export never writes to ``data/``) and patches only the
 real lines belonging to a currently-editable domain -- **Types**,
 **Planes**, **Contacts**, **Aliases**, **Styles**, **Compose**,
 **Connect**, **cifinput**'s own two flat sub-structures (ignored
-layers, layer hints), and **cifoutput**'s own flat, editable-in-place
-``calma`` lines, the Magic Tech domains with a real form (see
+layers, layer hints), **cifoutput**'s own flat, editable-in-place
+``calma`` lines, and **extract**'s own flat ``ExtractMiscStatement``
+lines (``contact``/``devresist``/``antenna``/``disconnect``/
+``substrate``), the Magic Tech domains with a real form (see
 ``gui/magic_tech_view.py``'s own docstring). Every other real section
-(cifinput's own recipe blocks/drc/extract/everything ``magic_tech.py``
-doesn't parse) is copied verbatim, untouched -- there's no editor for
-them, so nothing to write back; deliberately bounded, not attempted
-for every remaining real sub-tab at once (see README's own Future Work
-note on the remaining gap).
+(cifinput's own recipe blocks/drc/every *other* real extract-section
+construct -- ``resist``/``order``/cap-coefficients/``device``/
+everything else ``magic_tech.py`` doesn't parse) is copied verbatim,
+untouched -- there's no editor for them, so nothing to write back;
+deliberately bounded, not attempted for every remaining real sub-tab
+at once (see README's own Future Work note on the remaining gap).
 
 Each real entry in every flat editable domain occupies exactly one
 real line (``[-]plane name,alias1,alias2`` for a type; ``NAME, SHORT``
@@ -21,9 +24,10 @@ for a plane; ``TYPE LAYER1 LAYER2`` for a contact; ``NAME MEMBERS`` for
 an alias; ``TYPE_NAME STYLE1 STYLE2 ...`` for a style; ``VERB ARG1 ARG2
 ARG3`` for a compose statement; ``TYPES_A TYPES_B`` for a connect rule;
 ``ignore NAME``/``calma NAME LAYER DATATYPE`` for cifinput's own two;
-``calma LAYER DATATYPE`` for cifoutput -- no block structure to
-navigate, unlike LEF's ``PIN``/``MACRO`` or DRC's multi-line
-``.output()`` calls), so all of them share one generic patch routine,
+``calma LAYER DATATYPE`` for cifoutput; ``DIRECTIVE ARG1 ARG2 ...`` for
+an extract-section misc statement -- no block structure to navigate,
+unlike LEF's ``PIN``/``MACRO`` or DRC's multi-line ``.output()``
+calls), so all of them share one generic patch routine,
 ``_render_section_patch``, parameterized by a per-domain line-render
 function -- rather than near-duplicated copies of the same real
 positional-patch logic.
@@ -31,9 +35,10 @@ positional-patch logic.
 line_no``/``ContactEntry.line_no``/``AliasEntry.line_no``/
 ``StyleEntry.line_no``/``ComposeStatement.line_no``/``ConnectRule.
 line_no``/``CifInputIgnoredLayer.line_no``/``CifInputLayerHint.
-line_no``/``CifOutputLayerMapping.line_no`` (tracked at parse time,
-only when safely mappable back to real file line numbers -- see
-``_safe_prefix_line_count``'s own docstring) are used exactly the way
+line_no``/``CifOutputLayerMapping.line_no``/``ExtractMiscStatement.
+line_no`` (tracked at parse time, only when safely mappable back to
+real file line numbers -- see ``_safe_prefix_line_count``'s own
+docstring) are used exactly the way
 ``pdklib/lef.py``'s ``LefPin.start_line``/``LefMacro.
 all_parsed_pin_ranges`` are: a deleted entry's original line is
 omitted entirely; a brand-new entry (``line_no == 0``) is appended
@@ -102,20 +107,41 @@ header of its own, so both used to be silently filtered out of the
 Technology picker entirely (see ``gui/magic_tech_view.py``'s own
 docstring for the real fallback-naming fix).
 
+**extract's own ``ExtractMiscStatement`` lines are, structurally, the
+same "spliced in from a separate real file" case as cifinput/
+cifoutput above** -- real content lives in ``ihp-sg13g2-extract.tech``,
+included into ``ihp-sg13g2.tech`` -- **and, unlike either of those two,
+also share their real section with plenty of other, still-read-only
+extract content** (``resist``/``order``/cap-coefficient/``device``
+lines, real ``variants (...)`` corner-scoping lines, comments): all of
+that simply never matches ``_parse_extract_misc_line``, so it falls
+through ``_render_section_patch``'s existing "copy any untracked line
+verbatim" gap logic for free, the same way cifinput's own untouched
+recipe blocks already do alongside its two editable sub-structures
+sharing that section. **A real ``contact`` line can also repeat across
+more than one real ``variants`` corner block with a different real
+value each time** (confirmed real, the same structural fact
+``ExtractResist`` documents for ``resist``) -- handled the same way
+``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows already are:
+each real occurrence is its own real line, independently patched by
+its own real ``line_no``, with no attempt to resolve which corner a
+given row belongs to.
+
 All real sections (confirmed real, not assumed: ``planes`` 83-98,
 ``types`` 104-260, ``contact`` 266-298, ``aliases`` 304-382, ``styles``
 388-529, ``compose`` 535-591, ``connect`` 597-621 in IHP's own real
 ``ihp-sg13g2.tech``; ``cifinput`` 20-1519 in the separate, real
 ``ihp-sg13g2-cifin.tech``; ``cifoutput`` 25-1875 in the separate, real
-``ihp-sg13g2-cifout.tech`` -- both, when parsed as that own real file
-directly) sit well before their own real file's own first real
-``include`` line (none, in either fragment file's own case), so all of
-them share the exact same real ``safe_through`` boundary already
-established for Types alone. If a given domain's own section
-start/end line is ``0`` (not found at a safely-mappable position),
-that one domain's real lines are simply left untouched -- refusing to
-guess is safer than patching the wrong real position -- while every
-other domain still patches normally.
+``ihp-sg13g2-cifout.tech``; ``extract`` 23-1282 in the separate, real
+``ihp-sg13g2-extract.tech`` -- all three fragment files, when parsed as
+that own real file directly) sit well before their own real file's own
+first real ``include`` line (none, in any of the three fragment files'
+own case), so all of them share the exact same real ``safe_through``
+boundary already established for Types alone. If a given domain's own
+section start/end line is ``0`` (not found at a safely-mappable
+position), that one domain's real lines are simply left untouched --
+refusing to guess is safer than patching the wrong real position --
+while every other domain still patches normally.
 """
 
 from __future__ import annotations
@@ -136,6 +162,7 @@ _CONNECT_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 _CIFINPUT_IGNORE_LINE_RE = re.compile(r"^(\s*)ignore(\s+)(\S+)(\s*)$")
 _CIFINPUT_HINT_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s+)(\S+)(\s*)$")
 _CIFOUTPUT_CALMA_LINE_RE = re.compile(r"^(\s*)calma(\s+)(\S+)(\s+)(\S+)(\s*)$")
+_EXTRACT_MISC_LINE_RE = re.compile(r"^(\s*)(\S+)(\s+)(\S.*)$")
 
 
 def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None) -> str:
@@ -284,6 +311,26 @@ def _render_cifoutput_calma_line(entry: magic_tech_mod.CifOutputLayerMapping, or
     return f"{indent}calma{sep0}{entry.gds_layer}{sep1}{entry.gds_datatype}{trailing}"
 
 
+def _render_extract_misc_line(entry: magic_tech_mod.ExtractMiscStatement, original_line: str | None) -> str:
+    """A real extract-misc line's own argument list is sometimes
+    column-aligned with more than one space (confirmed real: IHP's own
+    ``contact alldiffcont   17000``) -- the same real formatting
+    ``_render_style_line`` already guards for a variable-length list.
+    If the args are genuinely unchanged from the original line, its
+    real original whitespace is preserved verbatim; only a real,
+    deliberate edit gets freshly, normally single-spaced."""
+
+    match = _EXTRACT_MISC_LINE_RE.match(original_line) if original_line is not None else None
+    indent = match.group(1) if match else " "
+    separator = match.group(3) if match else " "
+    rest_original = match.group(4) if match else None
+    if rest_original is not None and tuple(rest_original.split()) == entry.args:
+        rest = rest_original
+    else:
+        rest = " ".join(entry.args)
+    return f"{indent}{entry.directive}{separator}{rest}"
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
 ) -> list[str]:
@@ -352,6 +399,10 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
         (
             tech.cifoutput_section_start_line, tech.cifoutput_section_end_line,
             [(tech.cif_layers, tech.all_parsed_cif_layer_line_nos, _render_cifoutput_calma_line)],
+        ),
+        (
+            tech.extract_misc_section_start_line, tech.extract_misc_section_end_line,
+            [(tech.extract_misc, tech.all_parsed_extract_misc_line_nos, _render_extract_misc_line)],
         ),
     ]
     active_sections = sorted(

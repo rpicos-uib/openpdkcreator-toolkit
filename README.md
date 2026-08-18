@@ -2762,6 +2762,56 @@ editor yet -- see Future Work.
   (`sg13g2_stdcell`: `1ns`/`1,pf`, `sg13g2_io_dummy`: `1ps`/`1,ff`); the
   GUI pane shows the correct real row count and labels the values text
   with the cell's own real time_unit. Full suite re-run clean (64/64).
+- **Magic Tech write-back extended to extract's own `ExtractMiscStatement`
+  lines** (`contact`/`devresist`/`antenna`/`disconnect`/`substrate`) --
+  the ninth editable domain. **Investigated before writing any code,
+  not assumed equally hard**: unlike the harder mini-DSL constructs
+  this section also carries (`resist`/`order`/cap-coefficients/
+  `device`), every real `ExtractMiscStatement` line is flat and
+  variable-length-but-uniform-per-directive -- the exact "one real line
+  per entry" shape `_scan_single_line_section`/`SimpleListEditor`
+  already fit, once looked at closely rather than lumped in with
+  `extract`'s genuinely harder content by default. `ExtractMiscStatement`
+  gained a real `line_no` field (same `_scan_single_line_section`
+  machinery as Compose/Connect) and an `args_text` property exposing
+  its own variable-length `args` tuple to the generic string-only
+  editor, the same pattern `StyleEntry.style_names_text` already
+  established. **Structurally the same "spliced in from a separate
+  real file" case as cifinput/cifoutput**: real content lives in
+  `ihp-sg13g2-extract.tech` (confirmed real: no `include` line of its
+  own, so line 23-1282 there is safely, fully mappable when parsed
+  directly), included into `ihp-sg13g2.tech`, where this domain's own
+  lines correctly come back unmapped (`line_no`/section bounds `0`) and
+  are left untouched -- no new mechanism needed, the same generic
+  resolution already in place. **A real, new wrinkle neither cifinput
+  nor cifoutput had**: this domain shares its real section with
+  several *other*, still-read-only extract constructs -- handled for
+  free by `_render_section_patch`'s existing "copy any untracked line
+  verbatim" gap logic, since `_parse_extract_misc_line` simply never
+  matches a `resist`/`order`/cap-coefficient/`device`/`variants` line.
+  **A real, confirmed structural fact shared with `ExtractResist`,
+  not unique to this domain**: a real `contact` line repeats once per
+  real `variants (...)` PVT-corner block with a different value each
+  time (e.g. IHP's own `contact alldiffcont` appears three times,
+  17000/22000/8000) -- modeled the same way `CifOutputLayerMapping`'s
+  own repeated `DNWELL` rows already are, as independent, individually
+  line-tracked rows with no attempt to resolve which corner a given
+  row belongs to (that real `variants` scoping semantics remain
+  deliberately unresolved everywhere in this project -- see this
+  section's own Future Work entry). Verified for real, driven:
+  `tests/test_magic_extract_misc.py` (new) -- 41 real entries load
+  from `ihp-sg13g2-extract.tech` parsed directly, all line-tracked; the
+  three real `contact alldiffcont` corner rows load as distinct,
+  independently-editable rows; parsed as part of `ihp-sg13g2.tech`'s
+  own combined view, this domain's section bounds correctly come back
+  `0`; no-edit export of `ihp-sg13g2-extract.tech` is byte-identical to
+  the real original, and `ihp-sg13g2.tech`'s own export (via the same
+  `App`/`technologies` dict) stays byte-identical throughout; an
+  in-GUI `args_text` edit/New/Delete round-trips correctly; the edit
+  survives `File > Save Edits` and a simulated relaunch; a real
+  `main.py export-magic-types`-equivalent write-back lands the edited
+  value in `ihp-sg13g2-extract.tech` specifically. Full suite re-run
+  clean (65/65).
 
 ## Future work
 
@@ -2782,6 +2832,12 @@ models, ...), not just read/display layers. Concretely, still open:
   `compose`/`connect` sections, and the dominant `width`/`spacing`
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
   done -- see `magic_tech.py`'s own docstring for exact real coverage.
+  `extract`'s own `contact`/`devresist`/`antenna`/`disconnect`/
+  `substrate` statements are now editable with real write-back too
+  (see the dedicated changelog entry above); `resist`/`order`/cap-
+  coefficients/`device` in the same section stay read-only (real
+  `variants` PVT-corner scoping for `resist`, real backslash-continued
+  lines for `device`, less uniform than this domain's own flat shape).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

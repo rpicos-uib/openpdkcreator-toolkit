@@ -28,8 +28,8 @@ Coefficients**/**Extract Devices**/**Extract Misc** (real
 see ``pdklib/magic_tech.py``'s own docstring for exactly what's
 extracted from each and why). **Types**/**Planes**/**Contacts**/
 **Aliases**/**Styles**/**Compose**/**Connect**/**CIF Input**'s own two
-flat sub-panes (ignored layers, layer hints)/**CIF Layers** are
-editable -- Types keeps its own hand-written list + form pane (a real
+flat sub-panes (ignored layers, layer hints)/**CIF Layers**/**Extract
+Misc** are editable -- Types keeps its own hand-written list + form pane (a real
 comma-split aliases list, a boolean obsolete combo); every other one
 shares one generic, reusable `simple_list_editor.SimpleListEditor`
 instead (flat, plain-string-field dataclasses, a clean fit for one
@@ -79,10 +79,23 @@ than CIF Layers: real content merges across more than one
 non-contiguous real block sharing the same name, *and* the current
 data model doesn't even track which block each real op line came from
 -- a real write-back would need a data-model redesign first, real
-separate future work. Every other remaining domain also stays
-read-only (each would need its own real editor design -- the genuinely
-harder mini-DSL sections aren't a clean fit for any existing editor
-shape; see README's own Future Work). Editing is in-memory, same as
+separate future work. **Extract Misc** (``ExtractMiscStatement`` --
+``contact``/``devresist``/``antenna``/``disconnect``/``substrate``
+statements) turned out to be another real, flat, editable domain once
+looked at closely, despite living in the same real ``extract`` section
+as several still-read-only constructs (``resist``/``order``/cap-
+coefficients/``device``) -- the same "flat, one real line per entry"
+shape ``SimpleListEditor`` already fits, with its own variable-length
+``args`` tuple exposed via ``args_text``, the same pattern
+``StyleEntry.style_names_text`` already established. A real ``contact``
+line can repeat once per real ``variants(...)`` PVT-corner block with a
+different value each time (the same real fact ``resist`` shares, still
+undocumented as a check here) -- each real occurrence is just its own
+independently-editable row, no attempt made to resolve which corner it
+belongs to. Every other remaining domain stays read-only (each would
+need its own real editor design -- the genuinely harder mini-DSL
+sections aren't a clean fit for any existing editor shape; see
+README's own Future Work). Editing is in-memory, same as
 DRC Rules/LEF pins, with native write-back into the real ``.tech``
 file via ``pdklib/magic_tech_writer.py`` (``File > Export Edited Magic
 Types``/``main.py export-magic-types`` -- despite the menu/command
@@ -199,7 +212,14 @@ class MagicTechView(ttk.Frame):
         self._build_extract_tab(sub)
         self._build_extract_coefficients_tab(sub)
         self._build_extract_devices_tab(sub)
-        self._build_extract_misc_tab(sub)
+        self.extract_misc_editor = self._build_simple_editor(
+            sub, "Extract Misc", [("directive", "Directive", 110), ("args_text", "Args", 500)],
+            lambda: magic_tech_mod.ExtractMiscStatement(directive="contact", args=()),
+            entry_label="Extract Misc Statement",
+            help_text="Real extract-section 'contact|devresist|antenna|disconnect|substrate ...' statement. "
+                      "A real 'contact' entry can repeat once per real variants(...) corner block -- each row "
+                      "here is its own independently-editable real line, not resolved to a specific corner.",
+        )
 
     def _build_extract_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -233,10 +253,6 @@ class MagicTechView(ttk.Frame):
     def _build_extract_devices_tab(self, notebook: ttk.Notebook):
         columns = ("devclass", "model", "type_name", "rest")
         self.extract_devices_tree = self._make_tab(notebook, "Extract Devices", columns, (110, 160, 110, 400))
-
-    def _build_extract_misc_tab(self, notebook: ttk.Notebook):
-        columns = ("directive", "args")
-        self.extract_misc_tree = self._make_tab(notebook, "Extract Misc", columns, (110, 500))
 
     def _build_cifinput_tab(self, notebook: ttk.Notebook):
         """Real, editable list+form panes for cifinput's own two flat
@@ -412,6 +428,7 @@ class MagicTechView(ttk.Frame):
         self.cifinput_ignore_editor.commit_pending_edits()
         self.cifinput_hints_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
+        self.extract_misc_editor.commit_pending_edits()
 
     def collect_types_by_tech(self) -> dict[str, list[magic_tech_mod.TypeEntry]]:
         return {name: tech.types for name, tech in self.technologies.items()}
@@ -442,6 +459,9 @@ class MagicTechView(ttk.Frame):
 
     def collect_cif_layers_by_tech(self) -> dict[str, list[magic_tech_mod.CifOutputLayerMapping]]:
         return {name: tech.cif_layers for name, tech in self.technologies.items()}
+
+    def collect_extract_misc_by_tech(self) -> dict[str, list[magic_tech_mod.ExtractMiscStatement]]:
+        return {name: tech.extract_misc for name, tech in self.technologies.items()}
 
     # -- data ---------------------------------------------------------------
 
@@ -482,11 +502,12 @@ class MagicTechView(ttk.Frame):
         self.cifinput_ignore_editor.commit_pending_edits()
         self.cifinput_hints_editor.commit_pending_edits()
         self.cif_layers_editor.commit_pending_edits()
+        self.extract_misc_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
             self.drc_tree,
             self.extract_resist_tree, self.extract_plane_order_tree,
-            self.extract_coeff_tree, self.extract_devices_tree, self.extract_misc_tree,
+            self.extract_coeff_tree, self.extract_devices_tree,
         ):
             for row in tree.get_children():
                 tree.delete(row)
@@ -503,6 +524,7 @@ class MagicTechView(ttk.Frame):
             self.cifinput_ignore_editor.set_entries(None)
             self.cifinput_hints_editor.set_entries(None)
             self.cif_layers_editor.set_entries(None)
+            self.extract_misc_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -517,6 +539,7 @@ class MagicTechView(ttk.Frame):
         self.cifinput_ignore_editor.set_entries(tech.cifinput_ignored_layers)
         self.cifinput_hints_editor.set_entries(tech.cifinput_layer_hints)
         self.cif_layers_editor.set_entries(tech.cif_layers)
+        self.extract_misc_editor.set_entries(tech.extract_misc)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -551,8 +574,6 @@ class MagicTechView(ttk.Frame):
             self.extract_devices_tree.insert(
                 "", "end", values=(device.devclass, device.model, device.type_name, " ".join(device.rest)),
             )
-        for misc in tech.extract_misc:
-            self.extract_misc_tree.insert("", "end", values=(misc.directive, " ".join(misc.args)))
 
         summary = (
             f"format {tech.format} | v{tech.version} -- {tech.description} | "

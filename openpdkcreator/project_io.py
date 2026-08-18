@@ -41,7 +41,7 @@ import yaml
 from .pdklib.lef import LefPin, LefPort
 from .pdklib.magic_tech import (
     AliasEntry, CifInputIgnoredLayer, CifInputLayerHint, CifOutputLayerMapping, ComposeStatement, ConnectRule,
-    ContactEntry, PlaneEntry, StyleEntry, TypeEntry,
+    ContactEntry, ExtractMiscStatement, PlaneEntry, StyleEntry, TypeEntry,
 )
 from .models import DesignRule, Layer
 
@@ -67,12 +67,14 @@ def save_state(
     magic_cifinput_ignored_layers: dict[str, list[CifInputIgnoredLayer]] | None = None,
     magic_cifinput_layer_hints: dict[str, list[CifInputLayerHint]] | None = None,
     magic_cif_layers: dict[str, list[CifOutputLayerMapping]] | None = None,
+    magic_extract_misc: dict[str, list[ExtractMiscStatement]] | None = None,
     layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
     """*magic_types*: technology name -> its current Types list.
     *magic_planes*/*magic_contacts*/*magic_aliases*/*magic_styles*/
     *magic_compose*/*magic_connect*/*magic_cifinput_ignored_layers*/
-    *magic_cifinput_layer_hints*/*magic_cif_layers*: the
+    *magic_cifinput_layer_hints*/*magic_cif_layers*/
+    *magic_extract_misc*: the
     same real shape, one dict per newly-editable Magic Tech domain (see
     ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
@@ -141,6 +143,14 @@ def save_state(
             tech_name: [dataclasses.asdict(mapping) for mapping in mappings]
             for tech_name, mappings in (magic_cif_layers or {}).items()
         },
+        "magic_extract_misc": {
+            # args is a real, variable-length tuple -- same real reason
+            # magic_compose casts its own fixed 3-tuple to a list here
+            # (yaml.safe_dump has no default representer for a plain
+            # tuple).
+            tech_name: [{**dataclasses.asdict(m), "args": list(m.args)} for m in statements]
+            for tech_name, statements in (magic_extract_misc or {}).items()
+        },
         "lef_pins": {
             lef_path: {
                 macro_name: [dataclasses.asdict(pin) for pin in pins]
@@ -172,6 +182,7 @@ class LoadedState:
     magic_cifinput_ignored_layers: dict[str, list[CifInputIgnoredLayer]] = dataclasses.field(default_factory=dict)
     magic_cifinput_layer_hints: dict[str, list[CifInputLayerHint]] = dataclasses.field(default_factory=dict)
     magic_cif_layers: dict[str, list[CifOutputLayerMapping]] = dataclasses.field(default_factory=dict)
+    magic_extract_misc: dict[str, list[ExtractMiscStatement]] = dataclasses.field(default_factory=dict)
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
@@ -227,6 +238,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [CifOutputLayerMapping(**mapping) for mapping in mappings]
         for tech_name, mappings in data.get("magic_cif_layers", {}).items()
     }
+    magic_extract_misc = {
+        tech_name: [ExtractMiscStatement(**{**m, "args": tuple(m["args"])}) for m in statements]
+        for tech_name, statements in data.get("magic_extract_misc", {}).items()
+    }
     lef_pins = {
         lef_path: {
             macro_name: [_load_lef_pin(p) for p in pins]
@@ -246,6 +261,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         magic_cifinput_ignored_layers=magic_cifinput_ignored_layers,
         magic_cifinput_layer_hints=magic_cifinput_layer_hints,
         magic_cif_layers=magic_cif_layers,
+        magic_extract_misc=magic_extract_misc,
         layers=layers,
     )
 

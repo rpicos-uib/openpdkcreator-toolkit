@@ -606,10 +606,42 @@ class ExtractMiscStatement:
     directly, not assumed) that all five share one generic, raw,
     positional shape rather than five near-identical dataclasses.
     Argument semantics deliberately not asserted, same discipline as
-    ``ExtractCapCoefficient``/``ComposeStatement``."""
+    ``ExtractCapCoefficient``/``ComposeStatement``.
+
+    **A real, confirmed wrinkle shared with ``ExtractResist``, not a
+    complication unique to it**: a real ``contact`` line also repeats
+    across the extract section's own real ``variants (...)``
+    PVT-corner blocks (confirmed real: IHP's own ``contact
+    alldiffcont`` appears three times, once per corner, with three
+    different real values) -- this domain's own real, flat,
+    line-number-keyed write-back (see ``pdklib/magic_tech_writer.py``)
+    handles that the same way ``CifOutputLayerMapping``'s own repeated
+    ``DNWELL`` rows already do: each real occurrence is its own real,
+    independently-editable row, with no attempt made here to resolve or
+    label *which* real corner a given row belongs to (that's the same
+    real ``variants`` semantic interpretation this project's own DRC-
+    deck work has deliberately deferred elsewhere -- see README's own
+    Future Work)."""
 
     directive: str
     args: tuple[str, ...]
+    line_no: int = 0
+    """Same real, source-mapped line tracking as
+    ``ComposeStatement.line_no``/``ConnectRule.line_no`` (see
+    ``_safe_prefix_line_count``)."""
+
+    @property
+    def args_text(self) -> str:
+        """A plain-string view of ``args`` -- the real GUI form field
+        this dataclass's own variable-length tuple can't be edited
+        through directly, same real reason ``StyleEntry`` exposes
+        ``style_names_text`` instead of its own list field."""
+
+        return " ".join(self.args)
+
+    @args_text.setter
+    def args_text(self, value: str) -> None:
+        self.args = tuple(value.split())
 
 
 @dataclass
@@ -767,6 +799,26 @@ class MagicTechnology:
     resolution: safely, fully mappable when that real file is parsed
     directly, correctly ``0`` when parsed as part of ``ihp-sg13g2.tech``
     's own combined view."""
+    all_parsed_extract_misc_line_nos: list[int] = field(default_factory=list)
+    extract_misc_section_start_line: int = 0
+    extract_misc_section_end_line: int = 0
+    """Same real bookkeeping, for extract-section ``contact``/
+    ``devresist``/``antenna``/``disconnect``/``substrate`` statements
+    (``ExtractMiscStatement``) -- **structurally the same real
+    "spliced in from a separate real file" situation as cifinput/
+    cifoutput above**: the real ``extract`` section doesn't live in
+    ``ihp-sg13g2.tech`` itself, it's spliced in from
+    ``ihp-sg13g2-extract.tech`` via ``include`` (confirmed real: that
+    fragment file has no real ``include`` line of its own, so its own
+    content is safely, fully mappable when parsed directly -- same
+    resolution as cifinput/cifoutput, no new mechanism needed). Every
+    other real extract-section construct this parser also recognizes
+    (``resist``/``order``/the four cap-coefficient directives/
+    ``device``) shares this same section but stays read-only -- see
+    this module's own docstring for why (real ``variants`` PVT-corner
+    scoping and, for ``device``, real backslash-continued lines, make
+    those genuinely less uniform than this domain's own flat,
+    single-line shape)."""
 
 
 def find_tech_files(pdk_root: Path) -> list[Path]:
@@ -1311,16 +1363,25 @@ def _parse_extract_devices(lines: list[str]) -> list[ExtractDevice]:
 _EXTRACT_MISC_KEYWORDS = ("contact", "devresist", "antenna", "disconnect", "substrate")
 
 
-def _parse_extract_misc(lines: list[str]) -> list[ExtractMiscStatement]:
-    entries = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        parts = stripped.split()
-        if parts[0] in _EXTRACT_MISC_KEYWORDS:
-            entries.append(ExtractMiscStatement(directive=parts[0], args=tuple(parts[1:])))
-    return entries
+def _parse_extract_misc_line(stripped: str) -> ExtractMiscStatement | None:
+    parts = stripped.split()
+    if not parts or parts[0] not in _EXTRACT_MISC_KEYWORDS:
+        return None
+    return ExtractMiscStatement(directive=parts[0], args=tuple(parts[1:]))
+
+
+def _parse_extract_misc_with_lines(lines: list[str], safe_through: int):
+    """Same real ``_scan_single_line_section`` machinery every other
+    flat, editable domain uses, applied to the ``extract`` section --
+    every real line this section carries that *isn't* a
+    'contact'/'devresist'/'antenna'/'disconnect'/'substrate' statement
+    (``resist``/``order``/cap-coefficient/``device``/``variants``
+    lines, comments) simply doesn't match ``_parse_extract_misc_line``
+    and falls through as an untracked, verbatim gap at write-back time
+    -- the same way cifinput's own still-read-only recipe blocks do
+    alongside its two editable sub-structures."""
+
+    return _scan_single_line_section(lines, "extract", safe_through, _parse_extract_misc_line)
 
 
 def parse_tech_file(path: Path) -> MagicTechnology:
@@ -1391,7 +1452,10 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.extract_plane_order = _parse_extract_plane_order(sections.get("extract", []))
     tech.extract_cap_coefficients = _parse_extract_cap_coefficients(sections.get("extract", []))
     tech.extract_devices = _parse_extract_devices(sections.get("extract", []))
-    tech.extract_misc = _parse_extract_misc(sections.get("extract", []))
+    (
+        tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
+        tech.extract_misc_section_start_line, tech.extract_misc_section_end_line,
+    ) = _parse_extract_misc_with_lines(lines, safe_through)
 
     parsed = set(_TABULAR_SECTIONS) | {"cifoutput", "cifinput", "compose", "connect", "drc", "extract"}
     tech.unparsed_sections = sorted(set(sections) - parsed)
