@@ -98,7 +98,45 @@ DRC_METHOD_TO_CHECK_TYPE = {
 _VALUE_ASSIGN_RE = re.compile(r"(\w+)\s*=\s*drc_rules\[['\"](\w+)['\"]\]")
 _CHECK_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.(width|space|sep|with_area|with_length)\(([^)]*)\)")
 _ENCLOSURE_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.enclosed\(\s*(\S+?)\s*,\s*([^)]*)\)")
+_VALUE_LITERAL_IN_ARGS_RE = re.compile(r"(\d+(?:\.\d+)?)\.um2?\b")
 _VALUE_VAR_IN_ARGS_RE = re.compile(r"(\w+)\.um2?\b")
+
+
+def _resolve_value(args: str, value_var_to_key: dict[str, str], values_by_key: dict[str, float]) -> float | None:
+    """A real check's value comes one of two real ways: IHP's own real
+    ``drc_rules['KEY']`` variable indirection (``cnt_c_value.um`` ->
+    looked up in *value_var_to_key*/*values_by_key*), or, for a
+    freshly hand-generated custom rule (``render_new_rule_block`` has
+    no JSON file to indirect through), a bare literal
+    (``0.05.um2``). **The variable path is tried first and must
+    win whenever it resolves** -- real IHP call sites routinely carry
+    a *second*, unrelated literal further along in the same real
+    ``args`` string (e.g. real ``LBE.b1``:
+    ``lbe_b1_value.um + 0.001.um``, a real arithmetic margin, not the
+    rule's own value; real ``M1.e``:
+    ``m1_e_value.um, projection_limits(m1_e_length.um + 0.001.um,
+    nil)``) -- trying the literal search first was tried and produces
+    real, confirmed wrong values for 7 real rules (caught by a
+    stash/pop before/after comparison against the live deck before
+    this shipped, not assumed safe). Only once the leading
+    ``\\w+.um``/``.um2`` variable fails to resolve to a real
+    ``drc_rules[...]`` entry (either no variable-shaped match at all,
+    or -- the real literal-value case -- a bogus captured name like
+    ``"05"`` from ``0.05.um2``, since ``\\w+`` can't span the decimal
+    point) does a bare leftmost-literal fallback apply. This fallback
+    is deliberately naive and is only reachable by real, hand-
+    generated custom rules (a single, plain literal, no arithmetic) --
+    a real composite/arithmetic expression whose *leading* term is
+    variable-indirected always resolves in the first branch and never
+    reaches the fallback at all."""
+
+    var_match = _VALUE_VAR_IN_ARGS_RE.search(args)
+    if var_match is not None:
+        json_key = value_var_to_key.get(var_match.group(1))
+        if json_key:
+            return values_by_key.get(json_key)
+    literal_match = _VALUE_LITERAL_IN_ARGS_RE.search(args)
+    return float(literal_match.group(1)) if literal_match else None
 _OUTPUT_CALL_RE = re.compile(
     r"(\w+)\.output\(\s*['\"]([^'\"]+)['\"]\s*,\s*(?:\r?\n\s*)?\"([^\"]*)\""
 )
@@ -199,19 +237,17 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
         for match in _VALUE_ASSIGN_RE.finditer(text):
             value_var_to_key[match.group(1)] = match.group(2)
 
-        checks: dict[str, tuple[str, str, str | None, int, str | None]] = {}
+        checks: dict[str, tuple[str, str, float | None, int, str | None]] = {}
         for match in _CHECK_CALL_RE.finditer(text):
             result_var, layer_expr, method, args = match.groups()
-            value_match = _VALUE_VAR_IN_ARGS_RE.search(args)
-            value_var = value_match.group(1) if value_match else None
+            value = _resolve_value(args, value_var_to_key, values_by_key)
             line_no = text.count("\n", 0, match.start()) + 1
-            checks[result_var] = (layer_expr, method, value_var, line_no, None)
+            checks[result_var] = (layer_expr, method, value, line_no, None)
         for match in _ENCLOSURE_CALL_RE.finditer(text):
             result_var, inner_expr, outer_expr, args = match.groups()
-            value_match = _VALUE_VAR_IN_ARGS_RE.search(args)
-            value_var = value_match.group(1) if value_match else None
+            value = _resolve_value(args, value_var_to_key, values_by_key)
             line_no = text.count("\n", 0, match.start()) + 1
-            checks[result_var] = (inner_expr, "enclosed", value_var, line_no, outer_expr)
+            checks[result_var] = (inner_expr, "enclosed", value, line_no, outer_expr)
 
         matched_result_vars: set[str] = set()
         for match in _OUTPUT_CALL_RE.finditer(text):
@@ -226,9 +262,7 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
                 )
                 continue
             matched_result_vars.add(result_var)
-            layer_expr, method, value_var, check_line, outer_expr = check
-            json_key = value_var_to_key.get(value_var) if value_var else None
-            value = values_by_key.get(json_key) if json_key else None
+            layer_expr, method, value, check_line, outer_expr = check
             check_type = DRC_METHOD_TO_CHECK_TYPE[method]
             if method == "enclosed":
                 applies_to = f"{layer_expr} enclosed by {outer_expr} (real KLayout DRC expressions, not resolved to Layers)"

@@ -3262,6 +3262,36 @@ editor yet -- see Future Work.
     rules now extracted (was 75), 90 composite constructs skipped (was
     84 -- the 6 new honest skips), no other rule or file changed. Full
     suite re-run clean.
+- **DRC rule extractor now resolves literal-valued rules' `.value`
+  too**, not just IHP's own `drc_rules['KEY']`-indirected ones --
+  closes the gap the `with_area`/`with_length` entry above surfaced
+  (re-extracting a freshly hand-generated custom rule always came back
+  `value=None`, true for the original `min_width`/`min_enclosure`
+  extraction just as much, simply never asserted before). **A real
+  regression was caught and fixed before this shipped, not assumed
+  safe**: the first attempt tried a bare literal search *before* the
+  existing variable search, which looked correct against a synthetic
+  hand-generated rule but broke 7 real rules when checked against the
+  live deck with a `git stash`/pop before/after comparison (real
+  `LBE.b1`: `lbe_b1_value.um + 0.001.um`; real `M1.e`:
+  `m1_e_value.um, projection_limits(m1_e_length.um + 0.001.um, nil)`)
+  -- a real, second, unrelated literal margin further along in the
+  same real `args` string was winning over the real, correct,
+  variable-indirected value. Fixed by trying the variable path
+  first and only falling back to a bare leftmost literal
+  (`<number>.um`/`.um2`) once that fails to resolve through
+  `drc_rules[...]` -- which is exactly and only what a real,
+  hand-generated custom rule's own literal-only args reach (the
+  variable regex still fires on it, capturing a bogus name like
+  `"05"` out of `0.05.um2` since `\w+` can't span the decimal point,
+  but that bogus name was never a real `drc_rules` key to begin with,
+  so the fallback correctly takes over). Verified for real, driven:
+  a repeated stash/pop comparison confirms the real 77 rules and 90
+  skips are now byte-for-byte identical to before this change (the
+  regression is gone); `tests/test_drc_generate.py` (extended) now
+  asserts `.value` resolves correctly for all four re-extracted
+  rules, `TE_W`/`TE_VIA_ENC` included (previously untested, silently
+  `None`). Full suite re-run clean.
 
 ## Future work
 
@@ -3318,17 +3348,21 @@ models, ...), not just read/display layers. Concretely, still open:
   now parsed and shown read-only too -- see the dedicated changelog
   entry below; still no editor/write-back for this domain, same
   "bounded, not a full parser" precedent as everywhere else.)
-- Wider KLayout DRC-deck coverage: `pdklib/drc.py` now extracts two
-  reliable patterns -- `width()`/`space()`/`sep()` and `.enclosed()` --
-  -> `.output()` (75 real rules total); the other 86 real,
-  honestly-skipped constructs are multi-step composite/derived checks
-  (angle/acute-corner checks, antenna-ratio accumulation, density
-  windows, ...) with no single reliable, generic pattern left to
-  extract -- re-checked a second time (not just assumed still true):
-  real `.without_bbox_width()` occurs exactly once deck-wide (not worth
-  a pattern), and every real method-chain shape used across the
-  remaining skipped constructs was tallied deck-wide with no one shape
-  dominating the way `width`/`space`/`sep`/`enclosed` did. Some (e.g.
+- Wider KLayout DRC-deck coverage: `pdklib/drc.py` now extracts four
+  reliable patterns -- `width()`/`space()`/`sep()`, `.enclosed()`,
+  `.with_area()`, and `.with_length()` -- -> `.output()` (77 real rules
+  total); `.overlap()` deliberately isn't extended (no real, direct
+  `.output()`-feeding call site exists anywhere in the deck -- see the
+  dedicated changelog entry above). The other 90 real, honestly-skipped
+  constructs are multi-step composite/derived checks (angle/acute-corner
+  checks, antenna-ratio accumulation, density windows, further-composed
+  `with_area`/`with_length`/`overlap` call sites, ...) with no single
+  reliable, generic pattern left to extract -- re-checked a second time
+  (not just assumed still true): real `.without_bbox_width()` occurs
+  exactly once deck-wide (not worth a pattern), and every real
+  method-chain shape used across the remaining skipped constructs was
+  tallied deck-wide with no one shape dominating the way `width`/
+  `space`/`sep`/`enclosed`/`with_area`/`with_length` did. Some (e.g.
   real `NW.b1`) could in principle resolve via real data-flow tracing
   through arbitrary `.join()`/`.and()`/... composition, but that's
   real, separate, higher-risk future work -- a wrong trace would

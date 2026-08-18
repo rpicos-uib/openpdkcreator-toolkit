@@ -155,22 +155,30 @@ with __import__("tempfile").TemporaryDirectory() as tmp:
     print("re-extracted rule ids:", reextracted_ids)
     assert reextracted_ids == {"TE_W", "TE_VIA_ENC", "TE_AREA", "TE_MAXLEN"}
     assert "TE_OVERLAP" not in reextracted_ids
-    # check_type is recognized for both new methods; .value stays None
-    # here too, same as it already silently did for TE_W/TE_VIA_ENC --
-    # the extractor's value resolver only ever follows the real deck's
-    # own `var = drc_rules['KEY']` indirection convention, and never
-    # resolved a bare literal `<number>.um`/`.um2` (which is exactly
-    # what a freshly hand-generated custom rule embeds). This is a
-    # real, pre-existing limitation, not something this pass introduced
-    # or is trying to close.
+    # check_type AND value both now resolve correctly for every
+    # re-extracted rule, including the two new methods -- the
+    # extractor's value resolver was extended to also fall back to a
+    # bare literal `<number>.um`/`.um2` (exactly what a freshly
+    # hand-generated custom rule embeds, with no drc_rules[...] JSON
+    # indirection to follow) once the leading variable-shaped match
+    # fails to resolve via drc_rules. This used to come back None for
+    # every literal-valued rule, TE_W/TE_VIA_ENC included -- confirmed
+    # fixed for all four here, with a real, driven stash/pop
+    # comparison against the live IHP deck confirming zero regressions
+    # to the existing 77 real, variable-indirected rules (see
+    # pdklib/drc.py's own docstring for exactly why naive
+    # literal-first ordering was tried and rejected first).
+    re_w = next(r for r in reextracted if r.rule_id == "TE_W")
+    assert re_w.check_type == "min_width" and re_w.value == 0.2 and re_w.units == "um"
+    re_via_enc = next(r for r in reextracted if r.rule_id == "TE_VIA_ENC")
+    assert re_via_enc.check_type == "min_enclosure" and re_via_enc.value == 0.1 and re_via_enc.units == "um"
     re_area = next(r for r in reextracted if r.rule_id == "TE_AREA")
-    assert re_area.check_type == "min_area" and re_area.value is None and re_area.units == "um2"
+    assert re_area.check_type == "min_area" and re_area.value == 0.05 and re_area.units == "um2"
     re_maxlen = next(r for r in reextracted if r.rule_id == "TE_MAXLEN")
-    assert re_maxlen.check_type == "max_length" and re_maxlen.value is None and re_maxlen.units == "um"
+    assert re_maxlen.check_type == "max_length" and re_maxlen.value == 0.05 and re_maxlen.units == "um"
     print("PASS: exported custom_rules.drc re-imports 4 of the 5 generatable rules (min_area/max_length now "
           "round-trip too); min_overlap honestly still doesn't (no real ground truth to extract against). "
-          "Re-extracted .value is None for literal-valued rules -- a pre-existing extractor limitation "
-          "(only drc_rules['KEY']-indirected values resolve), true for TE_W/TE_VIA_ENC too, not new here.")
+          "Every re-extracted rule's own .value now resolves correctly too, including literal-valued ones.")
 
     # --- Live, driven verification: the generated custom_rules.drc is
     # not just plausible-looking text -- it actually runs, cleanly,
