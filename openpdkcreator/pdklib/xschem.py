@@ -62,6 +62,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 _K_BLOCK_RE = re.compile(r"(?m)^K\s*\{")
 _B_RE = re.compile(r"(?m)^B\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
 _L_RE = re.compile(r"(?m)^L\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*\{")
@@ -72,10 +74,8 @@ _KV_RE = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|\S+)')
 
 
 def _to_float(token: str) -> float:
-    try:
-        return float(token)
-    except ValueError:
-        return 0.0  # a real, unexpected non-numeric coordinate -- never seen in practice; kept defensive, not fatal.
+    parsed = numeric.parse_number(token)
+    return 0.0 if parsed is None else parsed  # a real, unexpected non-numeric coordinate -- never seen in practice; kept defensive, not fatal.
 
 
 def _unquote(text: str) -> str:

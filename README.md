@@ -3613,6 +3613,31 @@ editor yet -- see Future Work.
     updated (`Help` now `["Help", "Unit Representation", "About
     openPDKcreator"]`) with real assertions on the new dialog's own
     content. Full suite re-run clean.
+  - **Extended to real file parsing too, per direct follow-up request
+    ("just in case")** -- genuinely safe to do, not just convenient:
+    `parse_number`/`parse_int` are a strict superset of bare
+    `float()`/`int()` for every currently real, valid input (the only
+    kind any real file here has ever contained), so every site keeps
+    its own exact previous fallback behavior for real data. Wired into
+    every remaining real file-parsing token-to-number conversion --
+    `pdklib/magic_tech.py`'s own `_parse_cap_coefficient_line` (and,
+    kept symmetric, `pdklib/magic_tech_writer.py`'s own matching
+    diff-comparison re-parse), `pdklib/lef.py`'s own `_try_float`,
+    `pdklib/liberty.py`'s own `_parse_csv_floats`/pin `capacitance`,
+    `pdklib/layers.py`'s own `.lyp` GDS layer/datatype parsing,
+    `pdklib/mag.py`'s own `magscale`/`timestamp` parsing,
+    `pdklib/xschem.py`'s own `_to_float`, `pdklib/xschem_sch.py`'s own
+    `_to_int`, `pdklib/qucs_sym.py`'s own `_to_int`. The real, practical
+    upside: if a future real PDK file (or a hand-edited one) ever does
+    carry a real SI-suffixed value in a field this project reads, it
+    now parses correctly instead of silently falling back to a default
+    (`0`/`0.0`/`None`, whichever that site already used). Verified for
+    real, driven: a repeated no-edit re-export across every real
+    domain this touches -- Layers (`.lyp`), LEF, Liberty, Magic Tech
+    (cap coefficients specifically), `.mag`, xschem symbols/schematics,
+    Qucs-S symbols -- confirms byte-identical output, and every real,
+    driven edit-round-trip test for each of those domains still
+    passes. Full suite re-run clean.
 
 ## Future work
 

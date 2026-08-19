@@ -60,14 +60,14 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 _PRIMITIVE_LINE_RE = re.compile(r"^<([A-Za-z]+)[^>]*/>\s*(?:<!--\s*(.*?)\s*-->)?\s*$")
 
 
 def _to_int(token: str) -> int:
-    try:
-        return int(token)
-    except ValueError:
-        return 0  # a real, unexpected non-integer coordinate -- never seen in practice; kept defensive, not fatal.
+    parsed = numeric.parse_int(token)
+    return 0 if parsed is None else parsed  # a real, unexpected non-integer coordinate -- never seen in practice; kept defensive, not fatal.
 
 
 @dataclass

@@ -52,6 +52,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 
 @dataclass
 class LefLayer:
@@ -265,10 +267,7 @@ def _apply_pin_field(pin: LefPin, keyword: str, tokens: list[str]) -> None:
 
 
 def _try_float(text: str) -> float | None:
-    try:
-        return float(text)
-    except ValueError:
-        return None
+    return numeric.parse_number(text)
 
 
 def _try_size(tokens: list[str]) -> tuple[float, float] | None:

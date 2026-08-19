@@ -2049,11 +2049,10 @@ def _parse_cap_coefficient_line(stripped: str) -> ExtractCapCoefficient | None:
         return None
     args = tuple(parts[1 : 1 + arg_count])
     value_tokens = parts[1 + arg_count :]
-    try:
-        values = tuple(float(token) for token in value_tokens)
-    except ValueError:
+    parsed_values = [numeric.parse_number(token) for token in value_tokens]
+    if any(v is None for v in parsed_values):
         return None
-    return ExtractCapCoefficient(directive=parts[0], args=args, values=values)
+    return ExtractCapCoefficient(directive=parts[0], args=args, values=tuple(parsed_values))
 
 
 def _parse_extract_cap_coefficients_with_lines(lines: list[str], safe_through: int):

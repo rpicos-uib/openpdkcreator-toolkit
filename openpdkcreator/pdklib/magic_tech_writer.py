@@ -203,6 +203,7 @@ import re
 from pathlib import Path
 
 from . import magic_tech as magic_tech_mod
+from . import numeric
 from . import text_utils
 
 _TYPE_LINE_RE = re.compile(r"^(\s*)(-)?(\S+)(\s+)(\S.*)$")
@@ -473,10 +474,8 @@ def _render_cap_coefficient_line(entry: magic_tech_mod.ExtractCapCoefficient, or
         parts = rest_original.split()
         arg_count = len(entry.args)
         orig_args = tuple(parts[:arg_count])
-        try:
-            orig_values = tuple(float(token) for token in parts[arg_count:])
-        except ValueError:
-            orig_values = None
+        parsed_orig_values = [numeric.parse_number(token) for token in parts[arg_count:]]
+        orig_values = None if any(v is None for v in parsed_orig_values) else tuple(parsed_orig_values)
         unchanged = orig_args == entry.args and orig_values == entry.values
     if unchanged:
         rest = rest_original

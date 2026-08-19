@@ -70,6 +70,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
 from .xschem import XschemArc, XschemBox, XschemLine, XschemText
 from .xschem import _A_RE, _B_RE, _L_RE, _T_HEAD_RE, _T_TAIL_RE
 from .xschem import _line_no_at, _parse_kv_block, _scan_braced, _to_float
@@ -82,10 +83,8 @@ _PIN_STEMS = {"ipin", "opin", "iopin"}
 
 
 def _to_int(token: str) -> int:
-    try:
-        return int(token)
-    except ValueError:
-        return 0  # a real, unexpected non-integer coordinate -- never seen in practice; kept defensive, not fatal.
+    parsed = numeric.parse_int(token)
+    return 0 if parsed is None else parsed  # a real, unexpected non-integer coordinate -- never seen in practice; kept defensive, not fatal.
 
 
 @dataclass

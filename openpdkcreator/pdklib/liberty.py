@@ -54,6 +54,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 _GROUP_START_RE = re.compile(r"^(\w+)\s*\(([^)]*)\)\s*\{")
 _ATTR_RE = re.compile(r"^(\w+)\s*:\s*(.+?)\s*;\s*$")
 _PAREN_ATTR_RE = re.compile(r"^(\w+)\s*\(([^)]*)\)\s*;\s*$")
@@ -74,10 +76,9 @@ def _parse_csv_floats(text: str) -> list[float]:
         token = token.strip()
         if not token:
             continue
-        try:
-            values.append(float(token))
-        except ValueError:
-            pass
+        parsed = numeric.parse_number(token)
+        if parsed is not None:
+            values.append(parsed)
     return values
 
 
@@ -302,10 +303,9 @@ def find_cells(path: Path) -> list[LibertyCell]:
                 if key == "direction":
                     pin.direction = value
                 elif key == "capacitance":
-                    try:
-                        pin.capacitance = float(value)
-                    except ValueError:
-                        pass
+                    parsed_cap = numeric.parse_number(value)
+                    if parsed_cap is not None:
+                        pin.capacitance = parsed_cap
                 elif key == "function":
                     pin.function = value
             elif kind == "bus" and key == "direction":

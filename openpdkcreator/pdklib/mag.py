@@ -44,6 +44,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 
 @dataclass
 class MagSection:
@@ -105,16 +107,14 @@ def parse_mag_file(path: Path) -> MagFile:
         if line.startswith("magscale "):
             parts = line.split()
             if len(parts) >= 3:
-                try:
-                    mag.magscale = (int(parts[1]), int(parts[2]))
-                except ValueError:
-                    pass
+                a, b = numeric.parse_int(parts[1]), numeric.parse_int(parts[2])
+                if a is not None and b is not None:
+                    mag.magscale = (a, b)
             continue
         if line.startswith("timestamp "):
-            try:
-                mag.timestamp = int(line[len("timestamp "):].strip())
-            except ValueError:
-                pass
+            parsed_timestamp = numeric.parse_int(line[len("timestamp "):].strip())
+            if parsed_timestamp is not None:
+                mag.timestamp = parsed_timestamp
             continue
         if line.startswith("<<") and line.endswith(">>"):
             section_name = line[2:-2].strip()

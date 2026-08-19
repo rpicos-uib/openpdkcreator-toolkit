@@ -42,6 +42,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from ..models import Layer
+from . import numeric
 
 _TAG_LINE_RE = re.compile(r"^\s*<([\w-]+)>(.*)</\1>\s*$")
 
@@ -71,10 +72,10 @@ def _parse_source(source: str) -> tuple[int | None, int | None]:
     parts = source.split("/")
     if len(parts) != 2:
         return None, None
-    try:
-        return int(parts[0]), int(parts[1])
-    except ValueError:
+    layer, datatype = numeric.parse_int(parts[0]), numeric.parse_int(parts[1])
+    if layer is None or datatype is None:
         return None, None
+    return layer, datatype
 
 
 def find_layer_blocks(lyp_path: Path) -> list[tuple[int, int, dict[str, str]]]:
