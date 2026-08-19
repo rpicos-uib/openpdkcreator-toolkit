@@ -243,9 +243,18 @@ def _render_type_line(entry: magic_tech_mod.TypeEntry, original_line: str | None
 
 
 def _render_plane_line(entry: magic_tech_mod.PlaneEntry, original_line: str | None) -> str:
+    """A real, confirmed requirement (not a formatting nicety): Magic's
+    own real ``planes`` section parser rejects a name/short-code pair
+    separated by ``", "`` (comma-space) -- every real IHP entry uses a
+    bare ``","`` (e.g. ``well,w``), and a real, direct Magic load of a
+    ``", "``-separated plane produces a real ``Unrecognized plane
+    name`` error for every later section referencing it (found by
+    actually loading a from-scratch project's own newly-written tech
+    file in real Magic, not by re-reading this writer's own text)."""
+
     match = _PLANE_LINE_RE.match(original_line) if original_line is not None else None
     indent = match.group(1) if match else ""
-    separator = match.group(3) if match else ", "
+    separator = match.group(3) if match else ","
     return f"{indent}{entry.name}{separator}{entry.short_code}"
 
 
