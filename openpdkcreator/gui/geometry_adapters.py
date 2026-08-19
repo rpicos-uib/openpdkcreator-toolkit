@@ -17,6 +17,7 @@ editable domain in this project already uses.
 
 from __future__ import annotations
 
+from ..pdklib import lef as lef_mod
 from ..pdklib import qucs_sym as qucs_mod
 from ..pdklib import xschem as xschem_mod
 from ..pdklib import xschem_sch as xschem_sch_mod
@@ -217,3 +218,59 @@ def new_qucs_arc(geometry: qucs_mod.QucsSymbolGeometry, x1: float, y1: float, x2
 
 def new_qucs_text(geometry: qucs_mod.QucsSymbolGeometry, x: float, y: float, content: str) -> None:
     geometry.texts.append(qucs_mod.QucsText(x=round(x), y=round(y), size=12, color="#800000", text=content))
+
+
+def lef_pin_scene(pin: lef_mod.LefPin) -> Scene:
+    """One real ``GeometryItem`` per real rect (not per ``LefPort`` --
+    a real port can hold more than one rect on the same real layer,
+    see ``LefPort.rects``' own docstring), the first real, non-symbol/
+    schematic domain to reuse this shared canvas. Uses the same real
+    ``"port"`` shape xschem/Qucs-S pins already use (a filled,
+    labeled rectangle) -- the closest real visual match, since this
+    *is* the real port geometry itself, labeled with its own real
+    layer name (several real rects can legitimately overlap across
+    different real layers on one real pin)."""
+
+    items: list[GeometryItem] = []
+    for port in pin.ports:
+        for idx, rect in enumerate(port.rects):
+            # A rect is a real, immutable tuple -- captured by *index*,
+            # not by value, so repeated incremental on_move calls
+            # during one real drag (geometry_canvas.py calls back with
+            # a small per-step delta each mouse-move, not one final
+            # total) keep updating the *same* real list slot rather
+            # than failing to re-find a tuple that's already changed.
+            def move(dx, dy, p=port, i=idx):
+                r = p.rects[i]
+                p.rects[i] = (r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy)
+
+            def delete(p=port, i=idx):
+                del p.rects[i]
+                if not p.rects and p in pin.ports:
+                    pin.ports.remove(p)
+
+            items.append(GeometryItem(
+                obj=rect, shape="port", x1=rect[0], y1=rect[1], x2=rect[2], y2=rect[3],
+                label=port.layer, color="#8b4513", on_move=move, on_delete=delete,
+            ))
+    return Scene(items=items)
+
+
+def new_lef_port_rect(pin: lef_mod.LefPin, layer: str, x1: float, y1: float, x2: float, y2: float) -> None:
+    """A real new rect on *layer* -- appended to the pin's own real,
+    existing ``LefPort`` for that layer when one is already selected
+    (matching real ``LAYER`` occurrences legitimately repeating with a
+    different real rect, e.g. a real multi-cut via's own layer), or a
+    real, brand-new ``LefPort`` otherwise. Real coordinates are
+    rounded to 3 decimal places (real LEF is in real microns; this
+    project's own real, confirmed manufacturing grids are all
+    coarser than 0.001um -- matches the precision every other real
+    micron-valued field in this project already rounds display/edit
+    values to)."""
+
+    rect = (round(min(x1, x2), 3), round(min(y1, y2), 3), round(max(x1, x2), 3), round(max(y1, y2), 3))
+    for port in pin.ports:
+        if port.layer == layer:
+            port.rects.append(rect)
+            return
+    pin.ports.append(lef_mod.LefPort(layer=layer, rects=[rect]))

@@ -77,7 +77,29 @@ class LefSite:
 @dataclass
 class LefPort:
     layer: str
-    rect_count: int = 0
+    rects: list[tuple[float, float, float, float]] = field(default_factory=list)
+    """Real (x1, y1, x2, y2) micron rects on this real layer -- the
+    same real "a layer can repeat with different rects" shape
+    ``LefViaLayerGeometry.rects`` already established (see that
+    dataclass's own docstring); a real ``LefPort`` is created per real
+    ``LAYER`` occurrence inside a pin's own ``PORT`` block, so a
+    repeated real layer name is already its own, separate ``LefPort``
+    entry rather than something this field itself needs to handle.
+    Editable (**Edit Geometry...**, ``gui/pin_editor.py``) -- real
+    port geometry used to be read-only, tracked only as a bare
+    ``rect_count``, since no editor for it existed; now a real,
+    graphical rectangle editor does (``gui/geometry_canvas.py``, the
+    same shared canvas xschem/Qucs-S symbol geometry already uses)."""
+
+    @property
+    def rect_count(self) -> int:
+        """Read-only, derived -- ``len(rects)``, kept as a real,
+        convenient shorthand for display code that only ever needs the
+        count, not the coordinates (matches this field's own old,
+        pre-geometry-editing name and shape, so no display call site
+        needed to change)."""
+
+        return len(self.rects)
 
 
 @dataclass
@@ -390,8 +412,9 @@ def parse_lef_file(path: Path) -> LefFile:
             stack[-2]["obj"].ports.append(LefPort(layer=tokens[1]))
         elif kind == "port" and keyword == "RECT":
             ports = stack[-2]["obj"].ports
-            if ports:
-                ports[-1].rect_count += 1
+            rect = _try_rect(tokens)
+            if ports and rect is not None:
+                ports[-1].rects.append(rect)
         elif kind == "obs" and keyword == "LAYER" and len(tokens) > 1:
             macro_obj = stack[-2]["obj"]
             if tokens[1] not in macro_obj.obs_layers:

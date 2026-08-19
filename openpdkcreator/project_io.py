@@ -212,8 +212,24 @@ def save_state(
             for tech_name, blocks in (magic_cifinput_recipes or {}).items()
         },
         "lef_pins": {
+            # A port's own real rects is a list of real (x1, y1, x2, y2)
+            # tuples -- yaml.safe_dump has no default representer for a
+            # plain tuple (same real reason magic_compose/
+            # magic_extract_misc cast their own tuples to lists), so
+            # each one is cast explicitly here; dataclasses.asdict
+            # already turns each real LefPort into a plain dict, this
+            # just fixes up its own nested rects afterward.
             lef_path: {
-                macro_name: [dataclasses.asdict(pin) for pin in pins]
+                macro_name: [
+                    {
+                        **dataclasses.asdict(pin),
+                        "ports": [
+                            {**dataclasses.asdict(port), "rects": [list(r) for r in port.rects]}
+                            for port in pin.ports
+                        ],
+                    }
+                    for pin in pins
+                ]
                 for macro_name, pins in macros.items()
             }
             for lef_path, macros in lef_pins.items()
@@ -254,8 +270,17 @@ class LoadedState:
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
 
+def _load_lef_port(raw: dict) -> LefPort:
+    # A real, pre-existing save file may still have the old shape
+    # (`rect_count`, no real coordinates -- from before LefPort.rects
+    # existed) -- honestly translated to zero real rects (there is no
+    # real geometry to recover from a bare count), not guessed at.
+    rects = [tuple(r) for r in raw.get("rects", [])]
+    return LefPort(layer=raw["layer"], rects=rects)
+
+
 def _load_lef_pin(raw: dict) -> LefPin:
-    ports = [LefPort(**p) for p in raw.get("ports", [])]
+    ports = [_load_lef_port(p) for p in raw.get("ports", [])]
     return LefPin(name=raw["name"], direction=raw.get("direction", ""), use=raw.get("use", ""), ports=ports)
 
 

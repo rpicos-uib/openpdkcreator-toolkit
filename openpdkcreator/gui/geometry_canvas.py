@@ -41,8 +41,10 @@ start/sweep angle default to a full real circle, ``0``/``360``,
 adjustable afterward via the selection's own side form), and, only
 when the owning pane supplies them, **Instance** (schematics only --
 pick a real ``.sym`` from the existing real symbol library, then click
-a position) and **Wire** (schematics only -- click two points).
-"""
+a position), **Wire** (schematics only -- click two points), and
+**Rect** (click-drag two opposite real corners -- LEF pin port
+geometry, ``gui/pin_editor.py``, the first real, non-symbol/schematic
+domain to reuse this shared canvas)."""
 
 from __future__ import annotations
 
@@ -106,6 +108,7 @@ class GeometryCanvas(ttk.Frame):
         on_new_text: Callable[[float, float, str], None] | None = None,
         on_new_instance: Callable[[float, float, str], None] | None = None,
         on_new_wire: Callable[[float, float, float, float], None] | None = None,
+        on_new_rect: Callable[[float, float, float, float], None] | None = None,
         on_selection_changed: Callable[[GeometryItem | None], None] | None = None,
         on_scene_changed: Callable[[], None] | None = None,
         pick_symbol: Callable[[], str | None] | None = None,
@@ -123,6 +126,7 @@ class GeometryCanvas(ttk.Frame):
         self.on_new_text = on_new_text
         self.on_new_instance = on_new_instance
         self.on_new_wire = on_new_wire
+        self.on_new_rect = on_new_rect
         self.on_selection_changed = on_selection_changed
         self.on_scene_changed = on_scene_changed
         self.pick_symbol = pick_symbol
@@ -154,6 +158,8 @@ class GeometryCanvas(ttk.Frame):
             ttk.Radiobutton(toolbar, text="Instance", variable=self.tool, value="instance").pack(side="left")
         if self.on_new_wire is not None:
             ttk.Radiobutton(toolbar, text="Wire", variable=self.tool, value="wire").pack(side="left")
+        if self.on_new_rect is not None:
+            ttk.Radiobutton(toolbar, text="Rect", variable=self.tool, value="rect").pack(side="left")
 
         ttk.Button(toolbar, text="Delete", command=self._delete_selected).pack(side="left", padx=(12, 0))
         ttk.Button(toolbar, text="Zoom to Fit", command=self.zoom_to_fit).pack(side="left", padx=(6, 0))
@@ -333,6 +339,11 @@ class GeometryCanvas(ttk.Frame):
                 self.canvas.delete(self._rubber_band_id)
             sx, sy = self._to_canvas(*self._draw_start_real)
             self._rubber_band_id = self.canvas.create_line(sx, sy, event.x, event.y, dash=(3, 2), fill="#999")
+        elif tool == "rect" and self._draw_start_real is not None:
+            if self._rubber_band_id is not None:
+                self.canvas.delete(self._rubber_band_id)
+            sx, sy = self._to_canvas(*self._draw_start_real)
+            self._rubber_band_id = self.canvas.create_rectangle(sx, sy, event.x, event.y, dash=(3, 2), outline="#999")
 
     def _on_release(self, event):
         tool = self.tool.get()
@@ -359,6 +370,8 @@ class GeometryCanvas(ttk.Frame):
             self.on_new_arc(real_x1, real_y1, real_x2, real_y2)
         elif tool == "wire" and self.on_new_wire is not None:
             self.on_new_wire(real_x1, real_y1, real_x2, real_y2)
+        elif tool == "rect" and self.on_new_rect is not None:
+            self.on_new_rect(real_x1, real_y1, real_x2, real_y2)
         if self.on_scene_changed is not None:
             self.on_scene_changed()
 

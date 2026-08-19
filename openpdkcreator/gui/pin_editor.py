@@ -23,6 +23,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..pdklib import lef as lef_mod
+from . import geometry_adapters
+from .geometry_canvas import GeometryCanvas
 
 DIRECTIONS = ("INPUT", "OUTPUT", "INOUT")
 USES = ("SIGNAL", "POWER", "GROUND")
@@ -102,9 +104,10 @@ class PinEditor(ttk.Frame):
         add_combo("direction", "Direction", DIRECTIONS)
         add_combo("use", "Use", USES)
 
-        ttk.Label(right, text="Ports (real drawn geometry -- read-only)").grid(
-            row=form_row, column=0, columnspan=2, sticky="w", pady=(10, 2)
-        )
+        ports_header = ttk.Frame(right)
+        ports_header.grid(row=form_row, column=0, columnspan=2, sticky="ew", pady=(10, 2))
+        ttk.Label(ports_header, text="Ports (real drawn geometry)").pack(side="left")
+        ttk.Button(ports_header, text="Edit Geometry...", command=self._edit_geometry).pack(side="right")
         form_row += 1
         self.ports_text = tk.Text(right, height=6, width=30, state="disabled", font=("Courier", 9))
         self.ports_text.grid(row=form_row, column=0, columnspan=2, sticky="nsew", pady=2)
@@ -152,17 +155,22 @@ class PinEditor(ttk.Frame):
         if pin is None:
             for var in self.pin_vars.values():
                 var.set("")
-            ports_text = ""
         else:
             self.pin_vars["name"].set(pin.name)
             self.pin_vars["direction"].set(pin.direction)
             self.pin_vars["use"].set(pin.use)
-            ports_text = "\n".join(f"{p.layer}: {p.rect_count} rect(s)" for p in pin.ports) or "(none)"
+        self._refresh_ports_text()
+        self._suspend_trace = False
+
+    def _refresh_ports_text(self):
+        pin = self.current_pin
+        ports_text = "" if pin is None else (
+            "\n".join(f"{p.layer}: {p.rect_count} rect(s)" for p in pin.ports) or "(none)"
+        )
         self.ports_text.configure(state="normal")
         self.ports_text.delete("1.0", "end")
         self.ports_text.insert("1.0", ports_text)
         self.ports_text.configure(state="disabled")
-        self._suspend_trace = False
 
     def _commit_form_to_pin(self):
         pin = self.current_pin
@@ -185,6 +193,53 @@ class PinEditor(ttk.Frame):
                 self.pins_tree.item(iid, values=self._pin_row_values(self.current_pin))
         if self.on_change is not None:
             self.on_change(self.macro)
+
+    def _edit_geometry(self):
+        """Opens a modal ``GeometryCanvas`` scoped to the current pin's
+        own real ``LefPort`` rects. A real layer picker sits above the
+        canvas (there is no per-item "layer" field on the Rect tool's
+        own click-drag gesture, unlike Select/move which already knows
+        which real ``LefPort`` a dragged rect belongs to) -- new rects
+        go on whichever real layer name is entered there, joining an
+        existing same-layer ``LefPort`` or starting a new one, matching
+        ``geometry_adapters.new_lef_port_rect``'s own real behavior."""
+        if self.current_pin is None:
+            return
+        self._commit_form_to_pin()
+        pin = self.current_pin
+
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Edit Geometry -- {pin.name}")
+        dialog.geometry("720x540")
+        dialog.transient(self.winfo_toplevel())
+
+        layer_row = ttk.Frame(dialog)
+        layer_row.pack(fill="x", padx=6, pady=(6, 0))
+        ttk.Label(layer_row, text="Layer for new rects:").pack(side="left")
+        existing_layers = sorted({p.layer for p in pin.ports})
+        layer_var = tk.StringVar(value=existing_layers[0] if existing_layers else "")
+        ttk.Combobox(layer_row, textvariable=layer_var, values=existing_layers, width=20).pack(
+            side="left", padx=(6, 0)
+        )
+
+        def refresh():
+            canvas.set_scene(geometry_adapters.lef_pin_scene(pin), auto_fit=False)
+            self._refresh_ports_text()
+            if self.on_change is not None:
+                self.on_change(self.macro)
+
+        def on_new_rect(x1, y1, x2, y2):
+            layer = layer_var.get().strip()
+            if not layer:
+                return
+            geometry_adapters.new_lef_port_rect(pin, layer, x1, y1, x2, y2)
+            refresh()
+
+        canvas = GeometryCanvas(dialog, on_new_rect=on_new_rect, on_scene_changed=refresh)
+        canvas.pack(fill="both", expand=True, padx=6, pady=6)
+        canvas.set_scene(geometry_adapters.lef_pin_scene(pin))
+
+        ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=(0, 6))
 
     def _new_pin(self):
         if self.macro is None:

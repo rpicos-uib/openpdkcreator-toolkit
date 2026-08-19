@@ -3638,6 +3638,81 @@ editor yet -- see Future Work.
     Qucs-S symbols -- confirms byte-identical output, and every real,
     driven edit-round-trip test for each of those domains still
     passes. Full suite re-run clean.
+- **Real LEF pin PORT geometry editing** -- per direct request
+  ("add a way to edit the LEF geometry"). Before this, a macro's own
+  pin `PORT` blocks were parsed only as a bare per-layer
+  `rect_count`, and `gui/pin_editor.py` showed that count in a
+  read-only `Text` widget -- there was no way to actually see or
+  change a real pin's own drawn geometry anywhere in this project.
+  **Reused existing, already-proven precedent rather than inventing a
+  new shape**: `LefPort.rects` is a `list[tuple[float, float, float,
+  float]]` of real `(x1, y1, x2, y2)` micron rects, the exact same
+  "a real layer can legitimately repeat with a different rect" shape
+  `LefViaLayerGeometry.rects` already established for real VIA
+  blocks; `rect_count` survives as a read-only, derived
+  `len(rects)` property so no existing display call site needed to
+  change. Editing itself reuses `gui/geometry_canvas.py`, the shared
+  interactive canvas already driving xschem Symbol/Schematic and
+  Qucs-S Symbol editing -- LEF is the first non-symbol/schematic
+  domain to reuse it, via a new **Rect** tool (click-drag two opposite
+  corners) and a new `gui/geometry_adapters.py` adapter
+  (`lef_pin_scene`/`new_lef_port_rect`). `gui/pin_editor.py` gained an
+  **Edit Geometry...** button opening a modal dialog with the canvas
+  embedded, scoped to the currently-selected pin, plus a layer picker
+  for where a newly-drawn rect lands (joining an existing same-layer
+  `LefPort`, or starting a new one).
+  - **A real bug, caught and fixed before it shipped**: a rect is an
+    immutable tuple, not a mutable object with its own `x`/`y`
+    attributes the way every *other* adapter's `on_move` closure
+    mutates in place -- an initial "find this rect by value, then
+    replace it" closure broke on the *second* of a real drag's own
+    repeated incremental `on_move` calls (the canvas calls back with a
+    small per-step delta on every mouse-move, not one final total),
+    since the list no longer contained the original, by-then-replaced
+    tuple. Fixed by capturing the rect's own list *index* at
+    scene-build time instead of the rect's *value*, and rebuilding the
+    whole scene from the real, live `LefPin` after every edit
+    (`on_scene_changed`) so a delete's own index shift never goes
+    stale either.
+  - **Write-back reuses this project's own established diff-first
+    pattern**: `pdklib/lef_writer.py`'s `_render_pin_block` already
+    kept a pin's whole interior verbatim unless a tracked field
+    changed; a pin's own `PORT`...`END` sub-block(s) now get the same
+    treatment one level down -- `_reparse_port_blocks` re-derives the
+    `LefPort` list the *captured original lines* represent and only
+    regenerates fresh `PORT` blocks (`_render_port_blocks`) if that
+    differs from the real, live, possibly-edited `LefPin.ports`. A
+    real, confirmed edge case this had to account for: 174 of IHP's
+    own 6443 real pins split one pin's geometry across *more than
+    one* separate real `PORT` block; an edit collapses that pin down
+    to one block per `LefPort` -- an accepted, documented formatting
+    tradeoff, not a semantic one, since the real rects themselves
+    survive exactly.
+  - Backward compatible with a project saved before this feature
+    existed: `project_io.py`'s new `_load_lef_port` reads a bare
+    `{"layer": ...}` (no `"rects"` key) as an empty-geometry port
+    rather than raising, and the `lef_pins` save-dict construction
+    explicitly casts each rect's own tuple to a list (`yaml.safe_dump`
+    has no default representer for a plain tuple, the same real issue
+    this project already solved for other tuple-typed fields).
+  - Verified for real, driven, in `tests/test_lef_port_geometry.py`
+    (new): the real parser now captures real rect coordinates (11053
+    real rects across 6443 real pins in all 32 real IHP `.lef`
+    files, not just a count); a real, unedited re-export is
+    byte-identical across every one of those 32 files, including
+    every real multi-PORT-block pin; the tuple-index move fix holds
+    across two repeated incremental drags; `new_lef_port_rect` both
+    starts a new `LefPort` and joins an existing same-layer one;
+    deleting removes just the one real rect, or the whole `LefPort`
+    once its last rect is gone; a real edit survives a full render +
+    re-parse round trip while every *other* real pin in the same file
+    stays byte-for-byte untouched; the old-shape backward-compat load
+    path; and, driven through the real, live `gui/pin_editor.py`
+    widget itself (not just the underlying adapter functions), that
+    **Edit Geometry...** opens a real `Toplevel` with a working
+    embedded canvas, a real new rect lands on the real, live `LefPin`,
+    and the pin list's own summary text refreshes. Full suite
+    (78 tests) re-run clean.
 
 ## Future work
 
