@@ -15,9 +15,15 @@ content still read-only), **cifoutput**'s own flat, editable-in-place
 ``ExtractResist`` (``resist``), ``ExtractCapCoefficient`` (the four
 ``default*`` directives, all four flat/single-line), and
 ``ExtractDevice`` (``device``, ranged) -- and **drc**'s own
-``MagicAngleCheck`` (``angles``, ranged) and ``MagicDrcCheck``
-(``width``/``spacing``/``maxwidth``, ranged), the Magic Tech domains
-with a real form (see ``gui/magic_tech_view.py``'s own docstring).
+``MagicAngleCheck`` (``angles``, ranged), ``MagicDrcCheck``
+(``width``/``spacing``/``maxwidth``, ranged), and
+``MagicDrcMiscStatement`` (``surround``/``edge4way``/``widespacing``/
+``cifmaxwidth``/``cifwidth``/``cifspacing``/``area``/
+``exact_overlap``/``overhang``/``extend``/``rect_only``/``cifarea``/
+``no_overlap``, ranged -- see that dataclass's own docstring, in
+``pdklib/magic_tech.py``, for exactly why one shared, raw/positional
+shape covers all thirteen), the Magic Tech domains with a real form
+(see ``gui/magic_tech_view.py``'s own docstring).
 Every other real section (cifinput's own recipe blocks' own real op
 content/everything else ``magic_tech.py`` doesn't parse) is copied
 verbatim, untouched -- there's no editor for them, so nothing to write
@@ -614,6 +620,26 @@ def _render_drc_check_range(entry: magic_tech_mod.MagicDrcCheck, original_lines:
     return [f' {entry.check_type} {layers_part} {value_int}{filler_part} "{entry.message}"']
 
 
+def _render_drc_misc_range(entry: magic_tech_mod.MagicDrcMiscStatement, original_lines: list[str] | None) -> list[str]:
+    """The drc section's third real ranged domain -- every real
+    keyword besides ``width``/``spacing``/``maxwidth``/``angles`` (see
+    ``MagicDrcMiscStatement``'s own docstring). Kept fully raw and
+    positional, so comparison is a plain whitespace-split token match
+    rather than a per-directive regex the way
+    ``_reparse_drc_check_range`` needs -- one shared shape for all
+    thirteen real keywords, same reason the dataclass itself is one
+    shared shape. Same real "preserve verbatim if genuinely unchanged,
+    else collapse to one fresh line" approach every other ranged
+    domain here uses."""
+
+    if original_lines is not None:
+        joined = _join_ranged_lines(original_lines)
+        parts = joined.split()
+        if parts and parts[0] == entry.directive and tuple(parts[1:]) == entry.args:
+            return list(original_lines)
+    return [" " + " ".join([entry.directive, *entry.args])]
+
+
 def _render_section_patch(
     original_lines: list[str], start_line: int, end_line: int, groups: list[tuple[list, list[int], object]],
     range_groups: list[tuple[list, list[tuple[int, int]], object]] = (),
@@ -740,6 +766,7 @@ def render_tech_file(original_path: Path, tech: magic_tech_mod.MagicTechnology) 
             [
                 (tech.drc_angle_checks, tech.all_parsed_drc_angle_ranges, _render_angle_range),
                 (tech.drc_checks, tech.all_parsed_drc_check_ranges, _render_drc_check_range),
+                (tech.drc_misc, tech.all_parsed_drc_misc_ranges, _render_drc_misc_range),
             ],
         ),
     ]

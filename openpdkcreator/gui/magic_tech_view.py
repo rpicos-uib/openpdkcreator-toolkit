@@ -152,9 +152,27 @@ rebuilt each time. ``MagicDrcCheck`` needed a real prerequisite first
 (a new ``filler_raw`` field capturing the real ``mode``/exception-list
 text those lines routinely carry, previously discarded entirely) --
 see ``MagicAngleCheck``'s own docstring (``pdklib/magic_tech.py``) for
-the full real reasoning. Every real construct both `extract` and
+the full real reasoning. A third, wide pane below the two covers every
+other real drc-section keyword at once -- ``surround``/``edge4way``/
+``widespacing``/``cifmaxwidth``/``cifwidth``/``cifspacing``/``area``/
+``exact_overlap``/``overhang``/``extend``/``rect_only``/``cifarea``/
+``no_overlap`` (``MagicDrcMiscStatement``, 148 real lines across 13
+real directives, none dominant enough to justify its own bespoke
+parser the way ``width``/``spacing``/``maxwidth`` share one -- kept
+fully raw and positional instead, edited as ``directive``/``args_text``,
+the same "don't guess further" shape ``ComposeStatement``/``Extract
+Misc`` already established; see that dataclass's own docstring, in
+``pdklib/magic_tech.py``, for exactly why real ``variants``/``style``/
+``scalefactor``/``cifstyle`` lines are deliberately excluded -- a
+different real *kind* of line, section-level scope/config, not a
+per-rule check). Every real construct both `extract` and
 `drc` parse is now editable -- neither section has any remaining
-read-only content of its own. **CIF Input Recipes**
+read-only content of its own (real ``surround``/``edge4way``/
+``variants``/... constructs used to be flagged as unparsed entirely;
+now every one of the 13 real per-rule keywords is parsed and editable
+too, real ``variants``/``style``/``scalefactor``/``cifstyle`` still
+deliberately unparsed since they're a different kind of content, not
+merely a differently-shaped one). **CIF Input Recipes**
 (``CifInputRecipeBlock``) is editable in a more limited, deliberate
 way: only its own real header fields (``name``/``kind_text``/
 ``base_layer``), not its own real op content, which stays read-only in
@@ -311,13 +329,18 @@ class MagicTechView(ttk.Frame):
         ``pdklib/magic_tech.py``, for the real ``mode``/exception-list
         filler that had to be captured into ``filler_raw`` first, and
         ``MagicAngleCheck``'s own for why ``angles`` needed no such
-        prerequisite)."""
+        prerequisite). A third, wide pane below covers every other real
+        drc-section keyword (``surround``/``edge4way``/``widespacing``/
+        ``cifmaxwidth``/... -- see ``MagicDrcMiscStatement``'s own
+        docstring for the full real list and why they share one flat,
+        raw/positional shape rather than a bespoke parser each)."""
 
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="DRC (Magic)")
         frame.columnconfigure(0, weight=2)
         frame.columnconfigure(1, weight=1)
         frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(3, weight=1)
 
         ttk.Label(frame, text="width/spacing/maxwidth:").grid(
             row=0, column=0, sticky="w", padx=(0, 4)
@@ -352,6 +375,23 @@ class MagicTechView(ttk.Frame):
             help_text="Real drc-section 'angles LAYER DEGREES \"MESSAGE\"' statement.",
         )
         self.drc_angles_editor.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frame, text="surround/edge4way/widespacing/cifmaxwidth/cifwidth/cifspacing/area/"
+                        "exact_overlap/overhang/extend/rect_only/cifarea/no_overlap:",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        misc_frame = ttk.Frame(frame)
+        misc_frame.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        self.drc_misc_editor = SimpleListEditor(
+            misc_frame, [("directive", "Directive", 110), ("args_text", "Args", 600)],
+            lambda: magic_tech_mod.MagicDrcMiscStatement(directive="surround", args=()),
+            entry_label="DRC Statement",
+            help_text="Every other real drc-section statement -- 'DIRECTIVE ARG1 ARG2 ...', kept fully raw and "
+                      "positional (argument semantics vary too much per directive to assert, same 'don't guess "
+                      "further' discipline as Compose/Extract Misc). A trailing quoted message, when present, "
+                      "is just more whitespace-split tokens in Args -- edited as one plain string.",
+        )
+        self.drc_misc_editor.pack(fill="both", expand=True)
 
     def _build_extract_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
@@ -673,6 +713,9 @@ class MagicTechView(ttk.Frame):
     def collect_drc_checks_by_tech(self) -> dict[str, list[magic_tech_mod.MagicDrcCheck]]:
         return {name: tech.drc_checks for name, tech in self.technologies.items()}
 
+    def collect_drc_misc_by_tech(self) -> dict[str, list[magic_tech_mod.MagicDrcMiscStatement]]:
+        return {name: tech.drc_misc for name, tech in self.technologies.items()}
+
     # -- data ---------------------------------------------------------------
 
     def load(self):
@@ -720,6 +763,7 @@ class MagicTechView(ttk.Frame):
         self.extract_devices_editor.commit_pending_edits()
         self.drc_angles_editor.commit_pending_edits()
         self.drc_checks_editor.commit_pending_edits()
+        self.drc_misc_editor.commit_pending_edits()
         for tree in (
             self.cifinput_recipes_tree,
         ):
@@ -746,6 +790,7 @@ class MagicTechView(ttk.Frame):
             self.extract_devices_editor.set_entries(None)
             self.drc_angles_editor.set_entries(None)
             self.drc_checks_editor.set_entries(None)
+            self.drc_misc_editor.set_entries(None)
             self._refresh_types()
             return
 
@@ -768,6 +813,7 @@ class MagicTechView(ttk.Frame):
         self.extract_devices_editor.set_entries(tech.extract_devices)
         self.drc_angles_editor.set_entries(tech.drc_angle_checks)
         self.drc_checks_editor.set_entries(tech.drc_checks)
+        self.drc_misc_editor.set_entries(tech.drc_misc)
         for recipe in tech.cifinput_recipes:
             ops_text = " ".join(f"{op.verb}({op.args})" if op.args else op.verb for op in recipe.ops)
             self.cifinput_recipes_tree.insert(
@@ -782,7 +828,8 @@ class MagicTechView(ttk.Frame):
             f"planes:{len(tech.planes)} types:{len(tech.types)} contacts:{len(tech.contacts)} "
             f"aliases:{len(tech.aliases)} styles:{len(tech.styles)} cif_layers:{len(tech.cif_layers)} "
             f"compose:{len(tech.compose)} connect:{len(tech.connect)} "
-            f"drc_checks:{len(tech.drc_checks)}+{len(tech.drc_angle_checks)}angles({len(tech.drc_skipped)} skipped) "
+            f"drc_checks:{len(tech.drc_checks)}+{len(tech.drc_angle_checks)}angles+"
+            f"{len(tech.drc_misc)}misc({len(tech.drc_skipped)} skipped) "
             f"extract_resist:{len(tech.extract_resist)} "
             f"extract_cap_coefficients:{len(tech.extract_cap_coefficients)} "
             f"extract_devices:{len(tech.extract_devices)} "

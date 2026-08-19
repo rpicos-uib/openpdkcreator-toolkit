@@ -175,6 +175,15 @@ _EXTRACT_CAP_DIRECTIVES = {
 # width/spacing statements -- empirically confirmed (not from a local
 # spec), see this module's own docstring.
 _DRC_VALUE_TO_MICRONS = 1000.0
+# Every real drc-section keyword recognized as a MagicDrcMiscStatement
+# (see that dataclass's own docstring for real per-directive counts
+# and why `variants`/`style`/`scalefactor`/`cifstyle` are deliberately
+# excluded).
+_DRC_MISC_DIRECTIVES = (
+    "surround", "edge4way", "widespacing", "cifmaxwidth", "cifwidth",
+    "cifspacing", "area", "exact_overlap", "overhang", "extend",
+    "rect_only", "cifarea", "no_overlap",
+)
 
 
 @dataclass
@@ -668,6 +677,73 @@ class MagicAngleCheck:
 
 
 @dataclass
+class MagicDrcMiscStatement:
+    """One real drc-section statement whose own real keyword isn't
+    ``width``/``spacing``/``maxwidth``/``angles`` -- confirmed real,
+    directive-by-directive, not assumed uniform: ``surround`` (39 real
+    lines)/``edge4way`` (24)/``widespacing`` (21)/``cifmaxwidth`` (15)/
+    ``area`` (12)/``cifwidth`` (9)/``exact_overlap`` (8)/
+    ``cifspacing`` (6)/``overhang`` (5)/``extend`` (5)/``rect_only``
+    (2)/``cifarea`` (1)/``no_overlap`` (1), 148 real lines total, none
+    even close to dominant the way ``width``/``spacing``/``maxwidth``
+    already were -- the same real conclusion ``pdklib/drc.py``'s own
+    KLayout-deck extractor separately reached for its own remaining
+    skipped constructs (see that module's own docstring). Each real
+    directive carries a genuinely different real argument shape
+    (single vs. paired real layer-boolean expressions, one vs. two
+    real threshold values, an optional real trailing mode/exception-
+    list filler, ...) -- not uniform enough to justify a bespoke,
+    semantically-aware parser per directive the way ``width``/
+    ``spacing``/``maxwidth`` already have one shared shape. Kept fully
+    raw and positional instead -- ``directive`` plus its own remaining
+    ``args`` -- the same "don't guess further" discipline
+    ``ComposeStatement``/``ExtractMiscStatement`` already established,
+    not a working DRC-rule interpreter; a quoted trailing message (most
+    real lines carry one) is not treated specially either, just more
+    whitespace-split tokens in ``args``, since round-trip for an
+    *unedited* real entry always preserves its own original source
+    verbatim (see ``pdklib/magic_tech_writer.py``'s own
+    ``_render_drc_misc_range``) -- only a deliberate edit re-splits
+    ``args_text``, the same real tradeoff ``ExtractDevice.rest_text``
+    already accepts.
+
+    **Deliberately excludes** real ``variants (fast),(full)``/
+    ``style ...``/``scalefactor ...``/``cifstyle ...`` lines, despite
+    also being currently-unparsed real drc-section content: those are
+    real section-level directives (conditional PVT-corner scoping, or
+    one-time style/scale declarations that apply to the whole section,
+    not to one rule), a fundamentally different real *kind* of line,
+    not merely a differently-shaped one -- lumping them in here would
+    misrepresent what they are, the same real distinction this
+    project's own `extract`-section work already draws between a real
+    ``variants (...)`` block (scope, not a statement) and the real
+    statements repeating inside it."""
+
+    directive: str
+    args: tuple[str, ...] = ()
+    start_line: int = 0
+    end_line: int = 0
+    """Same real range-tracking shape as ``MagicDrcCheck.start_line``/
+    ``end_line`` -- confirmed real: the large majority of these 148
+    real *entries* (103 of them -- 100 real two-line, 3 real
+    three-line) wrap across more than one real physical line via a
+    trailing ``\\`` continuation, even more often than ``width``/
+    ``spacing``/``maxwidth`` do."""
+
+    @property
+    def args_text(self) -> str:
+        """A plain-string view of ``args`` -- same real reason
+        ``ExtractMiscStatement.args_text``/``ExtractDevice.rest_text``
+        exist."""
+
+        return " ".join(self.args)
+
+    @args_text.setter
+    def args_text(self, value: str) -> None:
+        self.args = tuple(value.split())
+
+
+@dataclass
 class ExtractResist:
     """One real per-layer sheet-resistance value from the extract
     section (milliohms/square, per the real file's own comment). Real
@@ -917,6 +993,10 @@ class MagicTechnology:
     """Real 'angles' statements -- see ``MagicAngleCheck``'s own
     docstring for why these are a separate list, not folded into
     ``drc_checks``."""
+    drc_misc: list[MagicDrcMiscStatement] = field(default_factory=list)
+    """Every other real drc-section statement -- ``surround``/
+    ``edge4way``/``widespacing``/``cifmaxwidth``/... -- see
+    ``MagicDrcMiscStatement``'s own docstring."""
     drc_skipped: list[str] = field(default_factory=list)
     """Real 'width'/'spacing'/'maxwidth'/'angles' lines found but not
     matched -- e.g. the one real, confirmed defect in IHP's own file
@@ -1110,6 +1190,7 @@ class MagicTechnology:
     ``CifOutputLayerMapping``'s own repeated ``DNWELL`` rows."""
     all_parsed_drc_angle_ranges: list[tuple[int, int]] = field(default_factory=list)
     all_parsed_drc_check_ranges: list[tuple[int, int]] = field(default_factory=list)
+    all_parsed_drc_misc_ranges: list[tuple[int, int]] = field(default_factory=list)
     drc_section_start_line: int = 0
     drc_section_end_line: int = 0
     """Same real range-based bookkeeping as
@@ -1853,6 +1934,81 @@ def _parse_drc_angles_with_lines(lines: list[str], safe_through: int):
     return entries, all_ranges, section_start, section_end
 
 
+def _parse_drc_misc_text(joined: str) -> MagicDrcMiscStatement | None:
+    parts = joined.split()
+    if not parts or parts[0] not in _DRC_MISC_DIRECTIVES:
+        return None
+    return MagicDrcMiscStatement(directive=parts[0], args=tuple(parts[1:]))
+
+
+def _parse_drc_misc_with_lines(lines: list[str], safe_through: int):
+    """Real, range-tracked scan for every real drc-section keyword
+    that isn't ``width``/``spacing``/``maxwidth``/``angles`` -- same
+    real accumulator shape ``_parse_drc_checks_with_lines``/
+    ``_parse_drc_angles_with_lines`` use (see
+    ``MagicDrcMiscStatement``'s own docstring for exactly which real
+    keywords and why ``variants``/``style``/``scalefactor``/
+    ``cifstyle`` are deliberately excluded). Every other real
+    drc-section line simply isn't one of these and is never touched
+    here, real read-only content copied verbatim at write-back time
+    via ``_render_section_patch``'s existing gap logic. Returns
+    (entries, all_ranges, section_start, section_end)."""
+
+    entries: list[MagicDrcMiscStatement] = []
+    all_ranges: list[tuple[int, int]] = []
+    section_start = section_end = 0
+    in_section = False
+    pending: dict | None = None  # {"start": line_no, "text": str}
+
+    for line_no, raw_line in enumerate(lines, start=1):
+        stripped = raw_line.strip()
+
+        if pending is not None:
+            piece = stripped[:-1].rstrip() if stripped.endswith("\\") else stripped
+            pending["text"] += " " + piece
+            if not stripped.endswith("\\"):
+                entry = _parse_drc_misc_text(pending["text"])
+                safe_start = pending["start"] if pending["start"] and line_no <= safe_through else 0
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+                pending = None
+            continue
+
+        if not in_section:
+            if stripped == "drc":
+                in_section = True
+                if section_start == 0 and line_no <= safe_through:
+                    section_start = line_no
+            continue
+        if stripped == "end":
+            in_section = False
+            if section_start and section_end == 0 and line_no <= safe_through:
+                section_end = line_no
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        first_token = stripped.split(None, 1)[0] if stripped.split() else ""
+        if first_token in _DRC_MISC_DIRECTIVES:
+            safe_start = line_no if section_start and line_no <= safe_through else 0
+            if stripped.endswith("\\"):
+                pending = {"start": safe_start, "text": stripped[:-1].rstrip()}
+            else:
+                entry = _parse_drc_misc_text(stripped)
+                if entry is not None:
+                    if safe_start:
+                        entry.start_line = safe_start
+                        entry.end_line = line_no
+                        all_ranges.append((safe_start, line_no))
+                    entries.append(entry)
+
+    return entries, all_ranges, section_start, section_end
+
+
 def _parse_resist_line(stripped: str) -> ExtractResist | None:
     match = _RESIST_RE.match(stripped)
     if match is None:
@@ -2091,14 +2247,18 @@ def parse_tech_file(path: Path) -> MagicTechnology:
     tech.drc_checks, tech.all_parsed_drc_check_ranges, _drc_start2, _drc_end2 = (
         _parse_drc_checks_with_lines(lines, safe_through)
     )
+    tech.drc_misc, tech.all_parsed_drc_misc_ranges, _drc_start3, _drc_end3 = (
+        _parse_drc_misc_with_lines(lines, safe_through)
+    )
     # _discarded_checks/_discarded_angle_checks: _parse_drc_checks's
     # own return values are superseded here by the real, range-tracked
     # _parse_drc_checks_with_lines/_parse_drc_angles_with_lines above --
     # kept for its own width/spacing/maxwidth/angles statistics
     # (drc_skipped) only, same "don't guess, but don't over-verify
-    # either" discipline elsewhere. _drc_start2/_drc_end2 are the exact
-    # same real section bounds already captured above -- discarded, not
-    # asserted equal, same reasoning as extract's own repeated groups.
+    # either" discipline elsewhere. _drc_start2/_drc_end2/_drc_start3/
+    # _drc_end3 are the exact same real section bounds already captured
+    # above -- discarded, not asserted equal, same reasoning as
+    # extract's own repeated groups.
     (
         tech.extract_misc, tech.all_parsed_extract_misc_line_nos,
         tech.extract_section_start_line, tech.extract_section_end_line,

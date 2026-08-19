@@ -3327,6 +3327,70 @@ editor yet -- see Future Work.
   retroactively rewrite history" precedent as everywhere else in this
   file -- this entry is the current, authoritative statement). Full
   suite re-run clean.
+- **Magic Tech `drc` section: every remaining real per-rule keyword
+  now parsed and editable** (`MagicDrcMiscStatement`) -- closes the
+  "much larger real remainder of `drc`" Future Work item, one of the
+  harder, deliberately-deferred gaps this project's own docs had
+  flagged as real, higher-risk work (variable argument counts, nested
+  real layer-boolean expressions), not a routine next increment.
+  **Investigated exhaustively before writing a single parser line, not
+  assumed uniform**: every real drc-section line not already matched
+  by `width`/`spacing`/`maxwidth`/`angles` was tallied by its own real
+  leading keyword against the live deck -- 13 real, distinct
+  directives (`surround` 39/`edge4way` 24/`widespacing` 21/
+  `cifmaxwidth` 15/`area` 12/`cifwidth` 9/`exact_overlap` 8/
+  `cifspacing` 6/`overhang` 5/`extend` 5/`rect_only` 2/`cifarea` 1/
+  `no_overlap` 1, 148 real lines total) plus 4 real, structurally
+  *different* directives (`variants` 47/`style` 1/`scalefactor` 1/
+  `cifstyle` 1) that turned out not to be per-rule checks at all --
+  real section-level conditional-scoping/config directives, confirmed
+  by direct inspection, not per-line statements -- and deliberately
+  excluded rather than lumped in, the same real distinction this
+  project's own `extract`-section work already draws between a real
+  `variants (...)` *block* (scope) and the statements repeating inside
+  it. **The original Future Work concern -- real shapes too varied for
+  a shared semantically-aware parser -- was confirmed correct, not
+  disproven**: no one of the 13 real directives comes remotely close
+  to dominant the way `width`/`spacing`/`maxwidth` did (39 max vs. 148
+  total), the same real conclusion `pdklib/drc.py`'s own KLayout-deck
+  extractor separately reached for its own remaining skipped
+  constructs. Rather than abandon the item or build 13 bespoke,
+  semantically-aware parsers guessing at each real directive's own
+  layer/value argument roles, all 13 share one flat, raw, positional
+  dataclass instead -- `directive` + `args` -- the same "don't guess
+  further, edit raw and positional" discipline `ComposeStatement`/
+  `ExtractMiscStatement` already established elsewhere in this exact
+  module; a trailing real quoted message (most real lines carry one)
+  isn't treated specially either, just more whitespace-split tokens,
+  since an *unedited* real entry's own original source is always
+  preserved verbatim regardless (see `pdklib/magic_tech_writer.py`'s
+  own `_render_drc_misc_range`), the same real tradeoff
+  `ExtractDevice.rest_text` already accepts. **A real, genuinely messy
+  wrinkle, confirmed not assumed**: 103 of the 148 real entries (100
+  two-line, 3 three-line) wrap across more than one real physical line
+  via a trailing `\` continuation -- even more often than `width`/
+  `spacing`/`maxwidth` do -- so every entry is range-tracked
+  (`start_line`/`end_line`) the same shared `pdklib/magic_tech_writer.py`
+  `_render_section_patch` *range_groups* mechanism `ExtractDevice`/
+  `MagicAngleCheck`/`MagicDrcCheck` already use, not rebuilt from
+  scratch. The GUI adds a third, wide pane to the existing **DRC
+  (Magic)** tab, below the `width`/`spacing`/`maxwidth`/`angles` panes,
+  reusing `gui/simple_list_editor.py`'s own generic `SimpleListEditor`
+  (New/Delete included -- safe, since a brand-new raw/positional entry
+  is exactly as well-formed as any other, the same reasoning `Compose`/
+  `Extract Misc` already established). Verified for real, driven:
+  `tests/test_magic_drc_misc.py` (new) -- all 148 real entries parse
+  with the exact real, confirmed per-directive counts, `variants`/
+  `style`/`scalefactor`/`cifstyle` correctly excluded; no-edit export
+  of both `ihp-sg13g2-drc.tech` and the combined `ihp-sg13g2.tech`
+  stays byte-identical; editing a real, wrapped entry collapses it to
+  one fresh line while leaving every other `drc_misc` entry and all of
+  `drc_checks`/`drc_angle_checks` completely untouched; in-GUI
+  `args_text` edits and New/Delete both round-trip correctly; the edit
+  survives `File > Save Edits` and a simulated relaunch; a real
+  write-back lands the edited entry in `ihp-sg13g2-drc.tech`
+  specifically, `ihp-sg13g2.tech`'s own export staying byte-identical
+  throughout. Full suite re-run clean (74/74).
 
 ## Future work
 
@@ -3335,14 +3399,29 @@ application that can create/edit/generate arbitrary PDK file types
 (Magic technology files, KLayout DRC decks, LEF, GDS, Liberty, SPICE
 models, ...), not just read/display layers. Concretely, still open:
 
-- The much larger real remainder of
-  `drc` (`surround`/`edge4way`/`cifmaxwidth`/`variants`/`widespacing`/
-  `cifwidth`/`cifspacing`/... -- `width`/`spacing`/`maxwidth`/`angles`
-  are done; the remainder's own real shapes are less uniform -- variable
-  argument counts, nested real layer-boolean expressions, or, for
-  `variants`, a real conditional-scoping directive rather than a check
-  at all -- so extending the `width`-style pattern to them isn't a safe
-  reuse). (Real GDS content -- bbox/shape counts, not full
+- ~~The much larger real remainder of `drc`~~ **-- done** (see the
+  dedicated `MagicDrcMiscStatement` changelog entry below): every real
+  drc-section per-rule keyword besides `width`/`spacing`/`maxwidth`/
+  `angles` -- `surround`/`edge4way`/`widespacing`/`cifmaxwidth`/
+  `cifwidth`/`cifspacing`/`area`/`exact_overlap`/`overhang`/`extend`/
+  `rect_only`/`cifarea`/`no_overlap` -- is now parsed and editable too,
+  148 real lines across those 13 real directives. The original
+  concern (real shapes too varied -- variable argument counts, nested
+  real layer-boolean expressions -- to safely extend the `width`-style
+  *semantically-aware* pattern to them) turned out to be the right
+  read but not a dead end: kept fully raw and positional instead (one
+  shared dataclass, no per-directive layer/value interpretation), the
+  same "don't guess further" discipline `ComposeStatement`/`Extract
+  Misc` already established -- editable despite unknown argument
+  semantics, not blocked by them. `variants (fast),(full)`/`style`/
+  `scalefactor`/`cifstyle` remain deliberately unparsed: a real
+  conditional-scoping/section-config directive, a fundamentally
+  different real *kind* of line, not a per-rule check at all, so
+  lumping it in would misrepresent what it is -- real, separate,
+  lower-priority future work if ever needed (real geometry-boolean
+  scope interpretation, not just raw capture, same caution as
+  everywhere `variants` comes up in this project). (Real GDS content
+  -- bbox/shape counts, not full
   geometry -- is done: `pdklib/gds.py`, via `klayout.db`. Real
   `compose`/`connect` sections, and the dominant `width`/`spacing`
   patterns in `drc`, and `resist`/`planeorder` in `extract`, are also
@@ -3369,9 +3448,15 @@ models, ...), not just read/display layers. Concretely, still open:
   `filler_raw` field first, closing the gap that used to keep those
   three read-only. Every real construct both `extract` and `drc`
   parse is now editable -- no read-only content remains in either
-  section (real `surround`/`edge4way`/`variants`/`widespacing`/
-  `cifwidth`/`cifspacing`/... constructs are still entirely unparsed,
-  not merely read-only -- see the bullet above for why).
+  section. `drc`'s own remaining 13 real keywords (`surround`/
+  `edge4way`/`widespacing`/`cifmaxwidth`/`cifwidth`/`cifspacing`/
+  `area`/`exact_overlap`/`overhang`/`extend`/`rect_only`/`cifarea`/
+  `no_overlap`) are also now parsed and editable, kept fully raw and
+  positional (`MagicDrcMiscStatement`, see the dedicated changelog
+  entry below) -- only real `variants`/`style`/`scalefactor`/
+  `cifstyle` section-level directives remain deliberately unparsed
+  (a different real kind of content, not a per-rule check -- see the
+  bullet above for why).
   LEF's own real `VIA`/`ViaRULE` via-stack geometry is also done:
   `pdklib/lef.py`, displayed read-only in the LEF tab's own **Vias**
   sub-tab. Liberty's own real pin/timing-arc scalar data --

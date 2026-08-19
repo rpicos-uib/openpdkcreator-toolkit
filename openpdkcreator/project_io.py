@@ -42,7 +42,8 @@ from .pdklib.lef import LefPin, LefPort
 from .pdklib.magic_tech import (
     AliasEntry, CifInputIgnoredLayer, CifInputLayerHint, CifInputOp, CifInputRecipeBlock, CifOutputLayerMapping,
     ComposeStatement, ConnectRule, ContactEntry, ExtractCapCoefficient, ExtractDevice, ExtractMiscStatement,
-    ExtractPlaneOrder, ExtractResist, MagicAngleCheck, MagicDrcCheck, PlaneEntry, StyleEntry, TypeEntry,
+    ExtractPlaneOrder, ExtractResist, MagicAngleCheck, MagicDrcCheck, MagicDrcMiscStatement, PlaneEntry,
+    StyleEntry, TypeEntry,
 )
 from .models import DesignRule, Layer
 
@@ -75,6 +76,7 @@ def save_state(
     magic_extract_devices: dict[str, list[ExtractDevice]] | None = None,
     magic_drc_angle_checks: dict[str, list[MagicAngleCheck]] | None = None,
     magic_drc_checks: dict[str, list[MagicDrcCheck]] | None = None,
+    magic_drc_misc: dict[str, list[MagicDrcMiscStatement]] | None = None,
     magic_cifinput_recipes: dict[str, list[CifInputRecipeBlock]] | None = None,
     layers: dict[str, list[Layer]] | None = None,
 ) -> Path:
@@ -85,7 +87,7 @@ def save_state(
     *magic_extract_misc*/*magic_extract_plane_order*/
     *magic_extract_resist*/*magic_extract_cap_coefficients*/
     *magic_extract_devices*/*magic_drc_angle_checks*/
-    *magic_drc_checks*/*magic_cifinput_recipes*: the
+    *magic_drc_checks*/*magic_drc_misc*/*magic_cifinput_recipes*: the
     same real shape, one dict per newly-editable Magic Tech domain (see
     ``pdklib/magic_tech_writer.py``'s own docstring) -- optional and
     default to empty so existing callers/save files stay valid.
@@ -196,6 +198,12 @@ def save_state(
             tech_name: [dataclasses.asdict(c) for c in checks]
             for tech_name, checks in (magic_drc_checks or {}).items()
         },
+        "magic_drc_misc": {
+            # args is a real, variable-length tuple -- same real reason
+            # magic_extract_misc casts its own tuple to a list here.
+            tech_name: [{**dataclasses.asdict(m), "args": list(m.args)} for m in statements]
+            for tech_name, statements in (magic_drc_misc or {}).items()
+        },
         "magic_cifinput_recipes": {
             # ops is a real list of nested CifInputOp dataclasses --
             # dataclasses.asdict already recurses into it, turning each
@@ -241,6 +249,7 @@ class LoadedState:
     magic_extract_devices: dict[str, list[ExtractDevice]] = dataclasses.field(default_factory=dict)
     magic_drc_angle_checks: dict[str, list[MagicAngleCheck]] = dataclasses.field(default_factory=dict)
     magic_drc_checks: dict[str, list[MagicDrcCheck]] = dataclasses.field(default_factory=dict)
+    magic_drc_misc: dict[str, list[MagicDrcMiscStatement]] = dataclasses.field(default_factory=dict)
     magic_cifinput_recipes: dict[str, list[CifInputRecipeBlock]] = dataclasses.field(default_factory=dict)
     layers: dict[str, list[Layer]] = dataclasses.field(default_factory=dict)
 
@@ -328,6 +337,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         tech_name: [MagicDrcCheck(**c) for c in checks]
         for tech_name, checks in data.get("magic_drc_checks", {}).items()
     }
+    magic_drc_misc = {
+        tech_name: [MagicDrcMiscStatement(**{**m, "args": tuple(m["args"])}) for m in statements]
+        for tech_name, statements in data.get("magic_drc_misc", {}).items()
+    }
     magic_cifinput_recipes = {
         tech_name: [CifInputRecipeBlock(**{**b, "ops": [CifInputOp(**op) for op in b["ops"]]}) for b in blocks]
         for tech_name, blocks in data.get("magic_cifinput_recipes", {}).items()
@@ -358,6 +371,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         magic_extract_devices=magic_extract_devices,
         magic_drc_angle_checks=magic_drc_angle_checks,
         magic_drc_checks=magic_drc_checks,
+        magic_drc_misc=magic_drc_misc,
         magic_cifinput_recipes=magic_cifinput_recipes,
         layers=layers,
     )
