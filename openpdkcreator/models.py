@@ -76,6 +76,15 @@ class DesignRule:
     ``applies_to_override`` lets a rule target something that is not a
     layer at all; when set it is used verbatim in place of a
     layers-derived "applies to" string.
+
+    ``window_size_um``/``window_step_um`` are only meaningful for a
+    ``density_window`` rule requesting real, windowed/tiled Ruby
+    generation -- see ``pdklib/drc_writer.py``'s own
+    ``render_new_rule_block`` docstring for the real, confirmed
+    KLayout ``with_density``/``tile_size``/``tile_step`` shapes these
+    map to, and why they needed a real, dedicated home here rather
+    than being crammed into an existing field. Every other check_type
+    leaves both ``None``.
     """
 
     rule_id: str
@@ -93,6 +102,8 @@ class DesignRule:
     source_provenance: str = ""
     why: str = ""
     status: str = STATUS_PLACEHOLDER
+    window_size_um: float | None = None
+    window_step_um: float | None = None
 
     def is_placeholder(self) -> bool:
         return self.status == STATUS_PLACEHOLDER or self.value is None

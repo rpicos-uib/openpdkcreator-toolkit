@@ -19,12 +19,13 @@ pre-populated starting set instead of an empty one.
 **New DRC Deck...** creates a real, minimal, valid, empty deck when
 none exists yet (``pdklib/drc.py``'s own ``create_new_drc_deck``) -- a
 from-scratch project's real starting point. A hand-authored **New
-Rule** is genuinely exportable too, not just metadata, for the three
-``check_type``s with a real, single-method KLayout DRC shape this
-project knows how to generate (``min_width``/``min_spacing``/
-``min_enclosure``, the exact three ``pdklib/drc.py``'s own extractor
-already recognizes the other way): **File > Export Edited DRC Rules**
-generates real, runnable Ruby into a separate, tool-owned
+Rule** is genuinely exportable too, not just metadata, for the seven
+``check_type``s with a real KLayout DRC shape this project knows how
+to generate (``min_width``/``min_spacing``/``min_enclosure``/
+``min_area``/``min_overlap``/``max_length``/``density_window`` -- see
+``pdklib/drc_writer.py``'s own ``render_new_rule_block`` docstring for
+exactly which real KLayout idiom each maps to): **File > Export Edited
+DRC Rules** generates real, runnable Ruby into a separate, tool-owned
 ``custom_rules.drc`` (each rule defines its own layer(s) inline via
 ``input(gds_layer, gds_datatype)``, resolved from the **Layer N**
 pickers above against ``app.project.layers`` -- pick a real layer with
@@ -32,7 +33,16 @@ a real GDS layer/datatype, not just any name). Every other
 ``check_type``, or a layer picker with no matching real ``Layer``,
 still can't be written back -- reported in the status line, not
 silently dropped; see ``pdklib/drc_writer.py``'s own docstring.
-"""
+``density_window`` additionally needs **Condition** set to exactly
+``min``/``max`` (which side of **Value** is a violation -- this
+check_type has no separate min/max variant the way ``min_width``/
+``max_length`` do) and, only for a real windowed/tiled check rather
+than a whole-chip one, **Window Size (um)**/**Window Step (um)** (real
+KLayout ``tile_size``/``tile_step``; leaving **Window Size (um)**
+blank generates a simpler, real, whole-chip ratio check instead -- see
+``render_new_rule_block``'s own docstring for the real, confirmed
+KLayout ``with_density`` shape and why two real, independent PDKs'
+own decks justify supporting both)."""
 
 from __future__ import annotations
 
@@ -183,6 +193,8 @@ class RulesView(ttk.Frame):
         add_combo("net_qualifier", "Net qualifier", NET_QUALIFIERS)
         add_entry("classification", "Classification")
         add_entry("condition", "Condition")
+        add_entry("window_size_um", "Window Size (um)")
+        add_entry("window_step_um", "Window Step (um)")
         add_entry("process_revision", "Process revision")
         add_entry("owner", "Owner")
         add_entry("source_provenance", "Source / provenance")
@@ -274,6 +286,8 @@ class RulesView(ttk.Frame):
             self.vars["net_qualifier"].set(rule.net_qualifier)
             self.vars["classification"].set(rule.classification)
             self.vars["condition"].set(rule.condition)
+            self.vars["window_size_um"].set("" if rule.window_size_um is None else str(rule.window_size_um))
+            self.vars["window_step_um"].set("" if rule.window_step_um is None else str(rule.window_step_um))
             self.vars["process_revision"].set(rule.process_revision)
             self.vars["owner"].set(rule.owner)
             self.vars["source_provenance"].set(rule.source_provenance)
@@ -303,6 +317,16 @@ class RulesView(ttk.Frame):
         rule.net_qualifier = self.vars["net_qualifier"].get() or "not_applicable"
         rule.classification = self.vars["classification"].get()
         rule.condition = self.vars["condition"].get()
+        raw_window_size = self.vars["window_size_um"].get().strip()
+        try:
+            rule.window_size_um = float(raw_window_size) if raw_window_size else None
+        except ValueError:
+            pass
+        raw_window_step = self.vars["window_step_um"].get().strip()
+        try:
+            rule.window_step_um = float(raw_window_step) if raw_window_step else None
+        except ValueError:
+            pass
         rule.process_revision = self.vars["process_revision"].get()
         rule.owner = self.vars["owner"].get()
         rule.source_provenance = self.vars["source_provenance"].get()

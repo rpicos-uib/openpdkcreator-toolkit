@@ -1,10 +1,19 @@
-"""Declarative registry for design-rule check types, copied verbatim
-from OpenPDKCreator's own ``scripts/pdk_wizard/schema.py``
-(github.com/rpicos-uib/OpenPDKCreator) -- already confirmed fully
-technology-agnostic during ADR 0018 research this session (no field,
-enum, or default here is memristor-specific; every entry is a generic
-DRC concept -- minimum width/spacing/area/overlap/enclosure, maximum
-length/current-density/array-dimension, density-window bound).
+"""Declarative registry for design-rule check types, originally copied
+verbatim from OpenPDKCreator's own ``scripts/pdk_wizard/schema.py``
+(github.com/rpicos-uib/OpenPDKCreator) -- confirmed fully
+technology-agnostic during ADR 0018 research (no field, enum, or
+default here is memristor-specific; every entry is a generic DRC
+concept -- minimum width/spacing/area/overlap/enclosure, maximum
+length/current-density/array-dimension, density-window bound). One
+real, deliberate divergence since: ``density_window``'s own
+``layer_roles``/``min_layers`` were widened from the original ``()``/
+``0`` (which left it with literally no way to attach a real layer to
+the rule at all -- see this project's own ``pdklib/drc_writer.py`` for
+the real, confirmed reason a density check always needs at least one),
+per the "Copy-vs-share, revisited" changelog entry's own conclusion --
+keep copying, but diverge when *this* project's own real needs
+warrant it, and re-check if the shared data models themselves start to
+diverge (see README's own Future Work).
 
 Every place that needs to know "what does a min_enclosure rule mean"
 reads it from ``CHECK_TYPES`` here instead of hard-coding it, so
@@ -75,8 +84,17 @@ CHECK_TYPES: dict[str, CheckTypeSpec] = {
             min_layers=0, max_layers=None, default_units="count", renderer="max_dimension", abbreviation="DIM",
         ),
         CheckTypeSpec(
-            key="density_window", label="Density window bound", layer_roles=(),
-            min_layers=0, max_layers=None, default_units="percent", renderer="density_window", abbreviation="DENS",
+            # layer_roles/min_layers widened from the original, upstream
+            # copy's (), 0 -- confirmed real, from two independent real
+            # PDKs' own density rule decks (IHP SG13G2's own
+            # density.drc, GlobalFoundries gf180mcu's own density.rb),
+            # a real density check always measures at least one real
+            # material layer's own coverage (e.g. gf180mcu's own real
+            # `comp + comp_dummy`, summing two). Three "Layer" slots
+            # mirrors min_area/min_overlap's own real precedent for
+            # "up to a few, summed" rather than a fixed pair/single.
+            key="density_window", label="Density window bound", layer_roles=("Layer", "Layer", "Layer"),
+            min_layers=1, max_layers=None, default_units="percent", renderer="density_window", abbreviation="DENS",
         ),
     )
 }

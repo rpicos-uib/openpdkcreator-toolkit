@@ -3391,6 +3391,94 @@ editor yet -- see Future Work.
   write-back lands the edited entry in `ihp-sg13g2-drc.tech`
   specifically, `ihp-sg13g2.tech`'s own export staying byte-identical
   throughout. Full suite re-run clean (74/74).
+- **Real Ruby generation for `density_window` rules** -- the third of
+  DRC Rules' original three ungeneratable `check_type`s, and the
+  hardest one this project had deferred: `density_window` was
+  previously described as "a genuinely multi-step real computation,
+  not one method call" and left alone, the same real caution
+  `min_overlap` got before its own real ground truth was confirmed.
+  **Investigated for real before writing any generation code, and the
+  investigation genuinely changed the plan mid-way, not just confirmed
+  it**: IHP's own real, downloaded deck does have a real `density.drc`
+  file, but its own real density-checking logic is a ~500-line,
+  hand-written Ruby module (`with_density_backup`, chip-edge
+  backup-window placement, sanity checks, ...) wrapping KLayout's own
+  real, native `with_density()` method -- genuinely too elaborate and
+  edge-case-specific to safely regenerate a byte-for-byte equivalent
+  of. A real, independent cross-check against a second, unrelated real
+  PDK's own deck (GlobalFoundries' gf180mcu, also present in this
+  container via `ciel`) revealed a second, genuinely simpler real
+  pattern: a plain, whole-chip density *ratio* (material layer area
+  over chip extent area, compared against a percent threshold, no
+  tiling at all) -- confirmed as the *only* pattern gf180mcu's own
+  deck uses for its own density rules, and one of *two* real modes
+  IHP's own deck separately implements alongside its windowed one.
+  Rather than guess which one this project should generate, this was
+  brought back to the user as a real, open design question -- their
+  call: support **both**, chosen per rule. KLayout's own official DRC
+  Reference documentation ("Layer Object") was fetched and read
+  directly (not guessed) to confirm the real, exact
+  `with_density(min..max, tile_size(...), [tile_step(...)])` signature
+  before generating a single line for the windowed pattern -- real
+  fractions in `0..1` (not percent), `tile_size`/`tile_step` real,
+  separate top-level helper calls, `tile_step` optional.
+  - **A second, real, genuine ambiguity found and resolved the same
+    way**: `schema.CHECK_TYPES['density_window']` (copied verbatim from
+    OpenPDKCreator) has no min/max direction, unlike `min_width`/
+    `max_length`'s own paired check_types -- confirmed still true in
+    OpenPDKCreator's own current, live copy too (fetched and diffed
+    directly), not something lost in copying. Real decks always need
+    both directions as separate rules (gf180mcu's own real
+    `DCF.1b`/`DCF.1d`; IHP's own real `AFil.g2`/`AFil.g3`). Also
+    brought to the user rather than guessed (e.g. silently assuming
+    every value means "maximum"): their call -- reuse the existing,
+    previously-generic `DesignRule.condition` free-text field,
+    required to be exactly `"min"`/`"max"` (case-insensitive) for this
+    one check_type; any other value is an honest refusal
+    ("needs Condition set to exactly 'min' or 'max'..."), never a
+    guess.
+  - **A real, structural model gap, not resolvable by reusing an
+    existing field**: the windowed pattern's own real `tile_size`/
+    `tile_step` need real numeric micron values with no honest home
+    anywhere in the existing schema (`value` is already the density
+    threshold itself). `DesignRule` gained two new, narrowly-scoped,
+    optional fields -- `window_size_um`/`window_step_um` -- both
+    `None` for every other check_type; `window_size_um` unset is also
+    the real opt-in signal for the simpler, global pattern (no new,
+    separate mode flag needed). `schema.py`'s own `density_window`
+    entry also needed real widening: its original, upstream
+    `layer_roles=()`/`min_layers=0` left it with literally no way to
+    attach a real layer to the rule at all (confirmed live: `gui/
+    rules_view.py`'s own layer-picker count is driven directly by
+    `len(layer_roles)`) -- widened to `("Layer", "Layer", "Layer")`/
+    `min_layers=1`, the same real "up to a few, summed via `+`"
+    precedent `min_area`/`min_overlap` already established, a real,
+    deliberate, documented divergence from the upstream copy (see the
+    "Copy-vs-share, revisited" changelog entry's own conclusion: keep
+    copying, diverge when this project's own real needs warrant it).
+  - `pdklib/drc.py`'s own extractor is **not** extended for either
+    pattern: the real IHP deck never feeds a density check straight
+    into `.output()` the simple way `width()`/`space()`/etc. do (its
+    own checks go through hand-written helper functions first) -- no
+    real, direct ground truth to verify a re-extraction against, the
+    same real, honest, one-directional gap `min_overlap` already has.
+  - Verified for real, driven, including a **live run through the
+    real, installed KLayout DRC engine** (not just structurally
+    plausible-looking text): `tests/test_drc_density_window.py` (new)
+    -- both real patterns, both real directions, and both real, honest
+    refusal paths (missing Condition, zero layers) generate/refuse
+    exactly as expected; the real, generated Ruby for all three
+    (global-min, global-max-summing-two-layers, windowed-min) runs
+    cleanly (exit 0) through real KLayout against a real, freshly-built
+    GDS, with every real violation/non-violation outcome physically
+    correct (a shape covering 100% of its own extent correctly never
+    trips a 25%-minimum global check; a shape clearly exceeding a
+    0.5%-maximum global check correctly does; a small, real shape
+    correctly can't sustain a 10%-minimum windowed check across larger
+    real tiles away from it). The GUI's **Window Size (um)**/**Window
+    Step (um)** fields (new) round-trip correctly; the three, now
+    real, `"Layer"` pickers (up from zero) are confirmed live too.
+    Full suite re-run clean.
 
 ## Future work
 
@@ -3965,17 +4053,17 @@ models, ...), not just read/display layers. Concretely, still open:
   own macro-level content -- see **New Macro...** above; its own
   `ORIGIN`/`SITE` gap on a brand-new macro is also since closed (see
   the dedicated changelog entry above).
-- **Real Ruby generation for DRC Rules' remaining three
-  `check_type`s** (`max_current_density`/`max_dimension`/
-  `density_window`) -- half of the original six are now done (see the
-  changelog entry below); these three still have no real, local
-  ground truth found for a single-method KLayout shape (`density_window`
-  in particular is a genuinely multi-step real computation in this same
-  deck -- window tiling, material-area-over-window-area ratio, then a
-  threshold compare -- not one method call). A **New Rule** of one of
-  these three is still real, editable metadata -- it just can't be
-  exported into a runnable check yet, reported honestly (rule ID +
-  reason) rather than silently dropped.
+- **Real Ruby generation for DRC Rules' remaining two `check_type`s**
+  (`max_current_density`/`max_dimension`) -- `density_window`, the
+  third, is now also done (see the dedicated changelog entry below,
+  which closes the real multi-step-computation concern this bullet
+  used to describe for it, by generating a real, correct check without
+  needing to replicate IHP's own real, elaborate windowed-tiling
+  implementation verbatim). `max_current_density`/`max_dimension`
+  still have no real, local ground truth found for a single-method
+  KLayout shape. A **New Rule** of either is still real, editable
+  metadata -- it just can't be exported into a runnable check yet,
+  reported honestly (rule ID + reason) rather than silently dropped.
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project
