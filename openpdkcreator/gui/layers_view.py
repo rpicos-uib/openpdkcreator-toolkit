@@ -52,6 +52,7 @@ import tkinter as tk
 from tkinter import colorchooser, ttk
 
 from ..models import Layer
+from ..pdklib import numeric
 from .list_filter import build_filter_row, matches
 
 PLANES = ("routing", "annotation")
@@ -276,13 +277,8 @@ class LayersView(ttk.Frame):
 
     @staticmethod
     def _parse_zoom_bound(raw: str, default: int) -> int:
-        raw = raw.strip()
-        if not raw:
-            return default
-        try:
-            return int(raw)
-        except ValueError:
-            return default
+        parsed = numeric.parse_int(raw.strip())
+        return default if parsed is None else parsed
 
     def _current_zoom_bounds(self, full_min: int, full_max: int) -> tuple[int, int]:
         zmin = self._parse_zoom_bound(self.zoom_min_var.get(), full_min)
@@ -557,10 +553,12 @@ class LayersView(ttk.Frame):
         layer.name = self.vars["name"].get().strip() or layer.name
         for field in ("gds_layer", "gds_datatype"):
             raw = self.vars[field].get().strip()
-            try:
-                setattr(layer, field, int(raw) if raw else None)
-            except ValueError:
-                pass
+            if not raw:
+                setattr(layer, field, None)
+            else:
+                parsed = numeric.parse_int(raw)
+                if parsed is not None:
+                    setattr(layer, field, parsed)
         layer.purpose = self.vars["purpose"].get() or layer.purpose
         layer.plane = self.vars["plane"].get() or layer.plane
         layer.streamout_allowed = {"yes": True, "no": False, "": None}[

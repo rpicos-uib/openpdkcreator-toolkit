@@ -3539,6 +3539,80 @@ editor yet -- see Future Work.
     above plus the real value/JSON write-back round-trip;
     `tests/test_drc_real_ihp.py` updated (77 -> 85). Full suite
     re-run clean.
+- **Consolidated number parsing: one shared `pdklib/numeric.py`, plus
+  real international (SI) scale-factor support** -- per direct
+  request. **Investigated the codebase for real duplication before
+  writing anything, not assumed to exist**: the exact same
+  `try: self.field = float(value) / except ValueError: pass` (or
+  `int(...)`) shape was copy-pasted across roughly a dozen real
+  `*_text` property setters (`pdklib/magic_tech.py`) and GUI
+  form-commit methods (`gui/rules_view.py`/`gui/layers_view.py`/
+  `gui/liberty_editor.py`/`gui/qucs_view.py`) -- genuine, real
+  repetition, now one shared `parse_number`/`parse_int`.
+  **Deliberately scoped to GUI-facing, user-typed values only, never
+  to real *file*-parsing regexes**: every real, downloaded PDK file
+  format this project reads (Magic `.tech`, KLayout `.drc`/JSON, LEF,
+  Liberty, GDS, Qucs-S/xschem XML) was grepped deck-wide for any of
+  the suffixes below first -- none found, confirming real file text
+  never needs this. Retrofitting SI parsing into an existing
+  file-parsing regex would risk silently reinterpreting a real,
+  already-correct value the moment some future real file happens to
+  contain a trailing letter -- exactly the kind of regression this
+  project's "don't guess further" discipline exists to avoid, so every
+  real file-parsing call site (`pdklib/magic_tech.py`'s own
+  `_parse_cap_coefficient_line`, `pdklib/magic_tech_writer.py`'s own
+  diff-comparison re-parse, `pdklib/lef.py`/`pdklib/liberty.py`/
+  `pdklib/xschem.py`/`pdklib/xschem_sch.py`/`pdklib/qucs_sym.py`/
+  `pdklib/layers.py`/`pdklib/mag.py`'s own real parsers) was left
+  completely untouched -- a user typing into a Tk `Entry`, by
+  contrast, can only ever gain a wider accepted spelling (a plain
+  `"0.2"` still parses to exactly `0.2`, byte-for-byte the same real
+  behavior as before), never change how a real file's own existing
+  text is read.
+  - **Real, sourced scale factors, not guessed or assumed from
+    memory**: fetched and read ngspice's own official HTML manual
+    directly -- its own "Some Useful Conventions" table (T/G/Meg/K/
+    mil/m/u/n/p/f/a) and, critically, its own real worked prose
+    confirming the one well-known SPICE trap this module deliberately
+    doesn't fall into: bare `m`/`M` always means *milli*, never mega
+    ("`M`, `MA`, `MSec`, and `MMhos` all represent the same [milli]
+    scale factor") -- only `meg` (any case) means mega. `mil`
+    (1/1000 inch) is matched the same longest-prefix-first way
+    `meg` is, so a real `"1mil"` doesn't wrongly parse as milli plus
+    an ignored `il`.
+  - Wired into every real, identified duplicate: `pdklib/magic_tech.py`'s
+    `MagicDrcCheck.value_text`/`ExtractCapCoefficient.values_text`
+    (SI-aware, real physical quantities) and
+    `CifInputLayerHint`/`CifOutputLayerMapping.gds_layer_text`/
+    `gds_datatype_text`/`MagicAngleCheck.degrees_text`/
+    `ExtractResist.milliohms_text`/`ExtractPlaneOrder.order_text`
+    (plain `parse_int`, deliberately not SI-scaled -- a GDS layer
+    number/angle/rank has no physical unit an SI prefix could sensibly
+    scale); `gui/rules_view.py`'s own DRC Rule **Value**/**Window Size
+    (um)**/**Window Step (um)** fields (SI-aware) and its own live
+    canvas-preview parsing; `gui/layers_view.py`'s own zoom-bound and
+    GDS layer/datatype fields (`parse_int`); `gui/liberty_editor.py`'s
+    own pin **Capacitance** field (SI-aware); `gui/qucs_view.py`'s own
+    port x/y/angle fields (`parse_int`).
+  - Verified for real, driven: `tests/test_numeric.py` (new) -- every
+    real, sourced suffix from the ngspice table resolves to the exact
+    real scale factor, the real `m`/`M`-is-milli trap is confirmed not
+    triggered, invalid/empty text returns `None` exactly like every
+    caller's own previous `except ValueError: pass` did, and a real,
+    driven, in-GUI check confirms DRC Rules' own **Value** field
+    accepts a real `"0.2u"` entry end-to-end through the actual Tk
+    form (not just a standalone function call) while a plain,
+    un-suffixed entry and clearing the field both still behave exactly
+    as before. A repeated, real no-edit re-export of every real
+    `.tech` file confirms byte-identical output, unaffected (these
+    setters only ever fire on a real, user-initiated edit). A new
+    **Help > Unit Representation** menu entry documents the same real,
+    sourced suffix table and the real milli-vs-mega trap directly in
+    the GUI, so a user doesn't need to go read `pdklib/numeric.py`'s
+    own docstring to know this exists -- `tests/test_menu_structure.py`
+    updated (`Help` now `["Help", "Unit Representation", "About
+    openPDKcreator"]`) with real assertions on the new dialog's own
+    content. Full suite re-run clean.
 
 ## Future work
 

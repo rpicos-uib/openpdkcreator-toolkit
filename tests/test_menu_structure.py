@@ -53,10 +53,10 @@ assert "Save Edits" not in export_labels
 assert not any("LibMan" in label for label in export_labels)
 print(f"PASS: Export holds exactly the real 11 per-domain open_pdks export actions.")
 
-# --- Help: About + a general Help entry ---
+# --- Help: About + a general Help entry + Unit Representation ---
 help_labels = entry_labels(cascade_menu("Help"))
-assert help_labels == ["Help", "About openPDKcreator"], help_labels
-print("PASS: Help holds a general Help entry and About openPDKcreator.")
+assert help_labels == ["Help", "Unit Representation", "About openPDKcreator"], help_labels
+print("PASS: Help holds a general Help entry, Unit Representation, and About openPDKcreator.")
 
 # --- File > Import/Export LibMan Project actually call the real
 # Library Manager methods and switch to that tab, not just a label ---
@@ -90,12 +90,14 @@ app_mod.show_text_dialog = lambda parent, title, text: shown.append((title, text
 try:
     app._show_about()
     app._show_help()
+    app._show_unit_reading()
 finally:
     app_mod.show_text_dialog = original_show_text_dialog
 
-assert len(shown) == 2
+assert len(shown) == 3
 about_title, about_text = shown[0]
 help_title, help_text = shown[1]
+unit_title, unit_text = shown[2]
 assert about_title == "About openPDKcreator"
 assert "openpdkcreator-toolkit" in about_text
 assert "github.com/IHP-GmbH/LibMan" in about_text
@@ -103,7 +105,14 @@ assert "Apache-2.0" in about_text
 assert help_title == "Help"
 assert "Wizard" in help_text and "Library Manager" in help_text
 assert "File" in help_text and "Export" in help_text
+assert "Unit Representation" in help_text
 print("PASS: About/Help open real dialogs with real, correct content (repo URL, LibMan link, license, tab guide).")
+
+assert unit_title == "Unit Representation"
+assert "Meg" in unit_text and "1e6" in unit_text
+assert "milli" in unit_text and "1e-3" in unit_text
+assert "ngspice" in unit_text
+print("PASS: Unit Representation opens a real dialog documenting the real, ngspice-sourced SI suffix table.")
 
 # --- The real show_text_dialog (not the app.py wrapper monkeypatched
 # above) uses real, dynamic word-wrap to the dialog's own current

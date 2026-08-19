@@ -374,6 +374,7 @@ class App(ttk.Frame):
 
         help_menu = tk.Menu(menubar, tearoff=False)
         help_menu.add_command(label="Help", command=self._show_help)
+        help_menu.add_command(label="Unit Representation", command=self._show_unit_reading)
         help_menu.add_command(label="About openPDKcreator", command=self._show_about)
         menubar.add_cascade(label="Help", menu=help_menu)
 
@@ -498,7 +499,7 @@ class App(ttk.Frame):
             "save/reload your edits, import/export a LibMan .projects file.\n"
             "Export -- write real, edited content back out in open_pdks format, one command "
             "per domain.\n"
-            "Help -- this dialog, and About.\n\n"
+            "Help -- this dialog, Unit Representation, and About.\n\n"
             "Command line\n"
             "------------\n"
             "python3 main.py wizard --name \"My PDK\" --pdk-root DIR -- creates a new PDK "
@@ -510,6 +511,42 @@ class App(ttk.Frame):
             "python3 main.py wizard --help.\n\n"
             "Full documentation lives in this project's own README.md:\n"
             "  github.com/rpicos-uib/openpdkcreator-toolkit",
+        )
+
+    def _show_unit_reading(self):
+        show_text_dialog(
+            self,
+            "Unit Representation",
+            "Numeric fields you type into (DRC Rules' own Value/Window Size/Window Step, "
+            "Liberty pin Capacitance, Layers' own zoom bounds/GDS layer & datatype, Qucs-S "
+            "port x/y/angle, and every Magic Tech numeric *_text field) accept a real "
+            "international (SI) scale-factor suffix, not just a fully-expanded decimal -- "
+            "\"0.2u\" works exactly like \"0.0000002\".\n\n"
+            "This only applies to what you type into this GUI's own fields. It never changes "
+            "how a real, downloaded PDK file's own text is read -- those keep parsing plain "
+            "decimals exactly as before.\n\n"
+            "Suffix   Name    Factor\n"
+            "------   ----    ------\n"
+            "T        Tera    1e12\n"
+            "G        Giga    1e9\n"
+            "Meg      Mega    1e6\n"
+            "K        Kilo    1e3\n"
+            "mil      Mil     25.4e-6  (1/1000 inch)\n"
+            "m        milli   1e-3\n"
+            "u (or µ) micro   1e-6\n"
+            "n        nano    1e-9\n"
+            "p        pico    1e-12\n"
+            "f        femto   1e-15\n"
+            "a        atto    1e-18\n\n"
+            "Case doesn't matter, and any letters after a recognized suffix are ignored "
+            "(\"10Hz\" -> 10, \"5V\" -> 5) -- the same real convention ngspice itself uses.\n\n"
+            "The one trap worth knowing: a bare \"m\" or \"M\" always means milli, never "
+            "mega -- \"M\", \"MA\", \"MSec\", and \"MMhos\" all mean the exact same thing "
+            "(1e-3). Only \"Meg\" (any case: \"meg\"/\"Meg\"/\"MEG\") means mega. This isn't "
+            "this project's own invention -- it's ngspice's own real, documented convention "
+            "(see its own manual's \"Some Useful Conventions\" section), matched here exactly "
+            "so a value you already know how to type in a SPICE deck types the same way here.\n\n"
+            "See pdklib/numeric.py's own docstring for the full real reasoning and source.",
         )
 
     def _export_lef_files(self):

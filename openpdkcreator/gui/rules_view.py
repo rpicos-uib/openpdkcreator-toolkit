@@ -51,6 +51,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..models import DesignRule
+from ..pdklib import numeric
 from ..schema import CHECK_TYPES, CHECK_TYPE_ORDER
 from . import rule_canvas
 from .list_filter import build_filter_row, matches
@@ -309,24 +310,30 @@ class RulesView(ttk.Frame):
         rule.layers = [name for name in layers if name]
         rule.applies_to_override = self.vars["applies_to_override"].get().strip() or None
         raw_value = self.vars["value"].get().strip()
-        try:
-            rule.value = float(raw_value) if raw_value else None
-        except ValueError:
-            pass
+        if not raw_value:
+            rule.value = None
+        else:
+            parsed_value = numeric.parse_number(raw_value)
+            if parsed_value is not None:
+                rule.value = parsed_value
         rule.units = self.vars["units"].get()
         rule.net_qualifier = self.vars["net_qualifier"].get() or "not_applicable"
         rule.classification = self.vars["classification"].get()
         rule.condition = self.vars["condition"].get()
         raw_window_size = self.vars["window_size_um"].get().strip()
-        try:
-            rule.window_size_um = float(raw_window_size) if raw_window_size else None
-        except ValueError:
-            pass
+        if not raw_window_size:
+            rule.window_size_um = None
+        else:
+            parsed_window_size = numeric.parse_number(raw_window_size)
+            if parsed_window_size is not None:
+                rule.window_size_um = parsed_window_size
         raw_window_step = self.vars["window_step_um"].get().strip()
-        try:
-            rule.window_step_um = float(raw_window_step) if raw_window_step else None
-        except ValueError:
-            pass
+        if not raw_window_step:
+            rule.window_step_um = None
+        else:
+            parsed_window_step = numeric.parse_number(raw_window_step)
+            if parsed_window_step is not None:
+                rule.window_step_um = parsed_window_step
         rule.process_revision = self.vars["process_revision"].get()
         rule.owner = self.vars["owner"].get()
         rule.source_provenance = self.vars["source_provenance"].get()
@@ -426,10 +433,7 @@ class RulesView(ttk.Frame):
             return
         layers = [self.vars[f"layer{i}"].get() for i in range(MAX_LAYER_PICKERS) if self.vars[f"layer{i}"].get()]
         raw_value = self.vars["value"].get().strip()
-        try:
-            value = float(raw_value) if raw_value else None
-        except ValueError:
-            value = None
+        value = numeric.parse_number(raw_value)
         units = self.vars["units"].get()
         rule_canvas.render(self.canvas, spec.renderer, layers, self.app.layer_colors(), value, units)
 

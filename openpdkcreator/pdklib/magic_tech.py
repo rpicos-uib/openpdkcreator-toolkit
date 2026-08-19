@@ -139,6 +139,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import numeric
+
 _TABULAR_SECTIONS = ("tech", "version", "planes", "types", "contact", "aliases", "styles")
 _ALL_KNOWN_SECTIONS = _TABULAR_SECTIONS + (
     "compose", "connect", "cifoutput", "cifinput", "drc", "extract",
@@ -304,10 +306,9 @@ class CifOutputLayerMapping:
 
     @gds_layer_text.setter
     def gds_layer_text(self, value: str) -> None:
-        try:
-            self.gds_layer = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.gds_layer = parsed
 
     @property
     def gds_datatype_text(self) -> str:
@@ -315,10 +316,9 @@ class CifOutputLayerMapping:
 
     @gds_datatype_text.setter
     def gds_datatype_text(self, value: str) -> None:
-        try:
-            self.gds_datatype = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.gds_datatype = parsed
 
 
 @dataclass
@@ -375,10 +375,9 @@ class CifInputLayerHint:
 
     @gds_layer_text.setter
     def gds_layer_text(self, value: str) -> None:
-        try:
-            self.gds_layer = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.gds_layer = parsed
 
     @property
     def gds_datatype_text(self) -> str:
@@ -395,10 +394,9 @@ class CifInputLayerHint:
         if stripped == "*":
             self.gds_datatype = None
             return
-        try:
-            self.gds_datatype = int(stripped)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(stripped)
+        if parsed is not None:
+            self.gds_datatype = parsed
 
 
 @dataclass
@@ -623,10 +621,9 @@ class MagicDrcCheck:
 
     @value_text.setter
     def value_text(self, value: str) -> None:
-        try:
-            self.value_um = float(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_number(value)
+        if parsed is not None:
+            self.value_um = parsed
 
 
 @dataclass
@@ -670,10 +667,9 @@ class MagicAngleCheck:
 
     @degrees_text.setter
     def degrees_text(self, value: str) -> None:
-        try:
-            self.degrees = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.degrees = parsed
 
 
 @dataclass
@@ -771,10 +767,9 @@ class ExtractResist:
 
     @milliohms_text.setter
     def milliohms_text(self, value: str) -> None:
-        try:
-            self.milliohms_per_square = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.milliohms_per_square = parsed
 
 
 @dataclass
@@ -805,10 +800,9 @@ class ExtractPlaneOrder:
 
     @order_text.setter
     def order_text(self, value: str) -> None:
-        try:
-            self.order = int(value)
-        except ValueError:
-            pass
+        parsed = numeric.parse_int(value)
+        if parsed is not None:
+            self.order = parsed
 
 
 @dataclass
@@ -864,10 +858,9 @@ class ExtractCapCoefficient:
     @values_text.setter
     def values_text(self, value: str) -> None:
         tokens = value.replace(",", " ").split()
-        try:
-            self.values = tuple(float(token) for token in tokens)
-        except ValueError:
-            pass
+        parsed = [numeric.parse_number(token) for token in tokens]
+        if all(v is not None for v in parsed):
+            self.values = tuple(parsed)
 
 
 @dataclass

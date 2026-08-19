@@ -24,6 +24,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from ..pdklib import liberty as liberty_mod
+from ..pdklib import numeric
 
 
 class LibertyPinEditor(ttk.Frame):
@@ -189,10 +190,12 @@ class LibertyPinEditor(ttk.Frame):
         pin.name = self.pin_vars["name"].get().strip() or pin.name
         pin.direction = self.pin_vars["direction"].get()
         raw_cap = self.pin_vars["capacitance"].get().strip()
-        try:
-            pin.capacitance = float(raw_cap) if raw_cap else None
-        except ValueError:
-            pass
+        if not raw_cap:
+            pin.capacitance = None
+        else:
+            parsed_cap = numeric.parse_number(raw_cap)
+            if parsed_cap is not None:
+                pin.capacitance = parsed_cap
         pin.function = self.pin_vars["function"].get()
 
     def commit_pending_edits(self):

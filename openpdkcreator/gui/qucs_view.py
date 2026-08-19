@@ -50,6 +50,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from ..pdklib import numeric
 from ..pdklib import qucs_sym as qucs_mod
 from . import geometry_adapters
 from .file_picker_utils import handle_action, update_action_button
@@ -484,19 +485,16 @@ class _SymbolsPane(ttk.Frame):
         port = self.current_port
         if port is None:
             return
-        try:
-            port.x = int(self.port_vars["x"].get())
-        except ValueError:
-            pass
-        try:
-            port.y = int(self.port_vars["y"].get())
-        except ValueError:
-            pass
+        parsed_x = numeric.parse_int(self.port_vars["x"].get())
+        if parsed_x is not None:
+            port.x = parsed_x
+        parsed_y = numeric.parse_int(self.port_vars["y"].get())
+        if parsed_y is not None:
+            port.y = parsed_y
         port.port_type = self.port_vars["port_type"].get()
-        try:
-            port.angle = int(self.port_vars["angle"].get())
-        except ValueError:
-            pass
+        parsed_angle = numeric.parse_int(self.port_vars["angle"].get())
+        if parsed_angle is not None:
+            port.angle = parsed_angle
         port.condition = self.port_vars["condition"].get()
 
     def _on_port_field_changed(self, *_args):
