@@ -12,11 +12,14 @@ root = tk.Tk()
 app = App(root, PDK_ROOT)
 root.update()
 
-# 77, not the original 75: pdklib/drc.py's extractor was later extended
-# to also recognize with_area()/with_length() (min_area/max_length),
-# adding the deck's own real LBE.b1/Seal.k rules.
+# 85, not the original 75: pdklib/drc.py's extractor was later extended
+# to also recognize with_area()/with_length() (min_area/max_length,
+# +2: LBE.b1/Seal.k), then extended again to safely trace real
+# boolean-composed constructs back to one unanimous value (+8: Ant.g/
+# MIM.c/NBL.c/NBL.d/NW.b1/Padb.c/Padc.c/Pas.c) -- see that module's
+# own docstring.
 print("real DRC rules loaded:", len(app.project.design_rules))
-assert len(app.project.design_rules) == 77
+assert len(app.project.design_rules) == 85
 
 # No-edit export against the real deck should be byte-identical, and
 # never touch/create custom_rules.drc (no hand-authored rules exist).

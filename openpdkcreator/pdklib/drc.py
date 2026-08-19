@@ -66,15 +66,59 @@ heterogeneous multi-step boolean composition (real, varying
 combinations of ``.join()``/``.and()``/``.interacting()``/
 ``.with_bbox_max()``/``.not_interacting()``/...), confirmed by
 tallying every real method-chain shape used deck-wide -- no one shape
-dominates the skipped set the way width/space/sep/enclosed did. Some
-skipped cases (e.g. real ``NW.b1``: two real ``space()``/``sep()``
-results, both tracing to the *same* real ``drc_rules`` value, then
-``.join()``ed and ``.and()``ed before ``.output()``) could in
-principle still resolve to one real, correct value via data-flow
-tracing through arbitrary composition -- but that's real, separate,
-higher-risk future work (a wrong trace would silently attach the wrong
-numeric value to a rule, unlike an honestly-skipped one), not a safe
-reuse of the current line-local regex approach.
+dominates the skipped set the way width/space/sep/enclosed did.
+
+**Composite-check data-flow tracing, added later still, once genuinely
+safe (not just likely)**: some skipped composites (e.g. real
+``NW.b1``: two real ``space()``/``sep()`` results, both tracing to the
+*same* real ``drc_rules`` value, then ``.join()``ed and ``.and()``ed
+before ``.output()``) resolve to one real, correct value via a real,
+conservative data-flow trace -- ``_trace_composite_provenance``.
+**The bar this had to clear, confirmed by a real near-miss found while
+building it, not assumed**: an early, looser version of this tracer
+would have "resolved" a real ``Sdiod.b`` composite purely by
+coincidence -- one of its own two real branches traced through a real
+``.sized(v.um)`` call, not one of the six directly-recognized check
+methods, and simply happened to share the same real value as the
+other branch. Silently ignoring that unrecognized branch (rather than
+refusing outright) would have been indistinguishable, from this
+module's own point of view, from a case where the two real branches
+*disagreed* -- exactly the failure mode this feature exists to avoid.
+Fixed by adding a real, deck-wide *value-touching* taint pass first:
+an operand identifier is only ever treated as a safe, inert spatial
+filter (ignorable) once *confirmed* to never reference any real
+``drc_rules`` value anywhere in its own real derivation, direct or
+transitive -- not merely because this module never happened to
+recognize how it was built. A composite is only ever resolved when
+**every** real operand in its own real chain is either (a) itself
+already resolved, with its own provenance unanimously agreeing with
+every other branch's, (b) confirmed real, value-clean (a real, plain
+untracked layer like ``pwell``, or a real, value-free boolean
+derivative like real ``Pas.c``'s own third branch, ``pas_c_l1.not(
+topmetal2_drw)``), or (c) a real, confirmed-inert "view, don't
+transform" method (``.polygons``/``.merged``/``.flatten``/``.clean``/
+``.raw``/``.strict``/``.non_strict``/``.edges``) applied to an
+already-resolved receiver. Any real disagreement, or any real operand
+this module can't confirm is safe one of those three ways, leaves the
+whole composite unresolved -- refused, never guessed. Deliberately
+excludes real ``+`` (a real, valid KLayout ``Region`` join operator
+too) from the recognized combiner set: this module has no reliable,
+regex-only way to tell a real geometric ``layer_a + layer_b`` apart
+from a real arithmetic ``value.um + 0.001.um`` margin (confirmed real
+elsewhere in this deck -- see ``_resolve_value``'s own docstring)
+without risking exactly the kind of mis-attribution this feature
+exists to avoid. Verified for real, driven: a repeated stash/pop
+before/after comparison confirms the existing real 77 rules and 90
+skips are completely unaffected (zero regressions), and exactly 8 new,
+individually hand-verified-against-source real rules are added
+(``Ant.g``/``MIM.c``/``NBL.c``/``NBL.d``/``NW.b1``/``Padb.c``/
+``Padc.c``/``Pas.c``, 77/90 -> 85/82); real, confirmed-unsafe near
+neighbors (``Sdiod.b``/``Sdiod.c``/``Padc.a``/``Padb.a``/``AFil.d``)
+correctly stay unresolved. ``pdklib/drc_writer.py``'s own ``_locate``
+was extended the same, real way, so a composite rule's own ``value``
+edit patches the real JSON correctly too, not just ``rule_id``/
+``description`` -- write-back for a composite rule now works exactly
+like a direct one.
 """
 
 from __future__ import annotations
@@ -100,6 +144,12 @@ _CHECK_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.(width|space|sep|with_area|wit
 _ENCLOSURE_CALL_RE = re.compile(r"(\w+)\s*=\s*(\S+?)\.enclosed\(\s*(\S+?)\s*,\s*([^)]*)\)")
 _VALUE_LITERAL_IN_ARGS_RE = re.compile(r"(\d+(?:\.\d+)?)\.um2?\b")
 _VALUE_VAR_IN_ARGS_RE = re.compile(r"(\w+)\.um2?\b")
+_ANY_ASSIGN_RE = re.compile(r"^(\w+)\s*=\s*(?!=)(.+?)\s*$")
+_IDENT_RE = re.compile(r"\b([a-zA-Z_]\w*)\b")
+_CHAIN_RE = re.compile(r"^(\w+)((?:\.\w+(?:\([^()]*\))?)*)\s*$")
+_CHAIN_STEP_RE = re.compile(r"\.(\w+)(?:\(([^()]*)\))?")
+_COMBINER_METHODS = {"join", "and", "or", "andnot", "xor"}
+_PASSTHROUGH_METHODS = {"polygons", "merged", "flatten", "clean", "raw", "strict", "non_strict", "edges"}
 
 
 def _resolve_value(args: str, value_var_to_key: dict[str, str], values_by_key: dict[str, float]) -> float | None:
@@ -137,6 +187,144 @@ def _resolve_value(args: str, value_var_to_key: dict[str, str], values_by_key: d
             return values_by_key.get(json_key)
     literal_match = _VALUE_LITERAL_IN_ARGS_RE.search(args)
     return float(literal_match.group(1)) if literal_match else None
+
+
+def _trace_composite_provenance(
+    text: str, value_var_to_key: dict[str, str], seed_provenance: dict[str, frozenset]
+) -> dict[str, frozenset]:
+    """Extends *seed_provenance* (every real, directly-recognized
+    ``width``/``space``/``sep``/``enclosed``/``with_area``/
+    ``with_length`` result, keyed by its own result variable) with real
+    *composite* results too -- a variable built by boolean-combining
+    two or more already-tracked results via a real, plain identifier
+    chain (``A.join(B)``, ``A.and(B).and(C)``, ...) -- confirmed real
+    and common (e.g. real ``NW.b1``: two real ``space()``/``sep()``
+    results, both tracing to the *same* real ``drc_rules`` value,
+    ``.join()``ed then ``.and()``ed with a real, plain, untracked
+    ``pwell`` layer before ``.output()``).
+
+    **Only ever resolves a composite when doing so genuinely can't be
+    wrong, never when it merely seems likely** -- the real risk this
+    function exists to avoid (a wrong trace silently attaching the
+    wrong numeric value to a rule) is treated as strictly worse than
+    leaving a real, resolvable-looking composite skipped. Concretely:
+
+    - A composite's own real chain must be a *pure* identifier chain
+      (``receiver.method(...).method(...)`` -- real, plain identifiers
+      only, no nested calls, no arithmetic, no ``+``, no bracket
+      indexing) -- anything else is left unresolved, not partially
+      trusted. ``+`` is deliberately excluded even though it's a real,
+      valid KLayout ``Region`` join operator too: this module has no
+      reliable, regex-only way to tell a real geometric ``layer_a +
+      layer_b`` apart from a real arithmetic ``value.um + 0.001.um``
+      margin (confirmed real for other constructs -- see this module's
+      own top docstring) without risking exactly the kind of
+      mis-attribution this function exists to avoid.
+    - A combiner method (``join``/``and``/``or``/``andnot``/``xor``)'s
+      own real operand must itself be a single, real, plain
+      identifier. If that identifier is *also* already a tracked,
+      resolved result, its own provenance must be folded in and must
+      **unanimously agree** with every other branch's -- any real
+      disagreement (a different check_type, or a different value
+      variable) leaves the whole composite unresolved, never guessed
+      at. If the operand isn't tracked at all, it's *not* automatically
+      assumed to be an inert, value-free spatial filter (the tempting,
+      unsafe shortcut) -- **it's only treated as safe to ignore once
+      confirmed real, via a real, deck-wide data-flow taint pass, to
+      never itself reference any real ``drc_rules`` value, directly or
+      transitively** (this is what real, confirmed-safe ``pwell`` in
+      the ``NW.b1`` example above actually is: a plain, real, boolean
+      combination of other plain layers, confirmed by tracing its own
+      real definition, not assumed). A real, confirmed *value-touching*
+      but otherwise-unresolved operand (e.g. a real ``.sized(v.um)``
+      result -- not one of the six directly-recognized check methods,
+      but still real, provably built from a real value variable) makes
+      the whole composite unresolved too, not silently ignored --
+      confirmed real and necessary by a real near-miss found while
+      building this (a real ``Sdiod.b`` composite that would otherwise
+      have looked safely resolvable purely by coincidence, both of its
+      real branches happening to share the same real value even though
+      one of them was never actually verified).
+    - Any other real method in the chain (``.interacting()``,
+      ``.sized()``, ``.with_bbox_max()``, ...) leaves the whole
+      composite unresolved -- only a small, real, confirmed-inert
+      "view, don't transform" allowlist (``polygons``/``merged``/
+      ``flatten``/``clean``/``raw``/``strict``/``non_strict``/``edges``)
+      passes a receiver's own provenance through unchanged.
+
+    Returns the extended provenance dict (composite entries included);
+    callers still need each composite's own real ``line_no`` separately
+    (tracked in ``extract_design_rules`` itself, alongside every other
+    real assignment line, not duplicated here)."""
+
+    lines = text.split("\n")
+    assign_rhs: dict[str, str] = {}
+    for line in lines:
+        match = _ANY_ASSIGN_RE.match(line.strip())
+        if match:
+            assign_rhs[match.group(1)] = match.group(2)
+
+    value_touching: set[str] = set(value_var_to_key.keys())
+    changed = True
+    while changed:
+        changed = False
+        for var, rhs in assign_rhs.items():
+            if var in value_touching:
+                continue
+            idents = set(_IDENT_RE.findall(rhs)) - {var}
+            if idents & value_touching:
+                value_touching.add(var)
+                changed = True
+
+    provenance = dict(seed_provenance)
+    unresolved: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for var, rhs in assign_rhs.items():
+            if var in provenance or var in unresolved:
+                continue
+            chain_match = _CHAIN_RE.match(rhs)
+            if chain_match is None:
+                continue
+            receiver, chain_tail = chain_match.groups()
+            if receiver not in provenance:
+                if receiver in value_touching:
+                    unresolved.add(var)
+                    changed = True
+                continue
+            current = set(provenance[receiver])
+            ok = True
+            for step in _CHAIN_STEP_RE.finditer(chain_tail):
+                method, args = step.groups()
+                if method in _PASSTHROUGH_METHODS:
+                    continue
+                if method in _COMBINER_METHODS:
+                    operand = (args or "").strip()
+                    if not re.fullmatch(r"\w+", operand):
+                        ok = False
+                        break
+                    if operand in provenance:
+                        current |= provenance[operand]
+                    elif operand in value_touching:
+                        ok = False
+                        break
+                    continue
+                ok = False
+                break
+            if not ok:
+                unresolved.add(var)
+                changed = True
+            elif len(current) == 1:
+                provenance[var] = frozenset(current)
+                changed = True
+            else:
+                unresolved.add(var)
+                changed = True
+
+    return provenance
+
+
 _OUTPUT_CALL_RE = re.compile(
     r"(\w+)\.output\(\s*['\"]([^'\"]+)['\"]\s*,\s*(?:\r?\n\s*)?\"([^\"]*)\""
 )
@@ -238,53 +426,100 @@ def extract_design_rules(pdk_root: Path, drc_root: Path | None) -> tuple[list[De
             value_var_to_key[match.group(1)] = match.group(2)
 
         checks: dict[str, tuple[str, str, float | None, int, str | None]] = {}
+        seed_provenance: dict[str, frozenset] = {}
         for match in _CHECK_CALL_RE.finditer(text):
             result_var, layer_expr, method, args = match.groups()
             value = _resolve_value(args, value_var_to_key, values_by_key)
             line_no = text.count("\n", 0, match.start()) + 1
             checks[result_var] = (layer_expr, method, value, line_no, None)
+            value_var = _VALUE_VAR_IN_ARGS_RE.search(args)
+            seed_provenance[result_var] = frozenset({
+                (DRC_METHOD_TO_CHECK_TYPE[method], value_var.group(1) if value_var else None)
+            })
         for match in _ENCLOSURE_CALL_RE.finditer(text):
             result_var, inner_expr, outer_expr, args = match.groups()
             value = _resolve_value(args, value_var_to_key, values_by_key)
             line_no = text.count("\n", 0, match.start()) + 1
             checks[result_var] = (inner_expr, "enclosed", value, line_no, outer_expr)
+            value_var = _VALUE_VAR_IN_ARGS_RE.search(args)
+            seed_provenance[result_var] = frozenset({("min_enclosure", value_var.group(1) if value_var else None)})
+
+        provenance = _trace_composite_provenance(text, value_var_to_key, seed_provenance)
+        composite_line_no: dict[str, int] = {}
+        for line_no, raw_line in enumerate(text.split("\n"), start=1):
+            match = _ANY_ASSIGN_RE.match(raw_line.strip())
+            if match:
+                composite_line_no[match.group(1)] = line_no
 
         matched_result_vars: set[str] = set()
         for match in _OUTPUT_CALL_RE.finditer(text):
             result_var, rule_id, description = match.groups()
             line_no = text.count("\n", 0, match.start()) + 1
             check = checks.get(result_var)
-            if check is None:
-                skipped.append(
-                    f"{rel}:{line_no}: '{rule_id}' -- .output() on '{result_var}', "
-                    f"which isn't a direct width()/space()/sep()/enclosed()/with_area()/"
-                    f"with_length() result (a composite or derived check -- not auto-extracted)"
+            if check is not None:
+                matched_result_vars.add(result_var)
+                layer_expr, method, value, check_line, outer_expr = check
+                check_type = DRC_METHOD_TO_CHECK_TYPE[method]
+                if method == "enclosed":
+                    applies_to = f"{layer_expr} enclosed by {outer_expr} (real KLayout DRC expressions, not resolved to Layers)"
+                    why = ("Best-effort extraction from a real .enclosed() check -- verify against "
+                           "the real source before trusting this value or mapping.")
+                else:
+                    applies_to = f"{layer_expr} (real KLayout DRC expression, not resolved to a Layer)"
+                    why = (f"Best-effort extraction from a real .{method}() check -- verify against "
+                           f"the real source before trusting this value or mapping."
+                           + ("" if method != "sep" else " ('sep' mapped to min_spacing, the closest existing check_type -- not an exact equivalent.)"))
+                rules.append(
+                    DesignRule(
+                        rule_id=rule_id,
+                        description=description.split(" : ", 1)[-1] if " : " in description else description,
+                        check_type=check_type,
+                        applies_to_override=applies_to,
+                        value=float(value) if value is not None else None,
+                        units=CHECK_TYPES[check_type].default_units,
+                        source_provenance=f"{rel}:{check_line} (.output at :{line_no})",
+                        why=why,
+                        status="placeholder",
+                    )
                 )
                 continue
-            matched_result_vars.add(result_var)
-            layer_expr, method, value, check_line, outer_expr = check
-            check_type = DRC_METHOD_TO_CHECK_TYPE[method]
-            if method == "enclosed":
-                applies_to = f"{layer_expr} enclosed by {outer_expr} (real KLayout DRC expressions, not resolved to Layers)"
-                why = ("Best-effort extraction from a real .enclosed() check -- verify against "
-                       "the real source before trusting this value or mapping.")
-            else:
-                applies_to = f"{layer_expr} (real KLayout DRC expression, not resolved to a Layer)"
-                why = (f"Best-effort extraction from a real .{method}() check -- verify against "
-                       f"the real source before trusting this value or mapping."
-                       + ("" if method != "sep" else " ('sep' mapped to min_spacing, the closest existing check_type -- not an exact equivalent.)"))
-            rules.append(
-                DesignRule(
-                    rule_id=rule_id,
-                    description=description.split(" : ", 1)[-1] if " : " in description else description,
-                    check_type=check_type,
-                    applies_to_override=applies_to,
-                    value=float(value) if value is not None else None,
-                    units=CHECK_TYPES[check_type].default_units,
-                    source_provenance=f"{rel}:{check_line} (.output at :{line_no})",
-                    why=why,
-                    status="placeholder",
+
+            composite_prov = provenance.get(result_var) if result_var not in seed_provenance else None
+            if composite_prov is not None:
+                (check_type, value_var), = composite_prov
+                json_key = value_var_to_key.get(value_var) if value_var else None
+                value = values_by_key.get(json_key) if json_key else None
+                matched_result_vars.add(result_var)
+                check_line = composite_line_no.get(result_var, line_no)
+                applies_to = (
+                    f"'{result_var}' (a real, boolean-composed KLayout DRC expression, traced through "
+                    f"2+ combined real checks that all agreed on the same value -- not resolved to a Layer)"
                 )
+                why = (
+                    "Best-effort extraction traced through a real boolean composition (.join()/.and()/...), "
+                    "not a single direct check -- verify against the real source before trusting this value "
+                    "or mapping even more than usual."
+                )
+                rules.append(
+                    DesignRule(
+                        rule_id=rule_id,
+                        description=description.split(" : ", 1)[-1] if " : " in description else description,
+                        check_type=check_type,
+                        applies_to_override=applies_to,
+                        value=float(value) if value is not None else None,
+                        units=CHECK_TYPES[check_type].default_units,
+                        source_provenance=f"{rel}:{check_line} (.output at :{line_no})",
+                        why=why,
+                        status="placeholder",
+                    )
+                )
+                continue
+
+            skipped.append(
+                f"{rel}:{line_no}: '{rule_id}' -- .output() on '{result_var}', "
+                f"which isn't a direct width()/space()/sep()/enclosed()/with_area()/"
+                f"with_length() result, nor a composite this module could safely trace back "
+                f"to one unambiguous value (a composite or derived check -- not auto-extracted)"
             )
 
         for result_var in checks:

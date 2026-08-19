@@ -3479,6 +3479,66 @@ editor yet -- see Future Work.
     Step (um)** fields (new) round-trip correctly; the three, now
     real, `"Layer"` pickers (up from zero) are confirmed live too.
     Full suite re-run clean.
+- **KLayout DRC composite-check data-flow tracing** -- the last of the
+  three harder, explicitly-deferred items this session set out to
+  close, and the riskiest by the project's own stated reasoning: "a
+  wrong trace would silently attach the wrong value to a rule, unlike
+  an honestly-skipped one." `pdklib/drc.py`'s new
+  `_trace_composite_provenance` resolves a real, boolean-composed
+  `.output()` result (e.g. real `NW.b1`:
+  `nw_b1_l1.join(nw_b1_l2).and(pwell)`) back to one real, unanimous
+  `(check_type, value)`, but **only when doing so genuinely can't be
+  wrong, never when it merely seems likely** -- confirmed by a real
+  near-miss found while building it, not a hypothetical: a first,
+  looser version would have "resolved" a real `Sdiod.b` composite
+  purely by coincidence (one of its own two real branches traced
+  through a real `.sized(v.um)` call this module doesn't recognize as
+  a check method, and just happened to share the same real value as
+  the other branch) -- silently indistinguishable, from this module's
+  own point of view, from a real case where the two branches
+  genuinely *disagreed*. Fixed by adding a real, deck-wide
+  *value-touching* taint pass first: an untracked operand is only ever
+  treated as a safe, inert spatial filter once *confirmed* to never
+  reference any real `drc_rules` value anywhere in its own real
+  derivation, direct or transitive -- not merely because this module
+  never happened to recognize how it was built. A composite only ever
+  resolves when every real operand in its own chain is (a) already
+  resolved with unanimous agreement, (b) confirmed real and
+  value-clean (a plain untracked layer, or a value-free boolean
+  derivative), or (c) a confirmed-inert "view, don't transform" method
+  (`.polygons`/`.merged`/`.flatten`/`.clean`/`.raw`/`.strict`/
+  `.non_strict`/`.edges`) -- any real disagreement, or any operand this
+  module can't confirm safe one of those three ways, leaves the whole
+  composite unresolved, refused rather than guessed. Real `+` is
+  deliberately excluded from the recognized combiner set even though
+  it's a real, valid KLayout `Region` join operator too: no reliable,
+  regex-only way exists to tell a real geometric `layer_a + layer_b`
+  apart from a real arithmetic `value.um + 0.001.um` margin (confirmed
+  real elsewhere in this same deck) without risking exactly the kind
+  of mis-attribution this feature exists to avoid.
+  - **A real, upstream design question, brought to the user rather
+    than picked**: whether to pursue this at all, given its own
+    explicitly-documented risk, was asked outright rather than assumed
+    -- their call was to go ahead.
+  - `pdklib/drc_writer.py`'s own `_locate` was extended the same, real
+    way (reusing `_trace_composite_provenance` directly, not
+    re-deriving it) so a composite rule's own real `value` edit patches
+    the real JSON config correctly too -- not just `rule_id`/
+    `description`, which would otherwise have silently continued to
+    write back while `value` edits silently no-op'd, a real, found gap
+    fixed before it ever shipped.
+  - Verified for real, driven: a repeated stash/pop before/after
+    comparison against the live IHP deck confirms the existing real 77
+    rules and 90 skips are completely unaffected (zero regressions),
+    and exactly 8 new, individually hand-verified-against-source real
+    rules are added (`Ant.g`/`MIM.c`/`NBL.c`/`NBL.d`/`NW.b1`/`Padb.c`/
+    `Padc.c`/`Pas.c`, 77/90 -> 85/82); real, confirmed-unsafe near
+    neighbors (`Sdiod.b`/`Sdiod.c`/`Padc.a`/`Padb.a`/`AFil.d`) correctly
+    stay unresolved, not silently guessed at.
+    `tests/test_drc_composite_tracing.py` (new) asserts all of the
+    above plus the real value/JSON write-back round-trip;
+    `tests/test_drc_real_ihp.py` updated (77 -> 85). Full suite
+    re-run clean.
 
 ## Future work
 
@@ -3557,25 +3617,27 @@ models, ...), not just read/display layers. Concretely, still open:
   entry below; still no editor/write-back for this domain, same
   "bounded, not a full parser" precedent as everywhere else.)
 - Wider KLayout DRC-deck coverage: `pdklib/drc.py` now extracts four
-  reliable patterns -- `width()`/`space()`/`sep()`, `.enclosed()`,
-  `.with_area()`, and `.with_length()` -- -> `.output()` (77 real rules
-  total); `.overlap()` deliberately isn't extended (no real, direct
-  `.output()`-feeding call site exists anywhere in the deck -- see the
-  dedicated changelog entry above). The other 90 real, honestly-skipped
-  constructs are multi-step composite/derived checks (angle/acute-corner
-  checks, antenna-ratio accumulation, density windows, further-composed
-  `with_area`/`with_length`/`overlap` call sites, ...) with no single
-  reliable, generic pattern left to extract -- re-checked a second time
-  (not just assumed still true): real `.without_bbox_width()` occurs
-  exactly once deck-wide (not worth a pattern), and every real
-  method-chain shape used across the remaining skipped constructs was
-  tallied deck-wide with no one shape dominating the way `width`/
-  `space`/`sep`/`enclosed`/`with_area`/`with_length` did. Some (e.g.
-  real `NW.b1`) could in principle resolve via real data-flow tracing
-  through arbitrary `.join()`/`.and()`/... composition, but that's
-  real, separate, higher-risk future work -- a wrong trace would
-  silently attach the wrong value to a rule, unlike an honestly-skipped
-  one.
+  reliable direct patterns -- `width()`/`space()`/`sep()`,
+  `.enclosed()`, `.with_area()`, and `.with_length()` -- -> `.output()`,
+  plus real, safely-traced boolean-composed rules on top of those (see
+  the dedicated `_trace_composite_provenance` changelog entry below --
+  `NW.b1` in particular, once flagged here as a real candidate for
+  "separate, higher-risk future work," is now done, closing this
+  bullet's own real caveat); `.overlap()` deliberately isn't extended
+  (no real, direct `.output()`-feeding call site exists anywhere in the
+  deck -- see the dedicated changelog entry above). 85 real rules total
+  now (was 77); the other 82 real, honestly-skipped constructs (was 90)
+  are still genuinely heterogeneous multi-step composite/derived checks
+  (angle/acute-corner checks, antenna-ratio accumulation, density
+  windows, further-composed `with_area`/`with_length`/`overlap` call
+  sites, and every real composite this module could not safely verify
+  a single, unanimous value for, ...) with no single reliable, generic
+  pattern left to extract further, re-checked a second time (not just
+  assumed still true): real `.without_bbox_width()` occurs exactly once
+  deck-wide (not worth a pattern), and every real method-chain shape
+  used across the remaining skipped constructs was tallied deck-wide
+  with no one shape dominating the way `width`/`space`/`sep`/
+  `enclosed`/`with_area`/`with_length` did.
 - Native write-back serialization: **done for every currently
   structured-editable domain** -- LEF pins (`pdklib/lef_writer.py`,
   verified against all 32 real files), DRC Rules (`pdklib/drc_writer.py`,

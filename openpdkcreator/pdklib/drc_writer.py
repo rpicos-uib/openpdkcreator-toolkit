@@ -18,9 +18,13 @@ everything else (surrounding Ruby code, other rules' own ``.output()``
 calls, comments, formatting, every other real JSON entry) stays
 byte-for-byte untouched. ``_locate`` re-derives which real JSON key (if
 any) backs a rule's value, and the exact real ``.output()`` regex
-match, by re-running ``pdklib/drc.py``'s own extraction regexes directly
-against the target line -- not a second, independently-drifting
-implementation of the same fact.
+match, by re-running ``pdklib/drc.py``'s own extraction regexes
+directly against the target line -- not a second, independently-
+drifting implementation of the same fact. This includes a real,
+boolean-composed rule's own value too (``pdklib/drc.py``'s own
+``_trace_composite_provenance``, reused here rather than re-derived) --
+a composite rule's ``value`` edit patches the real JSON correctly, the
+same as a direct rule's does.
 
 **A real, common wrinkle handled deliberately, not glossed over**: 61
 of IHP's own real ``.output()`` calls have a real ``"<section> : ...
@@ -77,29 +81,61 @@ def _locate(text: str, check_line: int, output_line: int) -> tuple[str | None, r
     value, and the real ``.output()`` regex ``Match``, from *text*
     alone (the same real ``.drc`` file's fresh content) -- mirroring
     ``pdklib/drc.py``'s own extraction logic exactly (its own compiled
-    regexes, imported not duplicated)."""
+    regexes, imported not duplicated).
+
+    ``check_line`` isn't always a direct ``width()``/``space()``/
+    ``sep()``/``enclosed()``/``with_area()``/``with_length()`` line --
+    for a real rule ``pdklib/drc.py`` traced through a real boolean
+    composition (``.join()``/``.and()``/...), it's the line where the
+    *composite* result variable was itself assigned. The same real
+    ``_trace_composite_provenance`` used for extraction is reused here
+    too (not a second, independently-drifting notion of what a
+    composite resolves to) so a composite rule's own real ``value``
+    edit patches the real JSON key correctly, the same as a direct
+    rule's does -- not silently dropped just because its own real
+    ``source_provenance`` doesn't point at one of the two direct
+    patterns."""
 
     value_var_to_key: dict[str, str] = {}
     for match in drc_mod._VALUE_ASSIGN_RE.finditer(text):
         value_var_to_key[match.group(1)] = match.group(2)
 
     value_var = None
+    seed_provenance: dict[str, frozenset] = {}
     for match in drc_mod._CHECK_CALL_RE.finditer(text):
         line_no = text.count("\n", 0, match.start()) + 1
+        result_var, _layer_expr, method, args = match.groups()
+        value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(args)
+        this_value_var = value_match.group(1) if value_match else None
+        seed_provenance[result_var] = frozenset({(drc_mod.DRC_METHOD_TO_CHECK_TYPE[method], this_value_var)})
         if line_no == check_line:
-            value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(match.group(4))
-            value_var = value_match.group(1) if value_match else None
-            break
+            value_var = this_value_var
     if value_var is None:
-        # Not a width()/space()/sep() result -- check the other real
-        # pattern pdklib/drc.py extracts from, .enclosed(outer, value.um,
-        # ...), before giving up on a real JSON key.
+        # Not a width()/space()/sep()/with_area()/with_length() result --
+        # check the other real, direct pattern pdklib/drc.py extracts
+        # from, .enclosed(outer, value.um, ...).
         for match in drc_mod._ENCLOSURE_CALL_RE.finditer(text):
             line_no = text.count("\n", 0, match.start()) + 1
+            result_var, _inner_expr, _outer_expr, args = match.groups()
+            value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(args)
+            this_value_var = value_match.group(1) if value_match else None
+            seed_provenance[result_var] = frozenset({("min_enclosure", this_value_var)})
             if line_no == check_line:
-                value_match = drc_mod._VALUE_VAR_IN_ARGS_RE.search(match.group(4))
-                value_var = value_match.group(1) if value_match else None
-                break
+                value_var = this_value_var
+    if value_var is None:
+        # Not a direct check line either -- try the real, composite
+        # case: is check_line a real, traceable boolean-composed
+        # assignment instead?
+        composite_var = None
+        for line_no, raw_line in enumerate(text.split("\n"), start=1):
+            match = drc_mod._ANY_ASSIGN_RE.match(raw_line.strip())
+            if match and line_no == check_line:
+                composite_var = match.group(1)
+        if composite_var is not None:
+            provenance = drc_mod._trace_composite_provenance(text, value_var_to_key, seed_provenance)
+            resolved = provenance.get(composite_var)
+            if resolved is not None and composite_var not in seed_provenance:
+                (_check_type, value_var), = resolved
     json_key = value_var_to_key.get(value_var) if value_var else None
 
     output_match = None
