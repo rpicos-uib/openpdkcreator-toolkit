@@ -3422,10 +3422,15 @@ models, ...), not just read/display layers. Concretely, still open:
   `main.py export-lef`/`export-drc`/`export-magic-types`/
   `export-netlist`/`export-verilog`/`export-liberty`/`export-layers`).
   What's left is everything that's still read-only in its own
-  structured view -- Magic Tech's remaining eleven real sub-tabs (see
-  the dedicated bullet below for exactly which, and why they're a
-  deliberately different, harder shape) -- for the same reason: no
-  editor -> no write-back path to build. GDS stays read-only by design
+  structured view -- for the same reason: no editor -> no write-back
+  path to build. This used to mean Magic Tech's own remaining eleven
+  real sub-tabs (see the dedicated bullet below for the original
+  reasoning); every one of those has since gained at least header-level
+  write-back too (see the many dedicated changelog entries above),
+  leaving only **CIF Input Recipes**' own real op content
+  genuinely read-only within Magic Tech now (a deliberate semantic-
+  safety scope limit, not a missing editor -- see
+  `CifInputRecipeBlock`'s own docstring). GDS stays read-only by design
   (real structural info only, no geometry-editing feature exists or is
   planned this pass); Liberty's own real lookup-table sub-groups are
   now parsed and shown read-only (see the dedicated changelog entry
@@ -3474,13 +3479,24 @@ models, ...), not just read/display layers. Concretely, still open:
   (cifinput's own real `layer`/`templayer` recipe blocks), plus
   `drc`/`extract`'s own remaining mini-DSL content -- none of these fit
   the "one flat entry per line" shape this pass's shared machinery
-  relies on. `CifInputRecipe` is a genuinely harder case even than
-  cifoutput's own now-done `CifOutputLayerMapping` (see the dedicated
-  changelog entry below): real content merges across more than one
-  non-contiguous real block sharing the same name, *and* the current
-  data model doesn't even track which block each real op line came
-  from -- real write-back would need a data-model redesign before any
-  editor work could start, real separate future work. (Styles/Compose/
+  relies on. `CifInputRecipe` looked like a genuinely harder case even
+  than cifoutput's own now-done `CifOutputLayerMapping` at the time
+  this was written: real content merges across more than one
+  non-contiguous real block sharing the same name, and the data model
+  of the time didn't even track which block each real op line came
+  from. **Since closed** (see the dedicated `CifInputRecipeBlock`
+  changelog entry above): re-modeled as one real entry per real block
+  *occurrence* (the same flattening precedent `CifOutputLayerMapping`
+  itself established), each with its own real `ops` scoped to just
+  that occurrence -- the data-model gap this bullet originally flagged
+  no longer exists. Its own real header fields (`name`/`kind_text`/
+  `base_layer`) are editable with real write-back; only the real op
+  content itself stays deliberately read-only, and for a narrower
+  reason than a data-model limit -- the same semantic-safety "don't
+  guess further" scope discipline as everywhere else (this project
+  can't confirm it's safe to let a user author an arbitrary real
+  geometry-boolean op line without understanding Magic's own op
+  semantics). (Styles/Compose/
   Connect/cifinput's own two flat sub-structures/cifoutput's own
   `CifOutputLayerMapping`, once also in this list, are done -- see the
   dedicated changelog entries below; Compose/Connect/cifinput's
@@ -3861,8 +3877,9 @@ models, ...), not just read/display layers. Concretely, still open:
   track are no longer a real gap, closed the same way Verilog/Verilog-A
   were -- through the **Library Manager** tab's own **Create**, not a
   new, dedicated top-level tab. LEF is not among them either for its
-  own macro-level content -- see **New Macro...** above; `ORIGIN`/
-  `SITE` still aren't modeled on a macro, real, separate future work.
+  own macro-level content -- see **New Macro...** above; its own
+  `ORIGIN`/`SITE` gap on a brand-new macro is also since closed (see
+  the dedicated changelog entry above).
 - **Real Ruby generation for DRC Rules' remaining three
   `check_type`s** (`max_current_density`/`max_dimension`/
   `density_window`) -- half of the original six are now done (see the
