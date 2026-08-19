@@ -4400,6 +4400,79 @@ models, ...), not just read/display layers. Concretely, still open:
   KLayout shape. A **New Rule** of either is still real, editable
   metadata -- it just can't be exported into a runnable check yet,
   reported honestly (rule ID + reason) rather than silently dropped.
+- **Real layout extraction (Magic) and LVS (Netgen), batch-mode** --
+  per direct request: until now there was no way to go from a real
+  `.mag` layout to a real ngspice-simulatable netlist, or to run a
+  real LVS comparing an extracted layout against a schematic-derived
+  reference -- only interactive **Open in Magic**. New `pdklib/
+  extraction.py`: `run_extract` renders and runs a real Magic Tcl
+  batch script (`magic -dnull -noconsole <script>`, no real X11/Tk
+  display needed) doing `tech load`/`load <cell>`/`port renumber`/
+  `extract`/`ext2spice`, in either a `"parasitic"` mode (real R/C
+  parasitics, for post-layout simulation) or a real `"lvs"` mode (the
+  real `ext2spice lvs` preset -- fast, connectivity-only, blackboxing
+  sub-cells with their own real ports into `X` subcircuit calls
+  instead of flattening them); `run_lvs` renders and runs a real
+  Netgen batch script (`netgen -batch source <script>`, `readnet
+  spice` x2 + `lvs "layout top" "schematic top" setup.tcl report.out`)
+  comparing the extracted netlist against a real, existing CDL/SPICE
+  view, writing a minimal default `setup.tcl` (`permute default`,
+  `property default`, `property parallel none`) when the project has
+  none of its own yet. Wired into `gui/library_manager_view.py` as two
+  new real actions on the Magic Layout view row -- **Extract to
+  SPICE** (mode chosen via a small dialog) and, once a CDL or SPICE
+  view also exists for the cell, **Run LVS** -- both blocking (no
+  background thread; a bare-minimum project's own extraction runs in
+  well under a second) and both showing the real tool's own stdout/
+  stderr/report verbatim via `gui/text_dialog.py`'s existing
+  `show_text_dialog`, never a synthesized summary.
+
+  Found and fixed two real, blocking bugs along the way, neither
+  specific to this feature: `magic_tech_writer.py`'s `_render_plane_line`
+  was emitting a brand-new `planes` entry as `name, code` (comma-
+  space) instead of Magic's own real required `name,code` (bare
+  comma) -- confirmed against real IHP tech data and a live
+  `scmos8m.tech` example, both bare-comma; a `", "`-separated plane
+  makes every later section referencing it fail to load with
+  `Unrecognized plane name`, silently breaking real Magic loading for
+  *any* brand-new technology's `planes` section built through this
+  tool, not just this one. Separately, `create_new_tech_file`'s own
+  minimal skeleton (`planes`/`types`/`contact`/`aliases` only, no
+  `styles`/`connect`/`extract`) turns out to be too incomplete for
+  Magic's own real extractor to run at all: `extract all` against a
+  tech file missing `connect` segfaults Magic outright (confirmed via
+  a clean, parallel test against the real, complete IHP tech file,
+  which extracts a trivial cell successfully -- the crash is real
+  tech-file incompleteness, not a Magic bug or a flaw in the new
+  extraction code). A conductor type also needs a real `resist
+  <type>/<plane> <value>` line in `extract` -- without one, Magic's
+  own extractor silently classifies it as non-electrical and drops it
+  from the output netlist entirely, not just from parasitic
+  calculation. Applied the fix to `openMemristorPDK`'s own real,
+  previously-incomplete tech file too (real `styles`/`connect`/
+  `extract` sections added for its real 4 metal electrode types),
+  confirmed via a real Magic extraction of a real two-port test cell
+  drawn against it, exit 0, no segfault, correct `.subckt <cell> BE
+  TE` output.
+
+  Verified for real, driven, against real Magic and real Netgen inside
+  the IIC-OSIC-TOOLS container (`tests/test_extraction.py`, new): a
+  real, from-scratch, minimal two-plane technology plus a real,
+  freshly-drawn two-pad `.mag` cell extract correctly in both real
+  modes (a real `.subckt` with both real, named ports); a real Netgen
+  LVS run against a matching reference reports the real pin lists as
+  equivalent, and against a reference with one real extra pin reports
+  a real `(no matching pin)` mismatch. Full suite re-run clean.
+
+  One known, disclosed limitation, not addressed here: `openMemristorPDK`'s
+  own GDS layer stack puts all four metal electrode types on a single
+  Magic plane (`metal`), so a real bottom/top-electrode pair can't
+  physically overlap in one `.mag` layout the way a real vertically-
+  stacked memristor cross-section would need -- drawing one requires
+  either a side-by-side (non-stacked) simplification or splitting the
+  electrodes across separate metal planes first, a real layer-stack
+  change out of scope for adding the extraction/LVS *capability*
+  itself.
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project

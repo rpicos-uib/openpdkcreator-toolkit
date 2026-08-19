@@ -129,6 +129,7 @@ from .. import export as export_mod
 from ..pdklib import liberty as liberty_mod
 from ..pdklib import libman_project as libman_mod
 from ..pdklib import library_index as li_mod
+from ..pdklib import extraction as extraction_mod
 from ..pdklib import mag as mag_mod
 from ..pdklib import magic_tech as magic_tech_mod
 from ..pdklib import netlist as netlist_mod
@@ -138,6 +139,7 @@ from ..pdklib import verilog as verilog_mod
 from ..pdklib import xschem as xschem_mod
 from ..pdklib import xschem_sch as xschem_sch_mod
 from .file_view_dialog import view_file_dialog
+from .text_dialog import show_text_dialog
 from .tooltip import add_help_icon
 
 LIBRARIES_DIRNAME = li_mod.LIBRARIES_DIRNAME
@@ -518,8 +520,16 @@ class LibraryManagerView(ttk.Frame):
             )
         elif view_kind == "mag":
             ttk.Button(row_frame, text="Open in Magic", command=lambda e=entry: self._open_magic_mag(e)).pack(
-                side="left"
+                side="left", padx=(0, 4)
             )
+            ttk.Button(
+                row_frame, text="Extract to SPICE", command=lambda e=entry: self._extract_spice(e),
+            ).pack(side="left", padx=(0, 4))
+            reference = self._entries.get("cdl") or self._entries.get("spice")
+            if reference is not None:
+                ttk.Button(
+                    row_frame, text="Run LVS", command=lambda e=entry, r=reference: self._run_lvs(e, r),
+                ).pack(side="left")
         elif view_kind == "libman_core":
             # A real, proprietary LibMan Cap'n Proto binary -- offering
             # a "View" button here would open it through the generic
@@ -714,6 +724,124 @@ class LibraryManagerView(ttk.Frame):
         with handle:
             handle.write(f"cd {entry.path.parent}\nload {entry.path.stem}\n")
         self._launch("magic", extra_argv=(handle.name,))
+
+    def _ask_extract_mode(self) -> str | None:
+        chosen: list[str | None] = [None]
+        window = tk.Toplevel(self)
+        window.title("Extract to SPICE")
+        ttk.Label(window, text="Extraction mode:").pack(padx=12, pady=(12, 4))
+
+        def pick(mode: str):
+            chosen[0] = mode
+            window.destroy()
+
+        ttk.Button(
+            window, text="Parasitic (for ngspice simulation)", command=lambda: pick("parasitic"),
+        ).pack(fill="x", padx=12, pady=2)
+        ttk.Button(
+            window, text="LVS (fast, connectivity-only)", command=lambda: pick("lvs"),
+        ).pack(fill="x", padx=12, pady=2)
+        ttk.Button(window, text="Cancel", command=window.destroy).pack(fill="x", padx=12, pady=(6, 12))
+        window.transient(self)
+        window.grab_set()
+        self.wait_window(window)
+        return chosen[0]
+
+    def _extract_spice(self, entry: li_mod.ViewEntry):
+        """Real, batch-mode Magic extraction -- see ``pdklib/
+        extraction.py``'s own docstring. Deliberately does not
+        register the resulting ``.spice`` as a new "SPICE" view: it's
+        a derived artifact of this specific layout, re-generated on
+        every click, not an authored view of the cell."""
+
+        tool = _find_tool("magic")
+        if tool is None:
+            messagebox.showerror("Extract to SPICE", "No 'magic' tool registered.", parent=self)
+            return
+        status = eda_tools.check_tool(tool)
+        if not status.found:
+            messagebox.showerror("Extract to SPICE", f"{tool.name} isn't on PATH.", parent=self)
+            return
+        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
+        if tech_file is None:
+            messagebox.showerror("Extract to SPICE", "No Magic technology (.tech) file found under this PDK.", parent=self)
+            return
+        mode = self._ask_extract_mode()
+        if mode is None:
+            return
+        self.status_var.set(f"Running Magic extraction ({mode})...")
+        self.update_idletasks()
+        try:
+            result = extraction_mod.run_extract(entry.path, tech_file, status.path, mode=mode)
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Extract to SPICE", "Magic did not finish within 120s.", parent=self)
+            self.status_var.set("Extraction timed out.")
+            return
+        self.status_var.set(f"Extracted {result.spice_path}." if result.ok else "Extraction failed -- see log.")
+        show_text_dialog(
+            self, f"Extract to SPICE ({mode}) -- {entry.path.stem}",
+            (f"Wrote {result.spice_path}\n\n" if result.ok else "No output file was written -- extraction failed.\n\n")
+            + result.log,
+        )
+
+    def _run_lvs(self, entry: li_mod.ViewEntry, reference: li_mod.ViewEntry):
+        """Real, batch-mode extraction (LVS-preset, fast/connectivity-
+        only) followed by a real Netgen LVS comparing the freshly
+        extracted layout netlist against *reference* (the cell's own
+        CDL, or SPICE if no CDL view exists -- ``library_index.py``'s
+        own existing CDL-before-SPICE precedence, reused here)."""
+
+        magic_tool = _find_tool("magic")
+        netgen_tool = _find_tool("netgen")
+        if magic_tool is None or netgen_tool is None:
+            messagebox.showerror("Run LVS", "'magic' and/or 'netgen' tool not registered.", parent=self)
+            return
+        magic_status = eda_tools.check_tool(magic_tool)
+        netgen_status = eda_tools.check_tool(netgen_tool)
+        if not magic_status.found:
+            messagebox.showerror("Run LVS", f"{magic_tool.name} isn't on PATH.", parent=self)
+            return
+        if not netgen_status.found:
+            messagebox.showerror("Run LVS", f"{netgen_tool.name} isn't on PATH.", parent=self)
+            return
+        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
+        if tech_file is None:
+            messagebox.showerror("Run LVS", "No Magic technology (.tech) file found under this PDK.", parent=self)
+            return
+
+        self.status_var.set("Extracting layout for LVS...")
+        self.update_idletasks()
+        try:
+            extract_result = extraction_mod.run_extract(entry.path, tech_file, magic_status.path, mode="lvs")
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Run LVS", "Magic did not finish within 120s.", parent=self)
+            self.status_var.set("LVS aborted: extraction timed out.")
+            return
+        if not extract_result.ok:
+            show_text_dialog(
+                self, f"Run LVS -- {entry.path.stem}",
+                f"Layout extraction failed, LVS was not run.\n\n{extract_result.log}",
+            )
+            self.status_var.set("LVS aborted: extraction failed.")
+            return
+
+        self.status_var.set("Running netgen LVS...")
+        self.update_idletasks()
+        try:
+            lvs_result = extraction_mod.run_lvs(
+                extract_result.spice_path, self.current_cell, reference.path, self.current_cell, netgen_status.path,
+            )
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Run LVS", "netgen did not finish within 120s.", parent=self)
+            self.status_var.set("LVS aborted: netgen timed out.")
+            return
+
+        verdict = {True: "MATCH", False: "MISMATCH", None: "UNKNOWN -- no report written"}[lvs_result.matched]
+        self.status_var.set(f"LVS result: {verdict}.")
+        show_text_dialog(
+            self, f"Run LVS -- {entry.path.stem} ({verdict})",
+            f"{lvs_result.log}\n\n--- {lvs_result.report_path.name} ---\n{lvs_result.report_text}",
+        )
 
     # -- IHP LibMan project-file import/export ---------------------------------
 
