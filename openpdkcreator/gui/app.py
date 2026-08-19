@@ -485,11 +485,11 @@ class App(ttk.Frame):
             "PDK > Overview -- a real, per-tool file inventory of whichever PDK is loaded.\n"
             "PDK > Technology -- Layers / Magic Tech / DRC Rules.\n"
             "PDK > Cells -- LEF and By Cell (one real cell's views across every domain).\n"
-            "PDK > Library Manager -- a Cadence-style Libraries | Cells | Views browser "
-            "spanning real and project-authored content; also where LibMan .projects "
-            "import/export lives (see the File menu).\n"
             "PDK > Simulation -- ngspice Models, xschem, Qucs-S, and your own User Models "
             "(Verilog/Verilog-A).\n"
+            "Library Manager -- a Cadence-style Libraries | Cells | Views browser spanning "
+            "real and project-authored content; also where LibMan .projects import/export "
+            "lives (see the File menu).\n"
             "Settings -- project name/directory, tool install status, generated shell-env "
             "script.\n\n"
             "Menus\n"
@@ -831,8 +831,10 @@ class App(ttk.Frame):
         self.status.set(f"Switched project directory to {new_dir}")
 
     # -- PDK tab (wraps everything actually about the PDK's own content;
-    # Settings -- project naming/tool config -- stays a separate,
-    # top-level tab, deliberately outside this one) --------------------
+    # Settings -- project naming/tool config -- and Library Manager --
+    # a Cadence-style browser spanning real+project-authored content,
+    # not just this one PDK's own real files -- both stay separate,
+    # top-level tabs, deliberately outside this one) --------------------
 
     def _build_pdk_tab(self):
         frame = ttk.Frame(self.notebook)
@@ -969,11 +971,16 @@ class App(ttk.Frame):
         self.cell_hub_view = CellHubView(cell_hub_frame, self)
         self.cell_hub_view.pack(fill="both", expand=True)
 
-    # -- Library Manager tab -----------------------------------------------
+    # -- Library Manager tab -- top-level, a sibling of PDK/Wizard/
+    # Settings, not nested under PDK: it spans real+project-authored
+    # content across every domain (not just this one PDK's own real
+    # files the way Overview/Technology/Cells do), so it doesn't
+    # belong buried a level down from tabs it's conceptually a peer
+    # of. ------------------------------------------------------------
 
     def _build_library_manager_tab(self):
-        frame = ttk.Frame(self.pdk_notebook)
-        self.pdk_notebook.add(frame, text="Library Manager")
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Library Manager")
         self.library_manager_view = LibraryManagerView(frame, self)
         self.library_manager_view.pack(fill="both", expand=True)
 
@@ -1039,16 +1046,21 @@ class App(ttk.Frame):
         stopping early (silently) if a segment isn't found, so a
         caller can pass a short path (just the top-level tab) too.
 
-        Every real path except ``("Settings", ...)`` now lives one
-        level deeper than *path* itself says, nested under the
-        top-level "PDK" tab (``self.pdk_notebook``) -- this method
-        inserts that real hop itself, so callers (the PDK Wizard's own
-        stage table) never needed to change when that wrapping tab was
-        added."""
+        Every real path except ``("Settings", ...)``/``("Library
+        Manager", ...)`` now lives one level deeper than *path* itself
+        says, nested under the top-level "PDK" tab
+        (``self.pdk_notebook``) -- this method inserts that real hop
+        itself, so callers (the PDK Wizard's own stage table) never
+        needed to change when that wrapping tab was added. "Library
+        Manager" itself is a top-level tab too (a sibling of PDK/
+        Wizard/Settings, not nested under PDK -- see
+        ``_build_library_manager_tab``'s own docstring for why), so it
+        gets the same direct-to-``self.notebook`` treatment as
+        "Settings"."""
 
         if not path:
             return
-        if path[0] == "Settings":
+        if path[0] in ("Settings", "Library Manager"):
             top_notebook = self.notebook
         else:
             self._select_tab_by_text(self.notebook, "PDK")

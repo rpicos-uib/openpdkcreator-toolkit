@@ -204,20 +204,23 @@ grows outward through the newly-creatable Layers/Magic Tech/DRC
 Rules/LEF skeletons above.
 
 Tabs are grouped by what they represent, not left flat -- and, one
-level up, **everything actually about the PDK's own content lives
-under a single top-level PDK tab**, deliberately separate from
-**Settings** (project naming/tool config, not PDK content itself, kept
-outside so it doesn't compete for space with the actual PDK-authoring
-tabs; **Wizard**, see above, is a third top-level tab of its own, for
-the same reason -- a new user should see it before anything else, not
-after opening **PDK**). Inside **PDK**: **Overview**
+level up, **everything actually about *this one PDK's own real,
+on-disk* content lives under a single top-level PDK tab**,
+deliberately separate from **Settings** (project naming/tool config,
+not PDK content itself, kept outside so it doesn't compete for space
+with the actual PDK-authoring tabs), **Wizard** (see above, a third
+top-level tab of its own, for the same reason -- a new user should see
+it before anything else, not after opening **PDK**), and **Library
+Manager** (a fourth top-level tab: unlike Overview/Technology/Cells,
+its own Cadence-style Libraries/Cells/Views browser spans real *and*
+project-authored content across every domain at once -- see its own
+section below -- so it's a peer of PDK, not a child of it). Inside
+**PDK**: **Overview**
 (the real, per-tool file inventory, spanning every domain including
 ones with no dedicated view yet), **Technology** (process/technology-
 definition data -- **Layers**, **Magic Tech**, and **DRC Rules** as
 sub-tabs, one per tool that defines it), **Cells** (real cell/macro
-data -- **LEF** and **By Cell** as sub-tabs), **Library Manager** (a
-Cadence-style Libraries/Cells/Views browser spanning every domain at
-once -- see its own section below), **Simulation** (**ngspice
+data -- **LEF** and **By Cell** as sub-tabs), **Simulation** (**ngspice
 Models** -- real `.model`/`.subckt` statements; **xschem** -- a
 **Symbols** sub-tab (a real symbol's own device-attribute block,
 read-only; an **editable** real pin list; and a real, interactive
@@ -232,13 +235,13 @@ drawn-geometry ports -- no real port names, just position/type/angle,
 a genuinely different tag syntax from xschem's own `.sym` -- plus its
 own real **Graphical** canvas); **User Models** -- user-authored Verilog/Verilog-A
 modules under `user_models/`, editable link to a real cell). That's
-everything inside **PDK**. **Settings** itself sits alongside it, its
-own separate top-level tab -- **General** (project name/directory,
-source-PDK provenance), **Tools** (real per-tool install/PATH status),
-and **Environment** (the generated shell-env script) as its own
-sub-tabs. **Technology**/**Cells**/**Simulation** are the pattern a
-future sub-tab would repeat once a real parser exists for a
-still-unparsed domain.
+everything inside **PDK**. **Settings** and **Library Manager** each
+sit alongside it, their own separate top-level tabs -- **Settings**
+has **General** (project name/directory, source-PDK provenance),
+**Tools** (real per-tool install/PATH status), and **Environment** (the
+generated shell-env script) as its own sub-tabs. **Technology**/
+**Cells**/**Simulation** are the pattern a future sub-tab would repeat
+once a real parser exists for a still-unparsed domain.
 
 **By Cell** is the hierarchical, cell-centric view: pick one real
 cell, in one place see which of its real views (LEF/CDL/SPICE/
@@ -3292,6 +3295,38 @@ editor yet -- see Future Work.
   asserts `.value` resolves correctly for all four re-extracted
   rules, `TE_W`/`TE_VIA_ENC` included (previously untested, silently
   `None`). Full suite re-run clean.
+- **Library Manager promoted to a top-level tab**, a direct sibling of
+  PDK/Wizard/Settings rather than nested a level down inside PDK, per
+  direct user request. Unlike Overview/Technology/Cells, its own
+  Cadence-style Libraries/Cells/Views browser was already conceptually
+  a peer of PDK, not a child of it -- it spans real *and*
+  project-authored content across every domain at once (xschem/Qucs-S
+  symbols and schematics included, not just `libs.ref/`'s own six),
+  rather than being scoped to this one PDK's own real, on-disk content
+  the way the other three PDK sub-tabs are. `gui/app.py`'s
+  `_build_library_manager_tab` now adds its frame to `self.notebook`
+  (the top-level notebook) instead of `self.pdk_notebook`, positioned
+  right after `PDK` in build order (`Wizard`/`PDK`/`Library
+  Manager`/`Settings`). `App.goto(*path)` gained a second top-level
+  special case alongside `"Settings"`: `path[0] == "Library Manager"`
+  now also skips the "hop into PDK first" step `goto` otherwise always
+  inserts, so `File > Import/Export LibMan Project...` (which calls
+  `self.goto("Library Manager")` to jump there first) keeps working
+  unchanged. Verified for real, driven: `tests/test_menu_structure.py`
+  (updated -- was asserting the tab landed inside `app.pdk_notebook`,
+  now asserts `app.notebook`) and `tests/test_library_manager_view.py`
+  both still pass; a live, driven check confirms the real top-level
+  tab order is exactly `['Wizard', 'PDK', 'Library Manager',
+  'Settings']`, `PDK`'s own sub-tabs are now just `['Overview',
+  'Technology', 'Cells', 'Simulation']`, and `goto("Library Manager")`
+  correctly selects it. The Help dialog's own tab guide text was
+  updated to match (`Library Manager` listed as its own top-level
+  entry, not `PDK > Library Manager`); historical changelog entries
+  above describing the older, nested layout were deliberately left
+  untouched (frozen snapshots of state at the time, same "don't
+  retroactively rewrite history" precedent as everywhere else in this
+  file -- this entry is the current, authoritative statement). Full
+  suite re-run clean.
 
 ## Future work
 

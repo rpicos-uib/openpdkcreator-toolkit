@@ -71,7 +71,7 @@ try:
     assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "Overview"
     app._import_libman_project()
     root.update()
-    assert app.pdk_notebook.tab(app.pdk_notebook.select(), "text") == "Library Manager"
+    assert app.notebook.tab(app.notebook.select(), "text") == "Library Manager"
     app._export_libman_project()
     root.update()
     assert calls == ["import", "export"]
