@@ -4473,6 +4473,58 @@ models, ...), not just read/display layers. Concretely, still open:
   electrodes across separate metal planes first, a real layer-stack
   change out of scope for adding the extraction/LVS *capability*
   itself.
+- **Real batch-mode DRC (KLayout), following the same pattern** --
+  the extraction/LVS work above left one adjacent gap: `gui/
+  library_manager_view.py` could already launch KLayout
+  *interactively* pre-loaded with a real `.lyp`, but the real,
+  already-exported DRC deck (`custom_rules.drc`) still had to be run
+  by hand (Macros > DRC), same as `eda_tools.py`'s own `LaunchGuidance`
+  note for it already said. New `pdklib/extraction.py::run_gds_export`
+  (real Magic batch `gds write`, since a Magic Layout view has no
+  separately registered GDS view of its own yet) and `pdklib/
+  drc.py::run_drc` (real `klayout -b <gds> -r <script> -rd
+  output=<report>` -- the exact real invocation this project's own
+  `DRC_DECK_SKELETON_HEADER` docstring already recorded as "confirmed
+  live"), reading back the real KLayout report-database XML's own
+  `<items>` count rather than trusting its exit code (0 whether the
+  real run found violations or not). Wired into `gui/
+  library_manager_view.py` as a third real action on the Magic Layout
+  row, **Run DRC**.
+
+  Found and fixed one more real, blocking bug while building a real
+  layout to test this against: `create_new_tech_file`'s minimal
+  skeleton has no `cifoutput` section at all, so a from-scratch
+  project drawing its first real shapes and running `gds write` had no
+  real GDS layer/datatype mapping to write against. Added one to
+  `openMemristorPDK`'s own real tech file (mapping each of its 4 real
+  metal types to the real GDS layer/datatype table its own
+  `walkthrough_full.tex` already documents) -- and found a second,
+  independent real bug doing it: the first `cifoutput scalefactor`
+  value tried (10 nanometers, copied from IHP's own real, far finer
+  grid) silently wrote every real shape 100x too small, because this
+  project's own tech file never declares its own internal-grid-to-
+  micron ratio and inherits whatever Magic's own default happens to
+  be (confirmed empirically: 1 real internal unit = 1 real micron
+  here) -- `scalefactor` has to match *that*, not the value copied
+  from a different, unrelated real technology. Fixed to `1000
+  nanometers`, confirmed via a real GDS re-export landing back at the
+  real, intended micron coordinates.
+
+  Verified for real, driven, against real Magic and real KLayout
+  inside the IIC-OSIC-TOOLS container (`tests/test_drc_run.py`, new):
+  a real, minimal, from-scratch technology plus a real `.mag` shape
+  export to a real, valid GDS; a real KLayout DRC run against a
+  real, minimal deck reports a real, clean 0-violation pass for a
+  shape wider than the rule's own minimum; the real report-database
+  XML's own `<items>` schema parses correctly. Run for real against
+  `openMemristorPDK`'s own real `memristor_tio2_au` layout too: 0
+  violations, a real, genuine clean pass. (This project's own coarse,
+  1-micron internal grid -- itself real, disclosed, separate future
+  work -- turned out too coarse to draw a shape that actually
+  *violates* any of this deck's real, sub-micron thresholds, so the
+  violation-counting path is verified directly against a real-shaped
+  report instead; see the test's own docstring.) Full suite: 81
+  passed, 0 failed.
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project

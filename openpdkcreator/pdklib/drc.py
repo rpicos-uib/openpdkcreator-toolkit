@@ -125,6 +125,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..models import DesignRule
@@ -378,6 +381,47 @@ def create_new_drc_deck(pdk_root: Path) -> Path:
     drc_root.mkdir(parents=True)
     (drc_root / CUSTOM_DRC_FILENAME).write_text(DRC_DECK_SKELETON_HEADER, encoding="utf-8")
     return drc_root
+
+
+@dataclass
+class DrcRunResult:
+    report_path: Path
+    log: str
+    violation_count: int | None
+    """The real number of ``<item>`` elements in the real KLayout report
+    database XML -- ``None`` only if the report couldn't be read at all
+    (a real crash before KLayout ever wrote one), never guessed from
+    the real exit code alone (KLayout exits 0 whether or not any real
+    rule was violated -- a real DRC *run* failure and a real, clean
+    *pass* look identical at that level)."""
+
+
+def run_drc(gds_path: Path, drc_script: Path, klayout_binary: str) -> DrcRunResult:
+    """Runs *drc_script* (a real KLayout DRC Ruby script, e.g.
+    ``CUSTOM_DRC_FILENAME`` above) against *gds_path* in real batch
+    mode -- ``klayout -b <gds> -r <script> -rd output=<report>``, the
+    exact real invocation confirmed live and recorded in this script's
+    own ``DRC_DECK_SKELETON_HEADER`` above (a bare ``report()`` call is
+    what makes ``-rd output=...`` actually take effect; every deck this
+    tool exports already has one). Never re-implements a single real
+    DRC check -- only launches the real KLayout engine and reads back
+    its own real report database XML."""
+
+    report_path = gds_path.with_name(gds_path.stem + ".lyrdb")
+    proc = subprocess.run(
+        [klayout_binary, "-b", str(gds_path), "-r", str(drc_script), "-rd", f"output={report_path}"],
+        capture_output=True, text=True, timeout=120,
+    )
+    log = proc.stdout + proc.stderr
+    violation_count: int | None = None
+    if report_path.is_file():
+        try:
+            root = ET.parse(report_path).getroot()
+            items = root.find("items")
+            violation_count = len(items) if items is not None else 0
+        except ET.ParseError:
+            violation_count = None
+    return DrcRunResult(report_path=report_path, log=log, violation_count=violation_count)
 
 
 def find_json_config_path(search_root: Path) -> Path | None:

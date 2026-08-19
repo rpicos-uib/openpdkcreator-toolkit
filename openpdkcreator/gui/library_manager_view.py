@@ -129,6 +129,7 @@ from .. import export as export_mod
 from ..pdklib import liberty as liberty_mod
 from ..pdklib import libman_project as libman_mod
 from ..pdklib import library_index as li_mod
+from ..pdklib import drc as drc_mod
 from ..pdklib import extraction as extraction_mod
 from ..pdklib import mag as mag_mod
 from ..pdklib import magic_tech as magic_tech_mod
@@ -529,7 +530,8 @@ class LibraryManagerView(ttk.Frame):
             if reference is not None:
                 ttk.Button(
                     row_frame, text="Run LVS", command=lambda e=entry, r=reference: self._run_lvs(e, r),
-                ).pack(side="left")
+                ).pack(side="left", padx=(0, 4))
+            ttk.Button(row_frame, text="Run DRC", command=lambda e=entry: self._run_drc(e)).pack(side="left")
         elif view_kind == "libman_core":
             # A real, proprietary LibMan Cap'n Proto binary -- offering
             # a "View" button here would open it through the generic
@@ -841,6 +843,77 @@ class LibraryManagerView(ttk.Frame):
         show_text_dialog(
             self, f"Run LVS -- {entry.path.stem} ({verdict})",
             f"{lvs_result.log}\n\n--- {lvs_result.report_path.name} ---\n{lvs_result.report_text}",
+        )
+
+    def _run_drc(self, entry: li_mod.ViewEntry):
+        """Real, batch-mode GDS export (``extraction.run_gds_export``,
+        since a Magic Layout view doesn't necessarily have a separate,
+        registered GDS view of its own) followed by a real KLayout DRC
+        run (``drc.run_drc``) against this project's own real, exported
+        ``custom_rules.drc`` deck."""
+
+        magic_tool = _find_tool("magic")
+        klayout_tool = _find_tool("klayout")
+        if magic_tool is None or klayout_tool is None:
+            messagebox.showerror("Run DRC", "'magic' and/or 'klayout' tool not registered.", parent=self)
+            return
+        magic_status = eda_tools.check_tool(magic_tool)
+        klayout_status = eda_tools.check_tool(klayout_tool)
+        if not magic_status.found:
+            messagebox.showerror("Run DRC", f"{magic_tool.name} isn't on PATH.", parent=self)
+            return
+        if not klayout_status.found:
+            messagebox.showerror("Run DRC", f"{klayout_tool.name} isn't on PATH.", parent=self)
+            return
+        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
+        if tech_file is None:
+            messagebox.showerror("Run DRC", "No Magic technology (.tech) file found under this PDK.", parent=self)
+            return
+        drc_root = drc_mod.find_drc_root(self.app.pdk_root)
+        if drc_root is None:
+            messagebox.showerror("Run DRC", "No DRC deck found under this PDK (Technology -> DRC Rules).", parent=self)
+            return
+        drc_script = drc_root / drc_mod.CUSTOM_DRC_FILENAME
+        if not drc_script.is_file():
+            messagebox.showerror("Run DRC", f"{drc_script} doesn't exist.", parent=self)
+            return
+
+        self.status_var.set("Exporting GDS for DRC...")
+        self.update_idletasks()
+        try:
+            gds_result = extraction_mod.run_gds_export(entry.path, tech_file, magic_status.path)
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Run DRC", "Magic did not finish within 120s.", parent=self)
+            self.status_var.set("DRC aborted: GDS export timed out.")
+            return
+        if not gds_result.ok:
+            show_text_dialog(
+                self, f"Run DRC -- {entry.path.stem}",
+                f"GDS export failed, DRC was not run.\n\n{gds_result.log}",
+            )
+            self.status_var.set("DRC aborted: GDS export failed.")
+            return
+
+        self.status_var.set("Running KLayout DRC...")
+        self.update_idletasks()
+        try:
+            drc_result = drc_mod.run_drc(gds_result.gds_path, drc_script, klayout_status.path)
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Run DRC", "KLayout did not finish within 120s.", parent=self)
+            self.status_var.set("DRC aborted: KLayout timed out.")
+            return
+
+        if drc_result.violation_count is None:
+            verdict = "UNKNOWN -- no report written"
+        elif drc_result.violation_count == 0:
+            verdict = "CLEAN"
+        else:
+            verdict = f"{drc_result.violation_count} violation(s)"
+        self.status_var.set(f"DRC result: {verdict}.")
+        report_text = drc_result.report_path.read_text(encoding="utf-8") if drc_result.report_path.is_file() else ""
+        show_text_dialog(
+            self, f"Run DRC -- {entry.path.stem} ({verdict})",
+            f"{drc_result.log}\n\n--- {drc_result.report_path.name} ---\n{report_text}",
         )
 
     # -- IHP LibMan project-file import/export ---------------------------------

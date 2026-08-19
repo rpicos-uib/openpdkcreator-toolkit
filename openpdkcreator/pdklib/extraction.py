@@ -65,6 +65,41 @@ class ExtractResult:
 
 
 @dataclass
+class GdsExportResult:
+    gds_path: Path
+    log: str
+    ok: bool
+    """``True`` only if *gds_path* actually exists afterward -- same
+    honest, file-existence-based signal as ``ExtractResult.ok``."""
+
+
+def run_gds_export(mag_path: Path, tech_file: Path, magic_binary: str) -> GdsExportResult:
+    """Runs real Magic in batch mode to write a real GDS for
+    *mag_path* (``gds write``) -- the real prerequisite for running a
+    real KLayout DRC deck (``pdklib/drc.py``'s own ``run_drc``)
+    against a cell that only has a ``.mag`` view so far, no separately
+    registered GDS view of its own."""
+
+    output_gds = mag_path.with_suffix(".gds")
+    cell = mag_path.stem
+    script = (
+        f"tech load {tech_file}\n"
+        f"cd {mag_path.parent}\n"
+        f"load {cell}\n"
+        f"gds write {output_gds}\n"
+        "quit -noprompt\n"
+    )
+    script_path = mag_path.with_name(mag_path.stem + "_gds_export.tcl")
+    script_path.write_text(script, encoding="utf-8")
+    proc = subprocess.run(
+        [magic_binary, "-dnull", "-noconsole", str(script_path)],
+        capture_output=True, text=True, cwd=mag_path.parent, timeout=120,
+    )
+    log = proc.stdout + proc.stderr
+    return GdsExportResult(gds_path=output_gds, log=log, ok=output_gds.is_file())
+
+
+@dataclass
 class LvsResult:
     report_path: Path
     log: str
