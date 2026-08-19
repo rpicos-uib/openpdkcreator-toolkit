@@ -410,6 +410,9 @@ class App(ttk.Frame):
         export_menu.add_command(
             label="Export Edited Qucs-S Components (open_pdks format)", command=self._export_qucs_components
         )
+        export_menu.add_command(
+            label="Export Edited SPICE .lib Corners (open_pdks format)", command=self._export_spice_lib_files
+        )
         menubar.add_cascade(label="Export", menu=export_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False)
@@ -604,6 +607,22 @@ class App(ttk.Frame):
             return
         self.status.set(f"Exported {len(written)} real .lef file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
 
+    def _export_spice_lib_files(self):
+        """Writes real, patched ``.lib`` text for every real file
+        parsed this session (Simulation tab's own Corners sub-tab) to
+        ``export/<pdk name>/...`` -- see ``export.py``'s/``pdklib/
+        spice_models_writer.py``'s own docstrings for exactly what's
+        patched (real ``.LIB ... .ENDL`` corner blocks) and what's
+        preserved verbatim (real ``.model``/``.subckt`` content).
+        Never touches the real, downloaded ``data/`` copy."""
+
+        self.spice_models_view.commit_pending_edits()
+        written = export_mod.export_spice_lib_files(self.pdk_root, self.spice_models_view.lib_cache)
+        if not written:
+            self.status.set("No .lib files parsed this session -- nothing to export (visit the Simulation tab first).")
+            return
+        self.status.set(f"Exported {len(written)} real .lib file(s) to {export_mod.EXPORT_ROOT / self.pdk_root.name}")
+
     def _export_drc_rules(self):
         """Writes real, patched DRC-deck text (the .drc scripts a
         rule_id/description live in, plus the one real JSON config
@@ -796,12 +815,14 @@ class App(ttk.Frame):
         self.magic_tech_view.commit_pending_edits()
         self.lef_view.commit_pending_edits()
         self.cell_hub_view.commit_pending_edits()
+        self.spice_models_view.commit_pending_edits()
         path = project_io.save_state(
             self.pdk_root,
             self.project.design_rules,
             self.magic_tech_view.collect_types_by_tech(),
             self.collect_lef_pin_overrides(),
             self.project_name,
+            spice_corners=self.spice_models_view.collect_corners_by_file(),
             lef_macros=self.collect_new_lef_macros(),
             magic_planes=self.magic_tech_view.collect_planes_by_tech(),
             magic_contacts=self.magic_tech_view.collect_contacts_by_tech(),
@@ -844,6 +865,8 @@ class App(ttk.Frame):
         self.xschem_schematic_cache.clear()
         self.qucs_symbol_cache.clear()
         self.qucs_component_cache.clear()
+        self.spice_models_view.lib_cache.clear()
+        self.spice_models_view.corner_overrides = {}
         self.set_project_name(DEFAULT_PROJECT_NAME)
         self.settings_view.refresh()
         self.lef_view.load()
@@ -851,6 +874,7 @@ class App(ttk.Frame):
         self.magic_tech_view.load()
         self.xschem_view.load()
         self.qucs_view.load()
+        self.spice_models_view.load()
         self.load()
 
     def change_project_directory(self, new_dir: Path):
@@ -899,6 +923,8 @@ class App(ttk.Frame):
         self.xschem_schematic_cache.clear()
         self.qucs_symbol_cache.clear()
         self.qucs_component_cache.clear()
+        self.spice_models_view.lib_cache.clear()
+        self.spice_models_view.corner_overrides = {}
         self.set_project_name(DEFAULT_PROJECT_NAME)
 
         self.lef_view.load()
@@ -906,6 +932,7 @@ class App(ttk.Frame):
         self.magic_tech_view.load()
         self.xschem_view.load()
         self.qucs_view.load()
+        self.spice_models_view.load()
         self.load()
         self.library_manager_view.refresh_libraries()
         self.settings_view.refresh()
@@ -1299,6 +1326,7 @@ class App(ttk.Frame):
                     tech.cifinput_recipes = blocks
             self.magic_tech_view._refresh_all()
             self.apply_saved_lef_pin_overrides(saved.lef_pins, saved.lef_macros)
+            self.spice_models_view.apply_saved_corner_overrides(saved.spice_corners)
             self.lef_view._refresh_all()
             self.cell_hub_view._refresh_cells()
             if saved.project_name:

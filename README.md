@@ -3749,6 +3749,70 @@ editor yet -- see Future Work.
     real relaunch does), and the reloaded macro exports a real,
     correct `MACRO ... END` block, `CLASS`, and `RECT` line. Full
     suite (78 tests) re-run clean.
+- **Real ngspice `.lib` PVT-corner (`.LIB ... .ENDL`) editing** -- per
+  direct user feedback ("they should be [editable]") on the Simulation
+  tab's own Corners sub-tab, which had been deliberately read-only up
+  to this point (matching several other real, display-only domains).
+  Given this project's own memristor PDK task explicitly needed real
+  corners and there was previously no way to author one at all, made
+  it a real, editable domain instead of working around the gap.
+  - `pdklib/spice_models.py`'s `SpiceCorner` gained real
+    `start_line`/`end_line` source-line tracking (the parser now
+    carries each surviving line's own real, 1-indexed line number
+    through comment-stripping and `+`-continuation joining, needed
+    since neither was tracked before) plus a new
+    `SpiceLibFile.all_parsed_corner_ranges` list (the same real
+    "track every original range separately from the live, editable
+    list" shape `LefMacro.all_parsed_pin_ranges` already established),
+    letting a new `pdklib/spice_models_writer.py` apply this project's
+    established diff-first patching one level down: an unedited real
+    corner block stays byte-for-byte verbatim; only a genuinely edited
+    one gets regenerated; a deleted corner's own original span is
+    omitted; a brand-new one is appended at the end of the file. Every
+    real `.model`/`.subckt`/comment stays completely untouched.
+  - **A real, found correctness bug, fixed before it could ship**: a
+    real corner param's value can be a quoted formula expression
+    containing spaces (confirmed real elsewhere in this deck, e.g.
+    `capacitors_mod_mismatch.lib`'s own
+    `cap_carea_mm='agauss(1, 0.01, (mm_ok != 1 ? 0 : 1))'`) --
+    `_parse_params` already stripped the surrounding quotes on the way
+    *in* (so a plain and an intentionally-quoted value are stored the
+    same, unquoted way), but a naive writer re-emitting `key = value`
+    verbatim would silently drop those quotes on the way back out
+    whenever *any* param in that same corner block was edited, turning
+    one real, valid statement into a broken, multi-token one. Fixed by
+    re-quoting a value in `_render_corner_block` whenever it contains
+    whitespace and isn't already quoted.
+  - `gui/spice_models_view.py`'s Corners sub-tab gained a real New/
+    Delete Corner pair and a per-corner side form (Name, one real
+    `key = value` param override per line, one real `.include` file
+    per line) -- the same left-tree/right-form commit-on-switch layout
+    `gui/pin_editor.py`'s own `PinEditor` already uses, including
+    identity-based (not name-based) tree row tracking so renaming a
+    corner doesn't lose its own row. A real file, once parsed, is now
+    cached (`SpiceModelsView.lib_cache`, the same real "stays live for
+    the rest of the session" discipline `gui/app.py`'s own `lef_cache`
+    already established) rather than re-parsed fresh on every refresh,
+    so an in-session edit survives switching to a different `.lib`
+    file and back.
+  - Persists through `project_io.py` (new `spice_corners` save/load
+    key, the same real shape `lef_pins` already uses) and writes back
+    through a new **Export Edited SPICE .lib Corners (open_pdks
+    format)** menu action (`export.py`'s new `export_spice_lib_files`,
+    also wired into `export_full_pdk`'s own whole-PDK smoking-gun
+    round-trip exercise).
+  - Verified for real, driven: `tests/test_spice_corners.py` (new) --
+    byte-identical no-edit export across all 32 real IHP `.lib` files
+    (47 real corners); a real edit round trip (param edit, new corner,
+    deleted corner) survives render + re-parse; the quoted-formula-
+    param fix confirmed via a direct, real round-trip check; and,
+    driven through the real, live `gui/spice_models_view.py` widget
+    itself, a real rename + param/include edit + New Corner all commit
+    to the real, live `SpiceCorner`, survive a real `_save_project()`
+    followed by a completely fresh `App` instance, Delete Corner
+    removes the real, selected corner, and the real **Export Edited
+    SPICE .lib Corners** action reflects every one of those edits
+    correctly. Full suite re-run clean.
 
 ## Future work
 

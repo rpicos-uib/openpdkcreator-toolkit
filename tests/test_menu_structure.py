@@ -47,11 +47,12 @@ print(f"PASS: File holds exactly the real project-level actions: {file_labels}")
 # --- Export: every real, per-domain "Export Edited X" action, and
 # nothing else (no Save Edits, no LibMan actions) ---
 export_labels = entry_labels(cascade_menu("Export"))
-assert len(export_labels) == 11, export_labels
+assert len(export_labels) == 12, export_labels
 assert all(label.startswith("Export Edited ") and label.endswith("(open_pdks format)") for label in export_labels)
+assert "Export Edited SPICE .lib Corners (open_pdks format)" in export_labels
 assert "Save Edits" not in export_labels
 assert not any("LibMan" in label for label in export_labels)
-print(f"PASS: Export holds exactly the real 11 per-domain open_pdks export actions.")
+print(f"PASS: Export holds exactly the real 12 per-domain open_pdks export actions.")
 
 # --- Help: About + a general Help entry + Unit Representation ---
 help_labels = entry_labels(cascade_menu("Help"))

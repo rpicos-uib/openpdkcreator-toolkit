@@ -86,11 +86,22 @@ class SpiceCorner:
     ``params`` is every real ``.param KEY = VALUE`` override found
     inside it, in real file order, kept as raw strings (see this
     module's own docstring for why); ``includes`` is every real
-    ``.include FILE`` statement found inside it."""
+    ``.include FILE`` statement found inside it.
+
+    Editable (**gui/spice_models_view.py**'s Corners sub-tab):
+    ``start_line``/``end_line`` are the real, 1-indexed, inclusive
+    source line range of this corner's own ``.LIB ... .ENDL`` block
+    (``0``/``0`` for a corner added this session, no real source
+    position yet -- the same convention ``pdklib/lef.py``'s own
+    ``LefPin``/``LefMacro`` already use), letting
+    ``pdklib/spice_models_writer.py`` keep an unedited corner's own
+    block verbatim and only regenerate one that actually changed."""
 
     name: str
     params: list[tuple[str, str]] = field(default_factory=list)
     includes: list[str] = field(default_factory=list)
+    start_line: int = 0
+    end_line: int = 0
 
 
 @dataclass
@@ -99,6 +110,14 @@ class SpiceLibFile:
     models: list[SpiceModel] = field(default_factory=list)
     subckts: list[SpiceSubckt] = field(default_factory=list)
     corners: list[SpiceCorner] = field(default_factory=list)
+    all_parsed_corner_ranges: list[tuple[int, int]] = field(default_factory=list)
+    """Every real corner's own real ``(start_line, end_line)`` as
+    originally parsed -- independent of ``corners`` above, which a
+    session's own edits can remove entries from; lets
+    ``pdklib/spice_models_writer.py`` tell a real, deleted corner
+    apart from one simply never in this list to begin with (the same
+    real ``LefMacro.all_parsed_pin_ranges`` shape ``pdklib/lef.py``
+    already established)."""
 
 
 def find_lib_files(pdk_root: Path) -> list[Path]:
@@ -118,8 +137,8 @@ def create_new_lib_file(path: Path) -> None:
     ``libs.tech/ngspice/models/`` to be found again by
     ``find_lib_files`` above. No editor exists for adding real
     ``.model``/``.subckt`` content from inside this GUI yet -- a real,
-    separate future work, matching every other read-only-content
-    domain here (see README's own gap note)."""
+    separate future work; **Corners** (``.LIB ... .ENDL`` blocks) *is*
+    now editable, see ``gui/spice_models_view.py``'s own docstring."""
 
     if path.exists():
         raise FileExistsError(f"{path} already exists")
@@ -127,19 +146,27 @@ def create_new_lib_file(path: Path) -> None:
     path.write_text("* New, empty ngspice model library.\n", encoding="utf-8")
 
 
-def _join_plus_continuations(lines: list[str]) -> list[str]:
+def _join_plus_continuations(lines: list[tuple[int, str]]) -> list[tuple[int, str]]:
     """Real ngspice ``.lib`` statements wrap across lines with a
     *leading* ``+`` marker on the continuation line -- SPICE's own,
     different convention from Magic's trailing ``\\`` (see
-    ``pdklib/magic_tech.py``'s own ``_join_backslash_continuations``)."""
+    ``pdklib/magic_tech.py``'s own ``_join_backslash_continuations``).
+    Each entry carries its own real, 1-indexed source line number
+    alongside its text (a continuation line's own text is folded into
+    its *logical* line's entry, keeping that logical line's own real,
+    first line number -- ``.LIB``/``.ENDL`` themselves are never real,
+    observed continuation targets, so this only ever affects
+    ``.model``/``.subckt`` line-number bookkeeping this module doesn't
+    itself track)."""
 
-    joined: list[str] = []
-    for line in lines:
+    joined: list[tuple[int, str]] = []
+    for line_no, line in lines:
         stripped = line.strip()
         if stripped.startswith("+") and joined:
-            joined[-1] = joined[-1] + " " + stripped[1:].strip()
+            prev_no, prev_text = joined[-1]
+            joined[-1] = (prev_no, prev_text + " " + stripped[1:].strip())
         else:
-            joined.append(line)
+            joined.append((line_no, line))
     return joined
 
 
@@ -160,16 +187,20 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
     lib = SpiceLibFile(source_path=path)
     # Real comment lines start with a bare '*' -- drop them before
     # joining continuations so a commented-out '+' line never gets
-    # spliced into a real, active statement.
+    # spliced into a real, active statement. Each surviving line keeps
+    # its own real, 1-indexed source line number alongside its text
+    # (needed for SpiceCorner.start_line/end_line -- see that
+    # dataclass's own docstring).
+    raw_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     content_lines = [
-        line for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        (line_no, line) for line_no, line in enumerate(raw_lines, start=1)
         if not line.strip().startswith("*")
     ]
     joined = _join_plus_continuations(content_lines)
 
     current_subckt: SpiceSubckt | None = None
     current_corner: SpiceCorner | None = None
-    for line in joined:
+    for line_no, line in joined:
         stripped = line.strip()
         if not stripped:
             continue
@@ -185,7 +216,9 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
             continue
         if current_corner is not None:
             if _ENDL_RE.match(stripped):
+                current_corner.end_line = line_no
                 lib.corners.append(current_corner)
+                lib.all_parsed_corner_ranges.append((current_corner.start_line, current_corner.end_line))
                 current_corner = None
                 continue
             param_match = _DOT_PARAM_RE.match(stripped)
@@ -210,7 +243,7 @@ def parse_lib_file(path: Path) -> SpiceLibFile:
             continue
         lib_match = _LIB_RE.match(stripped)
         if lib_match:
-            current_corner = SpiceCorner(name=lib_match.group(1))
+            current_corner = SpiceCorner(name=lib_match.group(1), start_line=line_no)
             continue
 
     return lib

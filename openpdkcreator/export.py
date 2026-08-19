@@ -43,6 +43,8 @@ from .pdklib import netlist_writer
 from .pdklib import qucs_component_writer
 from .pdklib import qucs_sym as qucs_sym_mod
 from .pdklib import qucs_sym_writer
+from .pdklib import spice_models as spice_models_mod
+from .pdklib import spice_models_writer
 from .pdklib import verilog as verilog_mod
 from .pdklib import verilog_writer
 from .pdklib import xschem as xschem_mod
@@ -77,6 +79,22 @@ def export_lef_files(
     for source_path, parsed in lef_cache.items():
         export_path = export_path_for(pdk_root, source_path, dest_root)
         lef_writer.export_lef_file(parsed, export_path)
+        written.append(export_path)
+    return written
+
+
+def export_spice_lib_files(
+    pdk_root: Path, lib_cache: dict[Path, spice_models_mod.SpiceLibFile], dest_root: Path | None = None,
+) -> list[Path]:
+    """Every real ``.lib`` file in *lib_cache* (the GUI's own
+    ``SpiceModelsView.lib_cache`` -- only files parsed this session).
+    Returns the real export paths written. Same real shape as
+    ``export_lef_files`` above."""
+
+    written = []
+    for source_path, parsed in lib_cache.items():
+        export_path = export_path_for(pdk_root, source_path, dest_root)
+        spice_models_writer.export_lib_file(parsed, export_path)
         written.append(export_path)
     return written
 
@@ -293,13 +311,16 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
     clone -- Liberty/GDS/docs/qa/every other real file this project has
     no editor for included, not just the small subset the other
     ``export_*`` functions above touch), then every real LEF/DRC/
-    Magic-Types/CDL/SPICE/Verilog/Layers/xschem-symbol/xschem-schematic/
-    Qucs-S-symbol/Qucs-S-component file is re-rendered on top through
-    its own real writer, freshly parsed straight from *pdk_root* with
-    no GUI session or edits involved -- a real no-op patch, but one
-    that exercises every real writer against every real file in the
-    whole PDK, not a hand-picked sample. Refuses to run if *dest_root*
-    already exists (never silently overwrites)."""
+    Magic-Types/CDL/SPICE-netlist/Verilog/Layers/xschem-symbol/
+    xschem-schematic/Qucs-S-symbol/Qucs-S-component/ngspice-``.lib``
+    file is re-rendered on top through its own real writer (for
+    ``.lib`` files, just the real ``.LIB ... .ENDL`` corner blocks --
+    the one editable piece of that domain), freshly parsed straight
+    from *pdk_root* with no GUI session or edits involved -- a real
+    no-op patch, but one that exercises every real writer against
+    every real file in the whole PDK, not a hand-picked sample.
+    Refuses to run if *dest_root* already exists (never silently
+    overwrites)."""
 
     if dest_root.exists():
         raise FileExistsError(f"{dest_root} already exists -- remove it first (this never overwrites blindly).")
@@ -369,3 +390,6 @@ def export_full_pdk(pdk_root: Path, dest_root: Path) -> None:
         path: qucs_sym_mod.parse_component_file(path) for path in qucs_sym_mod.find_component_files(pdk_root)
     }
     export_qucs_components(pdk_root, qucs_component_cache, dest_root)
+
+    lib_cache = {path: spice_models_mod.parse_lib_file(path) for path in spice_models_mod.find_lib_files(pdk_root)}
+    export_spice_lib_files(pdk_root, lib_cache, dest_root)

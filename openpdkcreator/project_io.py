@@ -39,6 +39,7 @@ from pathlib import Path
 import yaml
 
 from .pdklib.lef import LefMacro, LefPin, LefPort
+from .pdklib.spice_models import SpiceCorner
 from .pdklib.magic_tech import (
     AliasEntry, CifInputIgnoredLayer, CifInputLayerHint, CifInputOp, CifInputRecipeBlock, CifOutputLayerMapping,
     ComposeStatement, ConnectRule, ContactEntry, ExtractCapCoefficient, ExtractDevice, ExtractMiscStatement,
@@ -61,6 +62,7 @@ def save_state(
     lef_pins: dict[str, dict[str, list[LefPin]]],
     project_name: str = "",
     lef_macros: dict[str, dict[str, LefMacro]] | None = None,
+    spice_corners: dict[str, list[SpiceCorner]] | None = None,
     magic_planes: dict[str, list[PlaneEntry]] | None = None,
     magic_contacts: dict[str, list[ContactEntry]] | None = None,
     magic_aliases: dict[str, list[AliasEntry]] | None = None,
@@ -107,6 +109,11 @@ def save_state(
     re-parses the real, unmodified source file, finds no macro by that
     name, and silently drops the orphaned pin entries too (a real,
     found gap; see ``gui/app.py``'s own ``_apply_lef_overrides``).
+    *spice_corners*: real ``.lib`` path (relative to pdk_root, as a
+    string, matching ``SpiceModelsView.lib_files``'s own keys) -> its
+    current ``SpiceCorner`` list (real ``.model``/``.subckt`` content
+    isn't editable yet, so nothing else from that domain needs saving
+    here).
     *layers*: real ``.lyp`` path (relative to
     pdk_root, as a string -- there can be more than one, same real
     "New .lyp File..." precedent multiple Magic technologies already
@@ -266,6 +273,17 @@ def save_state(
             }
             for lef_path, macros in (lef_macros or {}).items()
         },
+        "spice_corners": {
+            # A corner's own real params is a list of real (key, value)
+            # tuples -- same real reason every other tuple-typed field
+            # in this module is cast to a list first (yaml.safe_dump
+            # has no default representer for a plain tuple).
+            lib_path: [
+                {**dataclasses.asdict(c), "params": [list(p) for p in c.params]}
+                for c in corners
+            ]
+            for lib_path, corners in (spice_corners or {}).items()
+        },
         "layers": {
             lyp_path: [dataclasses.asdict(layer) for layer in layer_list]
             for lyp_path, layer_list in (layers or {}).items()
@@ -282,6 +300,7 @@ class LoadedState:
     lef_pins: dict[str, dict[str, list[LefPin]]]
     project_name: str = ""
     lef_macros: dict[str, dict[str, LefMacro]] = dataclasses.field(default_factory=dict)
+    spice_corners: dict[str, list[SpiceCorner]] = dataclasses.field(default_factory=dict)
     magic_planes: dict[str, list[PlaneEntry]] = dataclasses.field(default_factory=dict)
     magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
     magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
@@ -324,6 +343,16 @@ def _load_lef_macro(name: str, raw: dict) -> LefMacro:
         origin=tuple(origin) if origin is not None else None,
         obs_layers=list(raw.get("obs_layers", [])),
         start_line=0, end_line=0,
+    )
+
+
+def _load_spice_corner(raw: dict) -> SpiceCorner:
+    return SpiceCorner(
+        name=raw["name"],
+        params=[tuple(p) for p in raw.get("params", [])],
+        includes=list(raw.get("includes", [])),
+        start_line=raw.get("start_line", 0),
+        end_line=raw.get("end_line", 0),
     )
 
 
@@ -432,6 +461,10 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         }
         for lef_path, macros in data.get("lef_macros", {}).items()
     }
+    spice_corners = {
+        lib_path: [_load_spice_corner(c) for c in corners]
+        for lib_path, corners in data.get("spice_corners", {}).items()
+    }
     layers = {
         lyp_path: [Layer(**layer) for layer in layer_list]
         for lyp_path, layer_list in data.get("layers", {}).items()
@@ -440,6 +473,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
         lef_macros=lef_macros,
+        spice_corners=spice_corners,
         magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
         magic_styles=magic_styles, magic_compose=magic_compose, magic_connect=magic_connect,
         magic_cifinput_ignored_layers=magic_cifinput_ignored_layers,
