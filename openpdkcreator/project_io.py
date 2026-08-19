@@ -38,7 +38,7 @@ from pathlib import Path
 
 import yaml
 
-from .pdklib.lef import LefPin, LefPort
+from .pdklib.lef import LefMacro, LefPin, LefPort
 from .pdklib.magic_tech import (
     AliasEntry, CifInputIgnoredLayer, CifInputLayerHint, CifInputOp, CifInputRecipeBlock, CifOutputLayerMapping,
     ComposeStatement, ConnectRule, ContactEntry, ExtractCapCoefficient, ExtractDevice, ExtractMiscStatement,
@@ -60,6 +60,7 @@ def save_state(
     magic_types: dict[str, list[TypeEntry]],
     lef_pins: dict[str, dict[str, list[LefPin]]],
     project_name: str = "",
+    lef_macros: dict[str, dict[str, LefMacro]] | None = None,
     magic_planes: dict[str, list[PlaneEntry]] | None = None,
     magic_contacts: dict[str, list[ContactEntry]] | None = None,
     magic_aliases: dict[str, list[AliasEntry]] | None = None,
@@ -93,7 +94,20 @@ def save_state(
     default to empty so existing callers/save files stay valid.
     *lef_pins*: real .lef path (relative to pdk_root, as a string,
     matching ``LefView.lef_files``'s own keys) -> macro name -> its
-    current Pins list. *layers*: real ``.lyp`` path (relative to
+    current Pins list. *lef_macros*: the same real ``.lef`` path ->
+    macro name -> its own ``LefMacro`` (class/size/site/symmetry/
+    origin/obs_layers -- pins excluded, already covered by
+    *lef_pins*), but only for a macro added this session (**New
+    Macro...**, ``start_line == 0``) -- an *existing* real macro's own
+    class/size/site/symmetry/origin aren't editable at all yet (see
+    ``gui/lef_view.py``), so there's nothing of theirs to save beyond
+    their pins. Without this, a brand-new macro's own pins were saved
+    under its name here, but the macro itself -- the only thing that
+    makes that name resolvable again -- was not: a fresh reload
+    re-parses the real, unmodified source file, finds no macro by that
+    name, and silently drops the orphaned pin entries too (a real,
+    found gap; see ``gui/app.py``'s own ``_apply_lef_overrides``).
+    *layers*: real ``.lyp`` path (relative to
     pdk_root, as a string -- there can be more than one, same real
     "New .lyp File..." precedent multiple Magic technologies already
     have) -> its current Layer list. Without this, a Layers edit was
@@ -234,6 +248,24 @@ def save_state(
             }
             for lef_path, macros in lef_pins.items()
         },
+        "lef_macros": {
+            # size/origin are real (float, float) tuples -- same real
+            # reason every other tuple-typed field in this module is
+            # cast to a list first (yaml.safe_dump has no default
+            # representer for a plain tuple).
+            lef_path: {
+                macro_name: {
+                    "macro_class": macro.macro_class,
+                    "size": list(macro.size) if macro.size is not None else None,
+                    "site": macro.site,
+                    "symmetry": list(macro.symmetry),
+                    "origin": list(macro.origin) if macro.origin is not None else None,
+                    "obs_layers": list(macro.obs_layers),
+                }
+                for macro_name, macro in macros.items()
+            }
+            for lef_path, macros in (lef_macros or {}).items()
+        },
         "layers": {
             lyp_path: [dataclasses.asdict(layer) for layer in layer_list]
             for lyp_path, layer_list in (layers or {}).items()
@@ -249,6 +281,7 @@ class LoadedState:
     magic_types: dict[str, list[TypeEntry]]
     lef_pins: dict[str, dict[str, list[LefPin]]]
     project_name: str = ""
+    lef_macros: dict[str, dict[str, LefMacro]] = dataclasses.field(default_factory=dict)
     magic_planes: dict[str, list[PlaneEntry]] = dataclasses.field(default_factory=dict)
     magic_contacts: dict[str, list[ContactEntry]] = dataclasses.field(default_factory=dict)
     magic_aliases: dict[str, list[AliasEntry]] = dataclasses.field(default_factory=dict)
@@ -277,6 +310,21 @@ def _load_lef_port(raw: dict) -> LefPort:
     # real geometry to recover from a bare count), not guessed at.
     rects = [tuple(r) for r in raw.get("rects", [])]
     return LefPort(layer=raw["layer"], rects=rects)
+
+
+def _load_lef_macro(name: str, raw: dict) -> LefMacro:
+    size = raw.get("size")
+    origin = raw.get("origin")
+    return LefMacro(
+        name=name,
+        macro_class=raw.get("macro_class", ""),
+        size=tuple(size) if size is not None else None,
+        site=raw.get("site", ""),
+        symmetry=list(raw.get("symmetry", [])),
+        origin=tuple(origin) if origin is not None else None,
+        obs_layers=list(raw.get("obs_layers", [])),
+        start_line=0, end_line=0,
+    )
 
 
 def _load_lef_pin(raw: dict) -> LefPin:
@@ -377,6 +425,13 @@ def load_state(pdk_root: Path) -> LoadedState | None:
         }
         for lef_path, macros in data.get("lef_pins", {}).items()
     }
+    lef_macros = {
+        lef_path: {
+            macro_name: _load_lef_macro(macro_name, raw)
+            for macro_name, raw in macros.items()
+        }
+        for lef_path, macros in data.get("lef_macros", {}).items()
+    }
     layers = {
         lyp_path: [Layer(**layer) for layer in layer_list]
         for lyp_path, layer_list in data.get("layers", {}).items()
@@ -384,6 +439,7 @@ def load_state(pdk_root: Path) -> LoadedState | None:
     return LoadedState(
         design_rules=design_rules, magic_types=magic_types, lef_pins=lef_pins,
         project_name=data.get("project_name", ""),
+        lef_macros=lef_macros,
         magic_planes=magic_planes, magic_contacts=magic_contacts, magic_aliases=magic_aliases,
         magic_styles=magic_styles, magic_compose=magic_compose, magic_connect=magic_connect,
         magic_cifinput_ignored_layers=magic_cifinput_ignored_layers,

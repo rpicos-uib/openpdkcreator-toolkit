@@ -180,6 +180,11 @@ class App(ttk.Frame):
         # -- see this module's own docstring.
         self.lef_cache: dict[Path, lef_mod.LefFile] = {}
         self.lef_pin_overrides: dict[str, dict[str, list[lef_mod.LefPin]]] = {}
+        # A macro added this session (New Macro..., start_line == 0)
+        # has no real source position a fresh re-parse can ever find --
+        # without its own saved identity here too, apply_lef_overrides
+        # would have nothing to attach its (separately saved) pins to.
+        self.lef_macro_overrides: dict[str, dict[str, lef_mod.LefMacro]] = {}
         # Same real reason, same fix, for CDL/SPICE/Verilog port edits
         # via the By Cell tab's own "Edit ... Ports" dialogs -- without
         # this, switching families and back would silently discard any
@@ -240,17 +245,35 @@ class App(ttk.Frame):
         return self.lef_cache[path]
 
     def _apply_lef_overrides(self, relpath: str, parsed: lef_mod.LefFile):
+        new_macros = self.lef_macro_overrides.get(relpath, {})
         macro_overrides = self.lef_pin_overrides.get(relpath)
-        if not macro_overrides:
+        if not macro_overrides and not new_macros:
             return
         macros_by_name = {macro.name: macro for macro in parsed.macros}
+        # A brand-new macro (start_line == 0) has no real source
+        # position a fresh re-parse could ever find on its own --
+        # reconstruct it from its own saved identity *before* pins are
+        # attached below, the same "no real interior to preserve"
+        # start_line == 0 convention pdklib/lef_writer.py already
+        # renders a fresh MACRO...END block for.
+        for macro_name, macro in new_macros.items():
+            if macro_name not in macros_by_name:
+                parsed.macros.append(macro)
+                macros_by_name[macro_name] = macro
+        if not macro_overrides:
+            return
         for macro_name, pins in macro_overrides.items():
             macro = macros_by_name.get(macro_name)
             if macro is not None:
                 macro.pins = pins
 
-    def apply_saved_lef_pin_overrides(self, overrides: dict[str, dict[str, list[lef_mod.LefPin]]]):
+    def apply_saved_lef_pin_overrides(
+        self,
+        overrides: dict[str, dict[str, list[lef_mod.LefPin]]],
+        macro_overrides: dict[str, dict[str, lef_mod.LefMacro]] | None = None,
+    ):
         self.lef_pin_overrides = overrides
+        self.lef_macro_overrides = macro_overrides or {}
         for path, parsed in self.lef_cache.items():
             self._apply_lef_overrides(str(path.relative_to(self.pdk_root)), parsed)
 
@@ -302,6 +325,23 @@ class App(ttk.Frame):
             str(path.relative_to(self.pdk_root)): {macro.name: macro.pins for macro in parsed.macros}
             for path, parsed in self.lef_cache.items()
         }
+
+    def collect_new_lef_macros(self) -> dict[str, dict[str, lef_mod.LefMacro]]:
+        """Every macro added this session (**New Macro...**,
+        ``start_line == 0``) -- an *existing* real macro's own class/
+        size/site/symmetry/origin aren't editable at all yet (see
+        ``gui/lef_view.py``), so only a new one needs its own identity
+        saved here; its pins are already covered by
+        ``collect_lef_pin_overrides``. Without this, a fresh reload's
+        re-parse of the real, unmodified source file would find no
+        macro by that name at all -- see ``_apply_lef_overrides``."""
+
+        result: dict[str, dict[str, lef_mod.LefMacro]] = {}
+        for path, parsed in self.lef_cache.items():
+            new_macros = {m.name: m for m in parsed.macros if m.start_line == 0}
+            if new_macros:
+                result[str(path.relative_to(self.pdk_root))] = new_macros
+        return result
 
     def _layers_by_lyp_path(self) -> dict[str, list[Layer]]:
         """The current layer list, keyed by the real ``.lyp`` path it
@@ -762,6 +802,7 @@ class App(ttk.Frame):
             self.magic_tech_view.collect_types_by_tech(),
             self.collect_lef_pin_overrides(),
             self.project_name,
+            lef_macros=self.collect_new_lef_macros(),
             magic_planes=self.magic_tech_view.collect_planes_by_tech(),
             magic_contacts=self.magic_tech_view.collect_contacts_by_tech(),
             magic_aliases=self.magic_tech_view.collect_aliases_by_tech(),
@@ -795,6 +836,7 @@ class App(ttk.Frame):
             save_path.unlink()
         self.lef_cache.clear()
         self.lef_pin_overrides = {}
+        self.lef_macro_overrides = {}
         self.netlist_cache.clear()
         self.verilog_cache.clear()
         self.liberty_cache.clear()
@@ -849,6 +891,7 @@ class App(ttk.Frame):
 
         self.lef_cache.clear()
         self.lef_pin_overrides = {}
+        self.lef_macro_overrides = {}
         self.netlist_cache.clear()
         self.verilog_cache.clear()
         self.liberty_cache.clear()
@@ -1255,7 +1298,7 @@ class App(ttk.Frame):
                 if tech is not None:
                     tech.cifinput_recipes = blocks
             self.magic_tech_view._refresh_all()
-            self.apply_saved_lef_pin_overrides(saved.lef_pins)
+            self.apply_saved_lef_pin_overrides(saved.lef_pins, saved.lef_macros)
             self.lef_view._refresh_all()
             self.cell_hub_view._refresh_cells()
             if saved.project_name:

@@ -3713,6 +3713,42 @@ editor yet -- see Future Work.
     embedded canvas, a real new rect lands on the real, live `LefPin`,
     and the pin list's own summary text refreshes. Full suite
     (78 tests) re-run clean.
+- **Fixed: a brand-new LEF macro (New Macro...) didn't actually
+  survive a save + relaunch** -- a real, pre-existing gap, found while
+  using the LEF pin PORT geometry feature above on a real, freshly-
+  created macro. `project_io.py`'s own `lef_pins` save key stores a
+  macro's *pins*, keyed by macro name, but never the macro's own
+  identity (class/size/site/symmetry/origin) -- fine for every real,
+  existing macro (only its pins are ever editable), but a brand-new
+  macro's own name is the *only* thing that makes its saved pins
+  resolvable again, and nothing persisted it. A fresh relaunch
+  re-parses the real, unmodified source `.lef` file, finds no macro by
+  that name, and `gui/app.py`'s own `_apply_lef_overrides` silently
+  drops the orphaned pin entries too (`if macro is not None:` quietly
+  doing nothing) -- both the macro *and* its pins vanished, with no
+  error of any kind.
+  - Fixed with the same real shape every other "domain that doesn't
+    exist in a real, downloaded file at all" already uses here (DRC
+    Rules/Magic Types/etc.): a new `lef_macros` save key, `lef_path ->
+    macro name -> {macro_class, size, site, symmetry, origin,
+    obs_layers}` (pins excluded -- already covered by `lef_pins`), but
+    only for a macro with `start_line == 0` (added this session) --
+    an *existing* real macro's own class/size/site/symmetry/origin
+    aren't editable at all yet, so there's nothing of theirs to save.
+    `gui/app.py`'s `_apply_lef_overrides` now reconstructs any missing
+    saved macro from its own saved identity and appends it to the
+    freshly re-parsed file's own macro list *before* attaching saved
+    pins, so a name saved under `lef_pins` always has something real
+    to attach to again.
+  - Verified for real, driven: `tests/test_lef_new_macro_gui.py`
+    extended -- a brand-new macro's own class/size/site/origin, plus a
+    real pin and that pin's own real port rect (added through the new
+    Edit Geometry... dialog's own adapter function), all survive a
+    real `_save_project()` followed by a completely fresh `App`
+    instance (a separate Python object graph, the same real thing a
+    real relaunch does), and the reloaded macro exports a real,
+    correct `MACRO ... END` block, `CLASS`, and `RECT` line. Full
+    suite (78 tests) re-run clean.
 
 ## Future work
 
