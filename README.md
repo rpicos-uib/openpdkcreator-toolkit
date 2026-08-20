@@ -4624,6 +4624,43 @@ models, ...), not just read/display layers. Concretely, still open:
   `ihp-sg13g2.tech`, no change in behavior). Full suite: 82 passed,
   0 failed.
 
+- **"Open in xschem" had the exact same real bug, for a different
+  real reason.** Continuing the same "actually verify every tool's
+  paths" audit: this dev container's own real, global
+  `~/.xschem/xschemrc` (part of the base image, not this project)
+  unconditionally sources `$PDK_ROOT/$PDK/libs.tech/xschem/xschemrc`,
+  with `PDK_ROOT`/`PDK` hardcoded container-wide to IHP's own real
+  values -- so a plain `xschem <file>` launch for *any* project pulled
+  in IHP's own real symbol library path, silently. Confirmed live,
+  visually: opening a real memristor symbol showed a real, injected
+  "IHP" menu in xschem's own menu bar that has no business being
+  there. Fixed with a new `_xschem_rcfile()` helper, writing a real,
+  minimal rc file that appends this project's own real
+  `libs.tech/xschem` to `XSCHEM_LIBRARY_PATH`, passed via xschem's own
+  real `--rcfile <file>` flag (confirmed from its own real, installed
+  man page -- not guessed; its `--help` prints nothing in this
+  container) so the wrong, hardcoded default chain is replaced
+  outright.
+
+  Asked mid-fix: "Maybe we can reuse the xschem IHP menu?" -- a fair
+  question, since that real "IHP" menu (`libs.tech/xschem/xschem-menu`
+  inside IHP's own real PDK data) turns out to be genuinely useful
+  IHP-specific tooling (corner-model shortcuts, FET/BIP parameter
+  annotators), not junk -- just wrongly leaking into projects it
+  doesn't belong to. Rather than special-casing "IHP" anywhere in this
+  project's own code, `_xschem_rcfile()` now sources a project's own
+  `libs.tech/xschem/xschem-menu` file generically, by real, on-disk
+  presence alone: IHP's own real PDK ships one at exactly that path,
+  so the real, useful IHP menu comes back correctly (and correctly
+  hardcoded to IHP's own real symbol libraries and model filenames,
+  since it *is* IHP's own real file, being run against IHP's own real
+  PDK) -- while a project that ships no such file (this project's own
+  memristor PDK) gets nothing extra, automatically, with zero
+  hardcoding needed to tell the two cases apart. Verified live, twice:
+  the real "IHP" menu is back for the real IHP project, and still
+  correctly absent for `openMemristorPDK`. Full suite: 82 passed,
+  0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

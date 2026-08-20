@@ -9,9 +9,18 @@ per-tool "open a specific file" research behind the mapping below).
 real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
 (never a new, separate launch mechanism):
 
-- Schematic/Symbol -> ``xschem <file>`` (a bare positional arg -- real,
-  confirmed by fetching xschem's own real ``src/options.c``; its
-  ``--help`` prints nothing in this container).
+- Schematic/Symbol -> ``xschem --rcfile <real, generated rc> <file>``
+  (the file itself is a bare positional arg -- real, confirmed by
+  fetching xschem's own real ``src/options.c``; its ``--help`` prints
+  nothing in this container, but its real, installed man page
+  documents ``--rcfile``). The generated rc file (``_xschem_rcfile``)
+  points ``XSCHEM_LIBRARY_PATH`` at this project's own real
+  ``libs.tech/xschem`` -- a real, found-not-assumed bug fix: this dev
+  container's own global ``~/.xschem/xschemrc`` unconditionally
+  sources IHP's own hardcoded ``$PDK_ROOT/$PDK/libs.tech/xschem``
+  otherwise, for *any* project, confirmed live by a real "IHP" menu
+  appearing even when opening a non-IHP (memristor) symbol -- gone
+  once ``--rcfile`` replaces the default chain.
 - Qucs-S Symbol/Component -> ``qucs-s`` -- launched, but **not** pointed
   at the file: confirmed real, from Qucs-S's own fetched
   ``qucs/main.cpp``, there is no CLI way to open a specific file in the
@@ -677,8 +686,56 @@ class LibraryManagerView(ttk.Frame):
         self.status_var.set(f"Launched: {' '.join(argv)}")
         return True
 
+    def _xschem_rcfile(self) -> str | None:
+        """Path to a real, freshly-written xschem rc file that points
+        ``XSCHEM_LIBRARY_PATH`` at this project's own real
+        ``libs.tech/xschem`` symbol library, or ``None`` if that
+        directory doesn't exist yet -- a real, found-not-assumed bug
+        fix, same class as ``_tech_load_line`` above: this dev
+        container's own real, global ``~/.xschem/xschemrc`` (part of
+        the base image, not this project) unconditionally sources
+        ``$PDK_ROOT/$PDK/libs.tech/xschem/xschemrc``, with both
+        ``PDK_ROOT`` and ``PDK`` hardcoded container-wide to IHP's own
+        real values -- so a plain ``xschem <file>`` launch for *any*
+        project (including a from-scratch, non-IHP one) silently pulls
+        in IHP's own real symbol library path and its own real custom
+        menu (confirmed live: a real "IHP" menu appears in the menu
+        bar even when opening a real memristor symbol), never this
+        project's own. Passed via xschem's own real ``--rcfile <file>``
+        flag (confirmed from its own real, installed man page --
+        "Use <file> as a rc file for startup instead of the default
+        xschemrc"), so the wrong, hardcoded default chain is replaced
+        outright rather than layered under."""
+
+        xschem_dir = self.app.pdk_root / "libs.tech" / "xschem"
+        if not xschem_dir.is_dir():
+            return None
+        handle = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".tcl", prefix="openpdkcreator_xschemrc_", delete=False, encoding="utf-8",
+        )
+        with handle:
+            handle.write(f"append XSCHEM_LIBRARY_PATH :{xschem_dir}\n")
+            # This project's own real technology may ship a real
+            # ``xschem-menu`` file right here (real, confirmed: IHP's
+            # own real sg13g2 PDK does, adding real, useful
+            # sg13g2-specific menu commands -- corner-model shortcuts,
+            # FET/BIP parameter annotators -- that reference IHP's own
+            # real symbol library and model filenames by name, so
+            # they'd be actively wrong for any other real technology).
+            # Sourced generically, by real, on-disk presence alone,
+            # never by hardcoding "IHP" here: whichever real PDK
+            # happens to ship one gets its own real menu back; one
+            # that doesn't (like this project's own memristor PDK)
+            # gets nothing extra, exactly as it should.
+            menu_file = xschem_dir / "xschem-menu"
+            if menu_file.is_file():
+                handle.write(f"source {menu_file}\n")
+        return handle.name
+
     def _open_xschem(self, entry: li_mod.ViewEntry):
-        self._launch("xschem", extra_argv=(str(entry.path),))
+        rcfile = self._xschem_rcfile()
+        extra_argv = ("--rcfile", rcfile, str(entry.path)) if rcfile is not None else (str(entry.path),)
+        self._launch("xschem", extra_argv=extra_argv)
 
     def _open_qucs_s(self, entry: li_mod.ViewEntry):
         messagebox.showinfo(
