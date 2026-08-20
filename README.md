@@ -4845,6 +4845,44 @@ models, ...), not just read/display layers. Concretely, still open:
   bar correctly reads `Technology: openmemristorpdk` with the real
   memristor layers loaded. Full suite: 82 passed, 0 failed.
 
+- **Followed up directly on Yosys/OpenROAD themselves ("Check if
+  Yosys/OpenROAD themselves have any similar container-wide default
+  worth verifying")** -- Yosys confirmed safe by design: its own real
+  `--help` documents every real flag, and none of them (nor any
+  environment variable) refer to a default config file at all, so
+  there's genuinely nothing for it to silently default wrong. OpenROAD
+  is a different story: its own real `-help` documents `-no_init`
+  ("do not read .openroad init file"), confirmed (web search) to mean
+  a real `~/.openroad` Tcl file sourced by default -- the exact same
+  real mechanism class as xschem's `~/.xschem/xschemrc`/Qucs-S's
+  `~/.config/qucs/qucs_s.conf`. Checked directly, not assumed: this
+  dev container has no real `~/.openroad` anywhere (confirmed via a
+  real, whole-filesystem `find`), so nothing is silently wrong right
+  now. But LibreLane's own real, installed code (`librelane/steps/
+  openroad.py`'s own real `get_command` -- confirmed via an
+  exhaustive grep across the entire installed package, not one
+  function) never passes `-no_init`, and its own `run_subprocess`
+  defaults to a plain `os.environ.copy()` -- so if this container's
+  `~/.openroad` is ever seeded the way the other two real config files
+  were, the exact same real bug would silently reappear here too, one
+  level removed, inside a real, third-party tool this project doesn't
+  control the internals of.
+
+  Asked whether to fix defensively now or just document the finding
+  given it's latent, not active -- checked the internet first (no
+  known simpler mechanism or upstream fix turned up), then fixed:
+  `librelane_pdk()` (`pdklib/shell_env.py`) now runs LibreLane in a
+  real subshell with a real, fresh, isolated `$HOME`
+  (`export HOME="$(mktemp -d)"`), closing the gap outright regardless
+  of what this container's own real `~/.openroad` ever becomes --
+  matching LibreLane's own stated reproducible-run design (a
+  synthesis/PnR batch flow has no real, legitimate need for a
+  persistent, shared `$HOME` the way a long-running interactive
+  session might), and verified live, directly: `$HOME` inside the real
+  subshell resolves to a fresh, real temp directory, while the calling
+  shell's own real `$HOME` is provably untouched afterward. Full
+  suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

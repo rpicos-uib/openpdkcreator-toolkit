@@ -47,6 +47,19 @@ downloaded IHP deck's own files, not from memory):
   real, confirmed-working invocation from this session's own live
   testing (a full flow -- Yosys/OpenROAD/Magic+KLayout DRC/Netgen LVS
   -- against this exact real PDK, all real checks passing).
+- ``librelane_pdk`` runs with a real, fresh, isolated ``$HOME``
+  (confirmed real, not guessed: LibreLane's own real, installed
+  ``librelane/steps/openroad.py`` -- its own real ``get_command``
+  method -- never passes OpenROAD's own real ``-no_init`` flag, and
+  OpenROAD's own real ``-help`` documents that flag's purpose as
+  skipping a real ``~/.openroad`` Tcl init file it otherwise sources
+  by default; Yosys, checked the same way, has no such mechanism at
+  all). Confirmed empirically absent in this dev container right now
+  (nothing silently wrong today), but isolated anyway since LibreLane
+  itself doesn't guard against it -- matching LibreLane's own stated
+  reproducible-run design, and cheap/safe since a synthesis/PnR batch
+  flow has no real, legitimate need for a persistent, shared
+  ``$HOME`` the way a long-running interactive session might.
 
 **A real file that doesn't exist yet is never guessed at or silently
 broken**: matching this project's own from-scratch-PDK precedent (the
@@ -148,8 +161,20 @@ _LIBRELANE_BODY = """
 # LibreLane, pointed at this PDK directly -- no Ciel/Volare fetch,
 # no Nix, no Docker (confirmed real and working: a full flow --
 # synthesis through DRC/LVS -- runs end to end this way).
+#
+# Runs with a real, fresh, isolated $HOME for this one subshell:
+# LibreLane's own real, installed code (checked directly, not
+# assumed) never passes OpenROAD's own real -no_init flag when it
+# invokes it internally, so OpenROAD would silently source a real
+# ~/.openroad init file if one ever exists -- the same real bug class
+# already found and fixed for xschem/Qucs-S above, just one level
+# removed (in a real, third-party tool this project doesn't control
+# the internals of). Confirmed empirically absent in this dev
+# container right now, so nothing is silently wrong today -- isolated
+# anyway, matching LibreLane's own stated reproducible-run design, and
+# your own real shell's $HOME is never touched.
 librelane_pdk() {
-  librelane --manual-pdk --pdk-root "$PDK_ROOT" --pdk "$PDK" "$@"
+  ( export HOME="$(mktemp -d)" && librelane --manual-pdk --pdk-root "$PDK_ROOT" --pdk "$PDK" "$@" )
 }
 """
 
