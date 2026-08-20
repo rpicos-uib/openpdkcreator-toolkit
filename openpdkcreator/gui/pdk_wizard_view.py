@@ -230,6 +230,23 @@ def _status_xschem_sch(app):
     return bool(files), f"{len(files)} real xschem schematic file(s) found.", None
 
 
+def _status_xschem_tech(app):
+    xschem_dir = app.pdk_root / "libs.tech" / "xschem"
+    has_rcfile = (xschem_dir / "xschemrc").is_file()
+    has_menu = (xschem_dir / "xschem-menu").is_file()
+    if has_rcfile and has_menu:
+        return True, "Real project xschemrc and xschem-menu both found.", None
+    if has_rcfile or has_menu:
+        found = "xschemrc" if has_rcfile else "xschem-menu"
+        return True, f"Real project {found} found (the other one still absent).", None
+    return (
+        False,
+        "No real project xschemrc/xschem-menu yet -- Open in xschem still works "
+        "correctly via a real, auto-generated minimal one each launch.",
+        None,
+    )
+
+
 def _status_qucs_sym(app):
     files = qucs_sym_mod.find_symbol_geometry_files(app.pdk_root)
     return bool(files), f"{len(files)} real Qucs-S symbol file(s) found.", None
@@ -394,6 +411,19 @@ _STAGES: list[WizardStage] = [
         _status_xschem_sch,
     ),
     WizardStage(
+        "xschem_tech", "Xschem RC & Menu", 5, 6, ("Library Manager",),
+        "This project's own real, persistent xschem startup file "
+        "(xschemrc) and custom menu (xschem-menu) -- Create/Edit/Remove "
+        "right in the Library Manager tab, no external editor needed. "
+        "Optional: Open in xschem already works correctly without "
+        "either one, via a real, auto-generated minimal rc file.",
+        "Create these only if you want persistent xschem preferences "
+        "or your own custom menu commands (the same real mechanism "
+        "IHP's own PDK uses for its own \"IHP\" menu) -- not required "
+        "for a working memristor schematic/symbol.",
+        _status_xschem_tech,
+    ),
+    WizardStage(
         "qucs_sym", "Qucs-S Symbol", 4, 8, ("Simulation", "Qucs-S", "Symbols"),
         "A real Qucs-S symbol's own drawn geometry (lines/arcs/text) plus "
         "its port positions -- Qucs-S's own graphical counterpart to an "
@@ -465,6 +495,7 @@ _EDGES: list[tuple[str, str]] = [
     ("cdl_spice", "by_cell"),
     ("user_models", "xschem_sym"),
     ("xschem_sym", "xschem_sch"),
+    ("xschem_sym", "xschem_tech"),
     ("xschem_sym", "qucs_sym"),
     ("qucs_sym", "qucs_components"),
     ("xschem_sch", "ngspice"),

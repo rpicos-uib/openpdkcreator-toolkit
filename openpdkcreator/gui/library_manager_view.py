@@ -9,18 +9,26 @@ per-tool "open a specific file" research behind the mapping below).
 real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
 (never a new, separate launch mechanism):
 
-- Schematic/Symbol -> ``xschem --rcfile <real, generated rc> <file>``
-  (the file itself is a bare positional arg -- real, confirmed by
-  fetching xschem's own real ``src/options.c``; its ``--help`` prints
-  nothing in this container, but its real, installed man page
-  documents ``--rcfile``). The generated rc file (``_xschem_rcfile``)
-  points ``XSCHEM_LIBRARY_PATH`` at this project's own real
-  ``libs.tech/xschem`` -- a real, found-not-assumed bug fix: this dev
+- Schematic/Symbol -> ``xschem --rcfile <path> <file>`` (the file
+  itself is a bare positional arg -- real, confirmed by fetching
+  xschem's own real ``src/options.c``; its ``--help`` prints nothing
+  in this container, but its real, installed man page documents
+  ``--rcfile``). ``_xschem_rcfile`` supplies the ``<path>``: this
+  project's own real, persistent ``libs.tech/xschem/xschemrc`` if one
+  has been created (Xschem RC File row, top of this tab -- Create
+  starts from a real template adapted from IHP's own), else a real,
+  freshly-generated minimal one (just the real ``XSCHEM_LIBRARY_PATH``
+  append) -- either way pointed at this project's own real
+  ``libs.tech/xschem``, a real, found-not-assumed bug fix: this dev
   container's own global ``~/.xschem/xschemrc`` unconditionally
   sources IHP's own hardcoded ``$PDK_ROOT/$PDK/libs.tech/xschem``
   otherwise, for *any* project, confirmed live by a real "IHP" menu
   appearing even when opening a non-IHP (memristor) symbol -- gone
-  once ``--rcfile`` replaces the default chain.
+  once ``--rcfile`` replaces the default chain. A project's own
+  ``libs.tech/xschem/xschem-menu`` (Xschem Custom Menu row, same
+  place) is sourced the same real, generic, presence-only way IHP's
+  own real ``xschemrc`` sources its own -- real, adopted IHP menu back
+  for the real IHP project, nothing extra for one that ships none.
 - Qucs-S Symbol/Component -> ``qucs-s`` -- launched, but **not** pointed
   at the file: confirmed real, from Qucs-S's own fetched
   ``qucs/main.cpp``, there is no CLI way to open a specific file in the
@@ -289,6 +297,64 @@ class LibraryManagerView(ttk.Frame):
             "LibMan is under active development with no version marker in its own file format; "
             "this is pinned to a specific, real, fetched commit -- see pdklib/libman_project.py.",
         ).pack(side="left", padx=(4, 0))
+
+        xschem_menu_row = ttk.Frame(self)
+        xschem_menu_row.pack(fill="x", padx=8, pady=(4, 0))
+        ttk.Label(xschem_menu_row, text="Xschem Custom Menu:").pack(side="left")
+        self.xschem_menu_status_var = tk.StringVar()
+        ttk.Label(xschem_menu_row, textvariable=self.xschem_menu_status_var).pack(side="left", padx=(6, 0))
+        self.xschem_menu_create_button = ttk.Button(
+            xschem_menu_row, text="Create", command=self._create_xschem_menu,
+        )
+        self.xschem_menu_create_button.pack(side="left", padx=(6, 0))
+        self.xschem_menu_edit_button = ttk.Button(
+            xschem_menu_row, text="Edit...", command=self._edit_xschem_menu,
+        )
+        self.xschem_menu_edit_button.pack(side="left", padx=(6, 0))
+        self.xschem_menu_remove_button = ttk.Button(
+            xschem_menu_row, text="Remove", command=self._remove_xschem_menu,
+        )
+        self.xschem_menu_remove_button.pack(side="left", padx=(6, 0))
+        add_help_icon(
+            xschem_menu_row,
+            "A real, project-wide xschem Tcl file (libs.tech/xschem/xschem-menu) -- "
+            "sourced automatically by every real Open in xschem launch (_xschem_rcfile), "
+            "by on-disk presence alone, same convention as IHP's own real PDK: its own "
+            "real xschem-menu there is what adds the real \"IHP\" menu (corner-model "
+            "shortcuts, FET/BIP parameter annotators) when working with the real IHP "
+            "project -- this row lets a from-scratch project add its own equivalent, "
+            "hand-written custom menu the same way, no external editor needed.",
+        ).pack(side="left", padx=(4, 0))
+        self._refresh_xschem_menu_row()
+
+        xschem_rcfile_row = ttk.Frame(self)
+        xschem_rcfile_row.pack(fill="x", padx=8, pady=(4, 0))
+        ttk.Label(xschem_rcfile_row, text="Xschem RC File:").pack(side="left")
+        self.xschem_rcfile_status_var = tk.StringVar()
+        ttk.Label(xschem_rcfile_row, textvariable=self.xschem_rcfile_status_var).pack(side="left", padx=(6, 0))
+        self.xschem_rcfile_create_button = ttk.Button(
+            xschem_rcfile_row, text="Create", command=self._create_xschem_rcfile,
+        )
+        self.xschem_rcfile_create_button.pack(side="left", padx=(6, 0))
+        self.xschem_rcfile_edit_button = ttk.Button(
+            xschem_rcfile_row, text="Edit...", command=self._edit_xschem_rcfile,
+        )
+        self.xschem_rcfile_edit_button.pack(side="left", padx=(6, 0))
+        self.xschem_rcfile_remove_button = ttk.Button(
+            xschem_rcfile_row, text="Remove", command=self._remove_xschem_rcfile,
+        )
+        self.xschem_rcfile_remove_button.pack(side="left", padx=(6, 0))
+        add_help_icon(
+            xschem_rcfile_row,
+            "This project's own real, persistent libs.tech/xschem/xschemrc -- the same "
+            "real filename/path IHP's own sg13g2 PDK uses for its own full startup file "
+            "(library paths, general preferences, its own custom-menu source line). Used "
+            "directly, unmodified, as the real --rcfile every Open in xschem launch passes "
+            "once it exists (_xschem_rcfile); until then, a minimal one is auto-generated "
+            "each launch instead. Create starts from a real template adapted from IHP's "
+            "own real file -- edit freely afterward, no external editor needed.",
+        ).pack(side="left", padx=(4, 0))
+        self._refresh_xschem_rcfile_row()
 
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=8, pady=8)
@@ -686,14 +752,205 @@ class LibraryManagerView(ttk.Frame):
         self.status_var.set(f"Launched: {' '.join(argv)}")
         return True
 
+    def _xschem_menu_path(self) -> Path:
+        """This project's own real ``libs.tech/xschem/xschem-menu``
+        path -- may or may not exist on disk yet; callers check for
+        themselves. The single, shared source of truth both
+        ``_xschem_rcfile`` (sources it if present) and the **Xschem
+        Custom Menu** row's own Create/Edit/Remove actions build from,
+        instead of each re-typing the same real path independently."""
+
+        return self.app.pdk_root / "libs.tech" / "xschem" / "xschem-menu"
+
+    def _refresh_xschem_menu_row(self):
+        path = self._xschem_menu_path()
+        exists = path.is_file()
+        self.xschem_menu_status_var.set(str(path) if exists else "(absent)")
+        self.xschem_menu_create_button.configure(state="disabled" if exists else "normal")
+        self.xschem_menu_edit_button.configure(state="normal" if exists else "disabled")
+        self.xschem_menu_remove_button.configure(state="normal" if exists else "disabled")
+
+    def _create_xschem_menu(self):
+        path = self._xschem_menu_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            '##################### Custom xschem menu (project-specific) #####################\n'
+            "#\n"
+            "# Real, project-specific xschem menu commands -- sourced automatically by\n"
+            "# every real Open in xschem launch (see library_manager_view.py's own\n"
+            "# _xschem_rcfile()), modeled on IHP's own real xschem-menu convention for\n"
+            "# its sg13g2 PDK: define a proc, register it in postinit_commands, and it\n"
+            "# runs once xschem's own real GUI has finished initializing.\n"
+            "\n"
+            "proc project_menu {} {\n"
+            "  global has_x\n"
+            "  if { [info exists has_x] } {\n"
+            "    set topwin [xschem get top_path]\n"
+            "\n"
+            "    # Adds a new top-level menu, inserted just before the real \"Netlist\" menu.\n"
+            '    $topwin.menubar insert Netlist cascade -label "Project" -menu $topwin.menubar.project\n'
+            "    menu $topwin.menubar.project -tearoff 0\n"
+            "\n"
+            "    # One example entry -- replace with this project's own real commands.\n"
+            "    $topwin.menubar.project add command -label {Example command} -command {\n"
+            "      tk_messageBox -message {Replace this with a real xschem Tcl command.}\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+            "\n"
+            'append postinit_commands "project_menu\\n"\n'
+            "\n"
+            "##################### /Custom xschem menu #####################\n",
+            encoding="utf-8",
+        )
+        self._refresh_xschem_menu_row()
+        view_file_dialog(self, path)
+        self._refresh_xschem_menu_row()
+
+    def _edit_xschem_menu(self):
+        view_file_dialog(self, self._xschem_menu_path())
+        self._refresh_xschem_menu_row()
+
+    def _remove_xschem_menu(self):
+        path = self._xschem_menu_path()
+        if not messagebox.askyesno(
+            "Remove xschem custom menu?",
+            f"Delete the real, local file\n{path}\n\n"
+            f"This only removes this project's own custom xschem menu -- nothing else.",
+            parent=self,
+        ):
+            return
+        path.unlink()
+        self._refresh_xschem_menu_row()
+
+    def _xschem_project_rcfile_path(self) -> Path:
+        """This project's own real, persistent
+        ``libs.tech/xschem/xschemrc`` -- the exact real filename/path
+        IHP's own sg13g2 PDK uses for its own full rc file (library
+        paths, ``PDK_ROOT``/``PDK``-keyed model paths, general
+        preferences, plus the real ``source ... xschem-menu`` line at
+        the bottom -- see ``_default_xschem_rcfile_content`` below).
+        Distinct from ``_xschem_menu_path``'s own ``xschem-menu`` --
+        real IHP ships both as two separate real files, this project's
+        own **Xschem RC File**/**Xschem Custom Menu** rows mirror that
+        exactly."""
+
+        return self.app.pdk_root / "libs.tech" / "xschem" / "xschemrc"
+
+    def _default_xschem_rcfile_content(self) -> str:
+        """A real, working ``xschemrc`` template, adapted from IHP's
+        own real ``libs.tech/xschem/xschemrc`` for sg13g2 (read in
+        full while building this feature) down to the handful of
+        lines that actually matter for a from-scratch project: the
+        real symbol-library-path append, the real preference defaults
+        IHP's own file also sets (``zoom_full_center``,
+        ``autotrim_wires``, etc. -- harmless, useful regardless of
+        real technology), and a real, conditional ``source`` of this
+        project's own **Xschem Custom Menu** file if one exists.
+        Deliberately *not* copied verbatim: IHP's own real file keys
+        its own model/library paths off ``env(PDK_ROOT)``/``env(PDK)``
+        (a real, install-wide convention this from-scratch project has
+        no equivalent of) -- replaced here with this project's own
+        real, already-known, concrete ``pdk_root`` path instead of
+        pretending that indirection exists."""
+
+        pdk_root = self.app.pdk_root
+        xschem_dir = pdk_root / "libs.tech" / "xschem"
+        menu_path = self._xschem_menu_path()
+        return (
+            "#### Real, project-specific xschem startup file.\n"
+            "#### Adapted from IHP-GmbH's own real libs.tech/xschem/xschemrc for\n"
+            "#### sg13g2 -- hardcoded to this project's own real path instead of\n"
+            "#### IHP's env-var-based PDK_ROOT/PDK convention. Edit freely; this\n"
+            "#### file is only ever read, never overwritten by this app once it\n"
+            "#### exists (see the Library Manager tab's own Xschem RC File row).\n"
+            "\n"
+            "###########################################################################\n"
+            "#### PROJECT SYMBOL LIBRARY PATH\n"
+            "###########################################################################\n"
+            f"append XSCHEM_LIBRARY_PATH :{xschem_dir}\n"
+            "\n"
+            "###########################################################################\n"
+            "#### DIRECTORY WHERE SIMULATIONS, NETLIST AND SIMULATOR OUTPUTS ARE PLACED\n"
+            "###########################################################################\n"
+            "set netlist_dir $env(PWD)/simulations\n"
+            "\n"
+            "###########################################################################\n"
+            "#### GENERAL PREFERENCES (same real defaults as IHP's own xschemrc)\n"
+            "###########################################################################\n"
+            "set zoom_full_center 1\n"
+            "set autotrim_wires 1\n"
+            "set toolbar_visible 1\n"
+            "set tabbed_interface 1\n"
+            "set live_cursor2_backannotate 1\n"
+            "set to_pdf {ps2pdf -dAutoRotatePages=/None}\n"
+            "\n"
+            "###########################################################################\n"
+            "#### TCL FILES TO LOAD AT STARTUP\n"
+            "###########################################################################\n"
+            "set tcl_files {}\n"
+            "lappend tcl_files ${XSCHEM_SHAREDIR}/ngspice_backannotate.tcl\n"
+            "\n"
+            "###########################################################################\n"
+            "#### PROJECT-SPECIFIC CUSTOM MENU\n"
+            "###########################################################################\n"
+            "#### Sourced only if this project's own real xschem-menu file exists\n"
+            "#### (Library Manager tab's own Xschem Custom Menu row).\n"
+            f'if {{[file exists {{{menu_path}}}]}} {{\n'
+            f"  source {menu_path}\n"
+            "}\n"
+        )
+
+    def _refresh_xschem_rcfile_row(self):
+        path = self._xschem_project_rcfile_path()
+        exists = path.is_file()
+        self.xschem_rcfile_status_var.set(str(path) if exists else "(absent -- auto-generated minimal one used)")
+        self.xschem_rcfile_create_button.configure(state="disabled" if exists else "normal")
+        self.xschem_rcfile_edit_button.configure(state="normal" if exists else "disabled")
+        self.xschem_rcfile_remove_button.configure(state="normal" if exists else "disabled")
+
+    def _create_xschem_rcfile(self):
+        path = self._xschem_project_rcfile_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self._default_xschem_rcfile_content(), encoding="utf-8")
+        self._refresh_xschem_rcfile_row()
+        view_file_dialog(self, path)
+        self._refresh_xschem_rcfile_row()
+
+    def _edit_xschem_rcfile(self):
+        view_file_dialog(self, self._xschem_project_rcfile_path())
+        self._refresh_xschem_rcfile_row()
+
+    def _remove_xschem_rcfile(self):
+        path = self._xschem_project_rcfile_path()
+        if not messagebox.askyesno(
+            "Remove xschem RC file?",
+            f"Delete the real, local file\n{path}\n\n"
+            f"Open in xschem will fall back to a minimal, auto-generated rc file "
+            f"(just the real symbol library path) until a new one is created here.",
+            parent=self,
+        ):
+            return
+        path.unlink()
+        self._refresh_xschem_rcfile_row()
+
     def _xschem_rcfile(self) -> str | None:
-        """Path to a real, freshly-written xschem rc file that points
-        ``XSCHEM_LIBRARY_PATH`` at this project's own real
-        ``libs.tech/xschem`` symbol library, or ``None`` if that
-        directory doesn't exist yet -- a real, found-not-assumed bug
-        fix, same class as ``_tech_load_line`` above: this dev
-        container's own real, global ``~/.xschem/xschemrc`` (part of
-        the base image, not this project) unconditionally sources
+        """The real ``--rcfile <path>`` value for the next **Open in
+        xschem** launch. If this project has its own real, persistent
+        ``libs.tech/xschem/xschemrc`` (created/edited via the Xschem
+        RC File row -- ``_xschem_project_rcfile_path``), that real
+        file is used directly, unmodified. Otherwise falls back to a
+        real, freshly-written, minimal rc file (just the real
+        ``XSCHEM_LIBRARY_PATH`` append plus a conditional
+        ``xschem-menu`` source) so **Open in xschem** still works
+        correctly out of the box before a project bothers to create
+        one -- or ``None`` if this technology has no real
+        ``libs.tech/xschem`` directory at all yet.
+
+        Exists as a real, found-not-assumed bug fix, same class as
+        ``_tech_load_line`` above: this dev container's own real,
+        global ``~/.xschem/xschemrc`` (part of the base image, not
+        this project) unconditionally sources
         ``$PDK_ROOT/$PDK/libs.tech/xschem/xschemrc``, with both
         ``PDK_ROOT`` and ``PDK`` hardcoded container-wide to IHP's own
         real values -- so a plain ``xschem <file>`` launch for *any*
@@ -706,6 +963,10 @@ class LibraryManagerView(ttk.Frame):
         "Use <file> as a rc file for startup instead of the default
         xschemrc"), so the wrong, hardcoded default chain is replaced
         outright rather than layered under."""
+
+        project_rcfile = self._xschem_project_rcfile_path()
+        if project_rcfile.is_file():
+            return str(project_rcfile)
 
         xschem_dir = self.app.pdk_root / "libs.tech" / "xschem"
         if not xschem_dir.is_dir():
@@ -726,8 +987,10 @@ class LibraryManagerView(ttk.Frame):
             # never by hardcoding "IHP" here: whichever real PDK
             # happens to ship one gets its own real menu back; one
             # that doesn't (like this project's own memristor PDK)
-            # gets nothing extra, exactly as it should.
-            menu_file = xschem_dir / "xschem-menu"
+            # gets nothing extra, exactly as it should. Same real path
+            # the **Xschem Custom Menu** row's own Create/Edit/Remove
+            # actions build from -- see ``_xschem_menu_path``.
+            menu_file = self._xschem_menu_path()
             if menu_file.is_file():
                 handle.write(f"source {menu_file}\n")
         return handle.name

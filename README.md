@@ -4661,6 +4661,59 @@ models, ...), not just read/display layers. Concretely, still open:
   correctly absent for `openMemristorPDK`. Full suite: 82 passed,
   0 failed.
 
+- **A project's own real, persistent xschem RC file and custom menu
+  are now Create/Edit/Remove-able right in the Library Manager tab.**
+  Two follow-up asks, back to back, building on the fix just above:
+  "Maybe we can reuse the xschem IHP menu?" (answered by the entry
+  above -- generic, presence-based sourcing) then "Can we add
+  something in our wizard to edit/add/remove this menu to xschem?"
+  and "Can you allow the xschem_rcfile to be added/edited? If it
+  doesn't exist, provide a template based on the IHP one, but adapted
+  to the current PDK." Two new rows at the top of the Library Manager
+  tab, next to the existing "IHP LibMan project file" row:
+
+  - **Xschem Custom Menu** -- Create/Edit/Remove for a real
+    `libs.tech/xschem/xschem-menu`. Create writes a real, working
+    skeleton (a `proc` + `postinit_commands` registration, the same
+    real mechanism IHP's own file uses -- verified live: the real
+    "Project" menu it adds actually appears in xschem's own menu bar
+    after a real launch). Edit reuses the already-existing
+    `file_view_dialog.view_file_dialog` (real Edit -> Save, no new
+    editor built).
+  - **Xschem RC File** -- Create/Edit/Remove for a real, persistent
+    `libs.tech/xschem/xschemrc`. Create writes a real template
+    (`_default_xschem_rcfile_content`) adapted from IHP's own real
+    file (read in full while building the fix above) down to the
+    parts that matter for a from-scratch project: the real
+    `XSCHEM_LIBRARY_PATH` append, IHP's own real general preference
+    defaults (`zoom_full_center`, `autotrim_wires`, etc. -- harmless
+    regardless of real technology), and a real, conditional `source`
+    of the project's own xschem-menu -- deliberately *not* copied
+    verbatim, since IHP's own file keys its paths off
+    `env(PDK_ROOT)`/`env(PDK)`, a real, install-wide convention a
+    from-scratch project has no equivalent of; this project's own
+    real, already-known, concrete `pdk_root` path is used directly
+    instead of pretending that indirection exists.
+
+  `_xschem_rcfile()` (the function every real **Open in xschem**
+  launch calls) now prefers this real, persistent file once it
+  exists, passing it straight through as `--rcfile`, unmodified;
+  before that, it still falls back to the same real, minimal,
+  auto-generated temp file as before, so **Open in xschem** keeps
+  working correctly either way. A matching new Wizard flowchart node,
+  **Xschem RC & Menu** (next to xschem Symbol), points **Go to Tab**
+  at the Library Manager the same way every other stage does.
+
+  Verified live, end to end, via the real, driven GUI: both rows
+  correctly show `(absent)`/the real path and enable/disable their
+  own buttons accordingly; Create on the RC file, then Create on the
+  menu, then a real **Open in xschem** launch shows the exact real
+  `--rcfile <persistent path>` argv in the status bar, and the real
+  "Project" menu (from the just-created menu file) actually appears
+  in xschem's own live menu bar. The Wizard node's own detail panel
+  and **Go to Tab** button both checked directly. Full suite:
+  82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,
