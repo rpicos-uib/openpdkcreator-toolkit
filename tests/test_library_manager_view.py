@@ -116,7 +116,7 @@ eda_tools_mod.check_tool = _fast_check_tool
 
 launched = []
 original_popen = subprocess_mod.Popen
-subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
+subprocess_mod.Popen = lambda argv, cwd=None, env=None: launched.append((argv, cwd))
 try:
     lmv._open_xschem(lmv._entries["xschem_symbol"])
 finally:
@@ -160,7 +160,7 @@ assert lyp_path_arg == app.lyp_path and lyp_path_arg is not None
 print("PASS: Open in KLayout calls the real klayout_server.open_cell with the real pdk_root/gds path/cell name/.lyp.")
 
 launched.clear()
-subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
+subprocess_mod.Popen = lambda argv, cwd=None, env=None: launched.append((argv, cwd))
 try:
     lmv._open_magic_gds(lmv._entries["gds"])
 finally:
@@ -200,7 +200,7 @@ print(f"PASS: Create adds a real, minimal .mag skeleton at {mag_path} declaring 
 # 2-step "gds read" + "load" script ---
 launched.clear()
 eda_tools_mod.check_tool = _fast_check_tool
-subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
+subprocess_mod.Popen = lambda argv, cwd=None, env=None: launched.append((argv, cwd))
 try:
     lmv._open_magic_mag(lmv._entries["mag"])
 finally:
@@ -217,6 +217,43 @@ assert "load sg13g2_inv_1" in mag_tcl_text
 assert "gds read" not in mag_tcl_text
 mag_tcl_path.unlink()
 print("PASS: Open in Magic (.mag) generates a real, correct self-contained 1-line-load Tcl script and launches with it.")
+
+# --- Open in Qucs-S redirects XDG_CONFIG_HOME at a real, disposable
+# copy of the real global qucs_s.conf with QucsHomeDir swapped to
+# this project's own real libs.tech/qucs-s, without ever touching the
+# real, shared file itself ---
+real_conf = Path.home() / ".config" / "qucs" / "qucs_s.conf"
+real_text_before = real_conf.read_text() if real_conf.is_file() else None
+
+qucs_env = lmv._qucs_env()
+assert qucs_env is not None, "real IHP data ships libs.tech/qucs-s -- _qucs_env should not be None"
+assert set(qucs_env) == {"XDG_CONFIG_HOME"}
+generated_conf = Path(qucs_env["XDG_CONFIG_HOME"]) / "qucs" / "qucs_s.conf"
+assert generated_conf.is_file()
+generated_text = generated_conf.read_text()
+assert f"QucsHomeDir={lmv.app.pdk_root / 'libs.tech' / 'qucs-s'}" in generated_text
+
+if real_text_before is not None:
+    assert real_conf.read_text() == real_text_before, "the real, shared qucs_s.conf must never be modified"
+    assert f"QucsHomeDir={lmv.app.pdk_root / 'libs.tech' / 'qucs-s'}" not in real_text_before
+print("PASS: Open in Qucs-S redirects XDG_CONFIG_HOME to a real, disposable copy with the right QucsHomeDir, real shared file untouched.")
+
+launched.clear()
+subprocess_mod.Popen = lambda argv, cwd=None, env=None: launched.append((argv, cwd, env))
+eda_tools_mod.check_tool = _fast_check_tool
+original_showinfo = lmv_module.messagebox.showinfo
+lmv_module.messagebox.showinfo = lambda *a, **kw: None
+try:
+    lmv._open_qucs_s(lmv._entries["xschem_symbol"])
+finally:
+    subprocess_mod.Popen = original_popen
+    eda_tools_mod.check_tool = original_check_tool
+    lmv_module.messagebox.showinfo = original_showinfo
+argv5, cwd5, env5 = launched[-1]
+print("qucs-s launch argv:", argv5, "env has XDG_CONFIG_HOME:", env5 is not None and "XDG_CONFIG_HOME" in env5)
+assert argv5[0].endswith("qucs-s")
+assert env5 is not None and "XDG_CONFIG_HOME" in env5
+print("PASS: Open in Qucs-S launches the real binary with the real, redirected XDG_CONFIG_HOME env var set.")
 
 # --- Hover-help "?" icons are actually attached to view rows, not
 # just present in the VIEW_KIND_HELP dict ---

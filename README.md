@@ -4714,6 +4714,70 @@ models, ...), not just read/display layers. Concretely, still open:
   and **Go to Tab** button both checked directly. Full suite:
   82 passed, 0 failed.
 
+- **Qucs-S had the exact same real bug, checked as part of finishing
+  the audit ("Check Qucs-S too, using the same phylosophy").**
+  Qucs-S's own real Projects workspace root (`QucsHomeDir`) is a
+  real, container-wide default hardcoded in one shared, global
+  `~/.config/qucs/qucs_s.conf`, pointing at `/headless/QucsWorkspace`
+  -- itself a real symlink farm into IHP's own real `/foss/pdks`.
+  Unlike Magic/xschem, Qucs-S has no CLI flag for this at all
+  (confirmed from its own real, fetched `main.cpp` -- a full
+  `QCommandLineParser` option list, checked exhaustively, with
+  nothing for the home/workspace directory) and its settings live in
+  that one real, shared file (`QSettings("qucs", "qucs_s")`, its own
+  real, fetched `settings.cpp` -- no explicit path/format, so Qt's
+  own standard `$XDG_CONFIG_HOME`-aware lookup applies). Asked
+  in chat whether to just rewrite that shared file before each
+  launch (with the real, honest trade-off spelled out: it's global,
+  so a different project's next launch would silently inherit it)
+  -- instead, real, disposable, per-launch copy: `_qucs_env()` reads
+  the real global conf, swaps only `QucsHomeDir=`, writes the result
+  into a fresh temp directory, and points `XDG_CONFIG_HOME` at it for
+  that one real subprocess -- the real, shared file itself is never
+  touched. Verified live: the real Projects panel then correctly
+  lists a redirected project's own real subdirectories (`examples`,
+  `symbols`, `user_lib` -- matching `libs.tech/qucs-s`'s own real
+  listing exactly), through the actual `_open_qucs_s` GUI code path,
+  not just the helper in isolation.
+
+- **KLayout's own real first-use Tip dialogs, simplified for real**
+  ("Check again the klayout to see if a similar solution is present?
+  I feel it would simplify the process"). The persistent-KLayout-reuse
+  feature (see the earlier LibMan-idea entry above) had needed a
+  generic, best-effort synthetic-Enter-keypress watchdog (X11 XTEST
+  via `python-xlib`) to dismiss two real, first-use modal Tip dialogs
+  that otherwise blocked its `-rr` server script from ever running.
+  Revisited: KLayout's own `-h` output documents a real
+  `KLAYOUT_HOME` environment variable -- the same real kind of lever
+  Qt's `XDG_CONFIG_HOME` gives Qucs-S above. Both real Tip dialogs
+  turn out to be suppressed by one real key inside a fresh
+  `klayoutrc`'s own `<tip-window-hidden>` element -- not the empty,
+  boolean-looking tag an earlier session guessed and confirmed didn't
+  work, but a real, comma-joined counter string,
+  `hide-empty-layers=4,hide-empty-layers=0,editor-mode=4,editor-mode=0`,
+  found by watching KLayout's own real, installed copy write it out
+  itself after manually checking "Don't show this window again" on
+  each real dialog once. `klayout_server.py`'s own `_klayout_home`
+  now pre-seeds a real, per-project `KLAYOUT_HOME` directory with
+  exactly that key before a fresh launch -- letting the entire XTEST
+  dismissal watchdog (and its optional `python-xlib` dependency) be
+  deleted outright. Verified live, twice: a launch with the exact
+  real production argv (`-l <lyp> <gds>`, no `-e`) produced zero
+  dialogs and the real layout/layers immediately, and the existing
+  `tests/test_klayout_server.py` still passes -- a first, fresh
+  launch now takes 1.8s (previously slower, waiting through the
+  dismissal poll cycle).
+
+  Also checked, at the same time, whether Magic's own fix (the
+  `tech load <path>` line) had a similarly simpler real alternative:
+  Magic does have a real `-T <technology>` flag, but confirmed (from
+  its own real, fetched man page) to be a *name*-based lookup via the
+  current directory / `${CAD_ROOT}`, not an absolute-path mechanism
+  -- it can't address this project's own real, arbitrary `.tech` file
+  path the way `tech load <path>` already does, so no change was
+  made there; xschem's own `--rcfile <file>` was already the single,
+  dedicated flag for exactly this purpose, likewise unchanged.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

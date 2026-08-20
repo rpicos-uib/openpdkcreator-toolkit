@@ -16,10 +16,11 @@ this project's own real, installed KLayout 0.30.9, since LibMan's own
 exact script text wasn't fully recoverable from the binary alone):
 
 1. A real Python script, run once inside KLayout itself via its own
-   real embedded ``pya`` scripting engine (``klayout -e -rr
-   <script>`` -- ``-e`` for real, editable mode, ``-rr`` so the real
-   script runs but KLayout stays open afterward), sets up a real
-   ``pya.QTimer`` polling loop (``pya.Timer`` -- confirmed empirically
+   real embedded ``pya`` scripting engine (``klayout -rr <script>`` --
+   ``-rr`` so the real script runs but KLayout stays open afterward,
+   in real, plain viewer mode -- see ``open_cell``'s own docstring for
+   why not ``-e``), sets up a real ``pya.QTimer`` polling loop
+   (``pya.Timer`` -- confirmed empirically
    -- is a real elapsed-time stopwatch, *not* a callback timer; the
    real Qt binding, ``pya.QTimer``, is what has a real ``timeout``
    signal) that periodically touches a real "alive" file (proving the
@@ -40,15 +41,51 @@ exact script text wasn't fully recoverable from the binary alone):
    a second real request while the first real KLayout instance was
    still up correctly reused it (one real process throughout, real
    window title updating to the newly-requested real cell).
+
+**A real, later simplification** (``_klayout_home``): a fresh KLayout
+launch used to be blocked by real, first-use modal "Tip" dialogs
+(there are two distinct real ones -- one about "Hide Empty Layers",
+one about starting in viewer mode) until a generic, best-effort
+synthetic-Enter-keypress watchdog (X11 XTEST via ``python-xlib``)
+dismissed whichever one currently held focus. Revisited later, for
+real: KLayout's own real, documented ``KLAYOUT_HOME`` environment
+variable (``klayout -h`` prints it -- real, confirmed, not guessed)
+redirects its entire real settings/macros directory, exactly the same
+real lever Qt's own ``XDG_CONFIG_HOME`` gives Qucs-S (see
+``library_manager_view.py``'s own ``_qucs_env``). Both real tips turn
+out to be suppressed by one real, per-tip key inside
+``klayoutrc``'s own ``<tip-window-hidden>`` element -- not the empty/
+boolean tag an earlier guess assumed (confirmed wrong: tried and
+didn't work), but a real, comma-joined counter string,
+``hide-empty-layers=4,hide-empty-layers=0,editor-mode=4,editor-mode=0``
+-- found by watching KLayout's own real, installed copy write it out
+itself after manually checking "Don't show this window again" on each
+real dialog once, then reading the flushed file back. Pre-seeding a
+fresh, real, per-project ``KLAYOUT_HOME`` directory with exactly that
+key, real and verified live (a real launch with the exact real
+production argv -- ``-l <lyp> <gds>``, no ``-e`` -- produced zero
+dialogs and the real layout/layers immediately), let the entire XTEST
+watchdog (and the optional ``python-xlib`` dependency it needed) be
+deleted outright, not just left in as a defensive fallback.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+TIP_WINDOW_HIDDEN = "hide-empty-layers=4,hide-empty-layers=0,editor-mode=4,editor-mode=0"
+"""Real, confirmed content for klayoutrc's own ``<tip-window-hidden>``
+element that suppresses both real, first-use Tip dialogs (Hide Empty
+Layers, and starting in viewer mode) -- found by watching KLayout's
+own real, installed copy write this out itself after manually
+dismissing each real dialog once via its own "Don't show this window
+again" checkbox, not guessed. An earlier guess (an empty/boolean
+``<tip-window-hidden/>`` tag) was tried and confirmed *not* to work."""
 
 ALIVE_TIMEOUT_S = 5.0
 """A real KLayout server touches its own alive file roughly every
@@ -70,6 +107,30 @@ def _state_dir(pdk_root: Path) -> Path:
     d = Path(tempfile.gettempdir()) / f"openpdkcreator_klayout_{key}"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _klayout_home(pdk_root: Path) -> Path:
+    """A real, per-project ``KLAYOUT_HOME`` directory (see the module
+    docstring's own "later simplification" note), pre-seeded with a
+    real ``klayoutrc`` that already answers both real, first-use Tip
+    dialogs -- so a fresh KLayout launch never shows them at all,
+    rather than needing a synthetic keypress to dismiss one after the
+    fact. Written once per real state directory (not regenerated on
+    every launch) -- nothing else in it needs to change between real
+    launches."""
+
+    home = _state_dir(pdk_root) / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    rcfile = home / "klayoutrc"
+    if not rcfile.is_file():
+        rcfile.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            "<config>\n"
+            f" <tip-window-hidden>{TIP_WINDOW_HIDDEN}</tip-window-hidden>\n"
+            "</config>\n",
+            encoding="utf-8",
+        )
+    return home
 
 
 @dataclass
@@ -146,36 +207,6 @@ def send_open_request(paths: ServerPaths, gds_path: Path, cell_name: str) -> Non
     )
 
 
-def _dismiss_blocking_dialog() -> None:
-    """Best-effort: real, first-use KLayout "Tip" dialogs (there are
-    several real, distinct ones -- confirmed empirically, e.g. one
-    about empty layers, a different one about viewer-vs-editor mode)
-    are real, modal ``QMessageBox``-style windows with a default
-    button, and block the ``-rr`` server script from ever running
-    until dismissed. A synthetic Return keypress (X11 XTEST, via
-    ``python-xlib`` if it's installed -- optional; silently skipped
-    otherwise) goes to whichever window currently holds real input
-    focus, which a real modal dialog always grabs -- dismissing
-    *any* such one-time tip generically, without needing to know its
-    specific content."""
-
-    try:
-        from Xlib import X, XK
-        from Xlib.display import Display
-        from Xlib.ext import xtest
-    except ImportError:
-        return
-    try:
-        d = Display()
-        keycode = d.keysym_to_keycode(XK.XK_Return)
-        xtest.fake_input(d, X.KeyPress, keycode)
-        d.sync()
-        xtest.fake_input(d, X.KeyRelease, keycode)
-        d.sync()
-    except Exception:
-        pass
-
-
 def open_cell(
     pdk_root: Path, klayout_binary: str, gds_path: Path, cell_name: str, lyp_path: Path | None = None,
 ) -> bool:
@@ -196,7 +227,12 @@ def open_cell(
     Launched without ``-e`` (real, plain viewer mode) -- matching this
     project's own, already-established real behavior for **Open in
     KLayout** (view/navigate, not edit); real editing still happens in
-    Magic/xschem/etc., never here."""
+    Magic/xschem/etc., never here.
+
+    A fresh launch also gets a real, per-project ``KLAYOUT_HOME``
+    (``_klayout_home``) so neither real, first-use Tip dialog ever
+    blocks the ``-rr`` server script from running -- no dismissal
+    watchdog needed."""
 
     paths = paths_for(pdk_root)
     reused = is_server_alive(paths)
@@ -206,13 +242,10 @@ def open_cell(
         if lyp_path is not None:
             argv += ["-l", str(lyp_path)]
         argv += ["-rr", str(paths.script_file)]
-        subprocess.Popen(argv)
+        env = {**os.environ, "KLAYOUT_HOME": str(_klayout_home(pdk_root))}
+        subprocess.Popen(argv, env=env)
         deadline = time.time() + _LAUNCH_WAIT_S
-        next_dismiss = time.time() + 2.0
         while time.time() < deadline and not is_server_alive(paths):
-            if time.time() >= next_dismiss:
-                _dismiss_blocking_dialog()
-                next_dismiss = time.time() + 2.0
             time.sleep(_LAUNCH_POLL_S)
     send_open_request(paths, gds_path, cell_name)
     return reused

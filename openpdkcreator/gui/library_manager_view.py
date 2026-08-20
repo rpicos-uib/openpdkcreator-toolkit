@@ -34,7 +34,14 @@ real file, via ``eda_tools.resolve_launch``'s new ``extra_argv``
   ``qucs/main.cpp``, there is no CLI way to open a specific file in the
   interactive GUI (``-i`` only applies in batch ``--netlist``/
   ``--print`` mode). Said plainly to the user before launching, not
-  glossed over.
+  glossed over. Its own real Projects workspace *is* redirected,
+  though (``_qucs_env``): the same real bug class as Magic/xschem --
+  this dev container's own global ``~/.config/qucs/qucs_s.conf``
+  hardcodes ``QucsHomeDir`` at IHP's own real workspace -- fixed via a
+  real, disposable, per-launch ``XDG_CONFIG_HOME`` copy (Qt's own
+  standard lookup for ``QSettings("qucs", "qucs_s")``, confirmed from
+  Qucs-S's own fetched ``settings.cpp``) rather than mutating that
+  real, shared file, since Qucs-S has no CLI flag for this either.
 - GDS/Layout -> **two** real, verified options: **Open in KLayout**
   (``klayout -l <real .lyp> <real .gds> -rr <script.rb>`` -- KLayout's
   own existing static ``LaunchGuidance`` already supplies ``-l``;
@@ -135,6 +142,7 @@ format -- needs LibMan's own converter toolchain, not embedded here).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import tkinter as tk
@@ -738,7 +746,25 @@ class LibraryManagerView(ttk.Frame):
 
     # -- Open / launch --------------------------------------------------------
 
-    def _launch(self, tool_id: str, extra_argv: tuple[str, ...] = ()) -> bool:
+    def _launch(
+        self, tool_id: str, extra_argv: tuple[str, ...] = (), extra_env: dict[str, str] | None = None,
+    ) -> bool:
+        """*extra_env*: real environment variables merged on top of a
+        copy of this process's own real ``os.environ`` for just this
+        one subprocess -- never mutates anything shared/persistent.
+        Exists for **Open in Qucs-S** (``_qucs_env``): a real,
+        per-launch, non-invasive way to redirect Qt's own real
+        ``QSettings("qucs", "qucs_s")`` lookup via ``XDG_CONFIG_HOME``
+        (real, standard, confirmed both from Qucs-S's own fetched real
+        ``settings.cpp`` -- a plain two-arg ``QSettings`` constructor,
+        no explicit format/path -- and live, empirically: the real
+        Projects panel correctly showed a redirected project's own
+        real subdirectories) -- Qucs-S has no real CLI flag for this
+        (confirmed from its own real, fetched ``main.cpp``: a full
+        ``QCommandLineParser`` option list with nothing for the home/
+        workspace directory), unlike Magic's ``tech load``/xschem's
+        ``--rcfile``."""
+
         tool = _find_tool(tool_id)
         if tool is None:
             messagebox.showerror("Open", f"No {tool_id!r} tool registered.", parent=self)
@@ -748,7 +774,8 @@ class LibraryManagerView(ttk.Frame):
             messagebox.showerror("Open", f"{tool.name} isn't on PATH.", parent=self)
             return False
         argv, cwd = eda_tools.resolve_launch(tool, status.path, extra_argv=extra_argv)
-        subprocess.Popen(argv, cwd=cwd)
+        env = {**os.environ, **extra_env} if extra_env else None
+        subprocess.Popen(argv, cwd=cwd, env=env)
         self.status_var.set(f"Launched: {' '.join(argv)}")
         return True
 
@@ -1000,6 +1027,54 @@ class LibraryManagerView(ttk.Frame):
         extra_argv = ("--rcfile", rcfile, str(entry.path)) if rcfile is not None else (str(entry.path),)
         self._launch("xschem", extra_argv=extra_argv)
 
+    def _qucs_env(self) -> dict[str, str] | None:
+        """Real environment variables that redirect Qucs-S's own real
+        ``QucsHomeDir`` (its Projects panel's own real workspace root)
+        at this project's own real ``libs.tech/qucs-s``, or ``None``
+        if that directory doesn't exist yet -- same real bug class as
+        ``_tech_load_line``/``_xschem_rcfile`` above: this dev
+        container's own real, global ``~/.config/qucs/qucs_s.conf``
+        hardcodes ``QucsHomeDir=/headless/QucsWorkspace``, itself a
+        real symlink farm pointing at IHP's own real
+        ``/foss/pdks`` -- so a plain ``qucs-s`` launch for *any*
+        project shows IHP's own real Projects panel, never this
+        project's own.
+
+        Unlike Magic/xschem, Qucs-S has no real CLI flag for this
+        (confirmed from its own real, fetched ``main.cpp`` -- a full
+        ``QCommandLineParser`` list with nothing for the home/
+        workspace directory) and its settings live in one real,
+        shared, global file (``QSettings("qucs", "qucs_s")``, its own
+        real, fetched ``settings.cpp`` shows no explicit path/format,
+        so Qt's own standard ``$XDG_CONFIG_HOME``-aware lookup
+        applies) -- so rather than mutating that real, shared file
+        (which would leak into every other real Qucs-S session,
+        including ones for a different project entirely), a real,
+        fresh copy of it is written into a real, disposable temp
+        directory each launch, with only ``QucsHomeDir=`` swapped,
+        and pointed at via ``XDG_CONFIG_HOME`` for that one real
+        subprocess alone -- verified live: the real Projects panel
+        then correctly lists a redirected project's own real
+        subdirectories, and the real, shared global file is never
+        touched."""
+
+        qucs_dir = self.app.pdk_root / "libs.tech" / "qucs-s"
+        if not qucs_dir.is_dir():
+            return None
+        real_conf = Path.home() / ".config" / "qucs" / "qucs_s.conf"
+        if not real_conf.is_file():
+            return None
+        lines = real_conf.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        lines = [
+            f"QucsHomeDir={qucs_dir}\n" if line.startswith("QucsHomeDir=") else line
+            for line in lines
+        ]
+        tmp_config_home = Path(tempfile.mkdtemp(prefix="openpdkcreator_qucs_xdg_"))
+        conf_dir = tmp_config_home / "qucs"
+        conf_dir.mkdir(parents=True)
+        (conf_dir / "qucs_s.conf").write_text("".join(lines), encoding="utf-8")
+        return {"XDG_CONFIG_HOME": str(tmp_config_home)}
+
     def _open_qucs_s(self, entry: li_mod.ViewEntry):
         messagebox.showinfo(
             "Open in Qucs-S",
@@ -1008,7 +1083,7 @@ class LibraryManagerView(ttk.Frame):
             f"for:\n\n{entry.path}",
             parent=self,
         )
-        self._launch("qucs-s")
+        self._launch("qucs-s", extra_env=self._qucs_env())
 
     def _open_klayout(self, entry: li_mod.ViewEntry):
         """Reuses a real, already-running KLayout instance across
