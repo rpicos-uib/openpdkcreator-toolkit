@@ -15,20 +15,35 @@ install philosophy: even its own CLI only ever *runs* an install
 command for the safe, non-privileged ``user_local`` case, and only
 behind an explicit ``--run`` flag; everything else is shown for the
 user to run themselves.
-"""
+
+**Launch Selected** used to call ``subprocess.Popen(argv, cwd=cwd)``
+directly, with no ``app``/``pdk_root`` reference at all -- a real,
+found-not-assumed gap: xschem/Qucs-S/Magic's own real per-project
+launch-time fixes (see ``pdklib/tool_env.py``'s own docstring) all
+live in ``library_manager_view.py``'s own ``_open_*`` methods, keyed
+off a specific cell's own view entry, so this second, separate,
+no-file "just start the tool" launch path bypassed every one of them
+-- Open in xschem/Qucs-S from here would still have shown IHP's own
+container-wide workspace even after those fixes. Now threads
+``app.pdk_root`` through (same ``app``-taking constructor convention
+``settings_view.py`` already uses) and calls the exact same real
+``pdklib/tool_env.py`` functions, not a second, re-derived copy."""
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .. import eda_tools
+from ..pdklib import tool_env as tool_env_mod
 
 
 class ToolsView(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, app):
         super().__init__(parent)
+        self.app = app
         self.statuses: dict[str, eda_tools.ToolStatus] = {}
 
         self._build()
@@ -165,5 +180,20 @@ class ToolsView(ttk.Frame):
                 "Not installed", f"{tool_id} isn't on PATH -- see the install guidance on the right.",
             )
             return
-        argv, cwd = eda_tools.resolve_launch(status.tool, status.path)
-        subprocess.Popen(argv, cwd=cwd)
+
+        extra_argv: tuple[str, ...] = ()
+        extra_env: dict[str, str] | None = None
+        if tool_id == "xschem":
+            rcfile = tool_env_mod.xschem_rcfile(self.app.pdk_root)
+            if rcfile is not None:
+                extra_argv = ("--rcfile", rcfile)
+        elif tool_id == "qucs-s":
+            extra_env = tool_env_mod.qucs_env(self.app.pdk_root)
+        elif tool_id == "magic":
+            script = tool_env_mod.magic_tech_load_script(self.app.pdk_root)
+            if script is not None:
+                extra_argv = (script,)
+
+        argv, cwd = eda_tools.resolve_launch(status.tool, status.path, extra_argv=extra_argv)
+        env = {**os.environ, **extra_env} if extra_env else None
+        subprocess.Popen(argv, cwd=cwd, env=env)

@@ -160,6 +160,7 @@ from ..pdklib import klayout_server as klayout_server_mod
 from ..pdklib import mag as mag_mod
 from ..pdklib import netlist as netlist_mod
 from ..pdklib import qucs_sym as qucs_sym_mod
+from ..pdklib import tool_env as tool_env_mod
 from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
 from ..pdklib import xschem as xschem_mod
@@ -780,14 +781,7 @@ class LibraryManagerView(ttk.Frame):
         return True
 
     def _xschem_menu_path(self) -> Path:
-        """This project's own real ``libs.tech/xschem/xschem-menu``
-        path -- may or may not exist on disk yet; callers check for
-        themselves. The single, shared source of truth both
-        ``_xschem_rcfile`` (sources it if present) and the **Xschem
-        Custom Menu** row's own Create/Edit/Remove actions build from,
-        instead of each re-typing the same real path independently."""
-
-        return self.app.pdk_root / "libs.tech" / "xschem" / "xschem-menu"
+        return tool_env_mod.xschem_menu_path(self.app.pdk_root)
 
     def _refresh_xschem_menu_row(self):
         path = self._xschem_menu_path()
@@ -851,82 +845,10 @@ class LibraryManagerView(ttk.Frame):
         self._refresh_xschem_menu_row()
 
     def _xschem_project_rcfile_path(self) -> Path:
-        """This project's own real, persistent
-        ``libs.tech/xschem/xschemrc`` -- the exact real filename/path
-        IHP's own sg13g2 PDK uses for its own full rc file (library
-        paths, ``PDK_ROOT``/``PDK``-keyed model paths, general
-        preferences, plus the real ``source ... xschem-menu`` line at
-        the bottom -- see ``_default_xschem_rcfile_content`` below).
-        Distinct from ``_xschem_menu_path``'s own ``xschem-menu`` --
-        real IHP ships both as two separate real files, this project's
-        own **Xschem RC File**/**Xschem Custom Menu** rows mirror that
-        exactly."""
-
-        return self.app.pdk_root / "libs.tech" / "xschem" / "xschemrc"
+        return tool_env_mod.xschem_project_rcfile_path(self.app.pdk_root)
 
     def _default_xschem_rcfile_content(self) -> str:
-        """A real, working ``xschemrc`` template, adapted from IHP's
-        own real ``libs.tech/xschem/xschemrc`` for sg13g2 (read in
-        full while building this feature) down to the handful of
-        lines that actually matter for a from-scratch project: the
-        real symbol-library-path append, the real preference defaults
-        IHP's own file also sets (``zoom_full_center``,
-        ``autotrim_wires``, etc. -- harmless, useful regardless of
-        real technology), and a real, conditional ``source`` of this
-        project's own **Xschem Custom Menu** file if one exists.
-        Deliberately *not* copied verbatim: IHP's own real file keys
-        its own model/library paths off ``env(PDK_ROOT)``/``env(PDK)``
-        (a real, install-wide convention this from-scratch project has
-        no equivalent of) -- replaced here with this project's own
-        real, already-known, concrete ``pdk_root`` path instead of
-        pretending that indirection exists."""
-
-        pdk_root = self.app.pdk_root
-        xschem_dir = pdk_root / "libs.tech" / "xschem"
-        menu_path = self._xschem_menu_path()
-        return (
-            "#### Real, project-specific xschem startup file.\n"
-            "#### Adapted from IHP-GmbH's own real libs.tech/xschem/xschemrc for\n"
-            "#### sg13g2 -- hardcoded to this project's own real path instead of\n"
-            "#### IHP's env-var-based PDK_ROOT/PDK convention. Edit freely; this\n"
-            "#### file is only ever read, never overwritten by this app once it\n"
-            "#### exists (see the Library Manager tab's own Xschem RC File row).\n"
-            "\n"
-            "###########################################################################\n"
-            "#### PROJECT SYMBOL LIBRARY PATH\n"
-            "###########################################################################\n"
-            f"append XSCHEM_LIBRARY_PATH :{xschem_dir}\n"
-            "\n"
-            "###########################################################################\n"
-            "#### DIRECTORY WHERE SIMULATIONS, NETLIST AND SIMULATOR OUTPUTS ARE PLACED\n"
-            "###########################################################################\n"
-            "set netlist_dir $env(PWD)/simulations\n"
-            "\n"
-            "###########################################################################\n"
-            "#### GENERAL PREFERENCES (same real defaults as IHP's own xschemrc)\n"
-            "###########################################################################\n"
-            "set zoom_full_center 1\n"
-            "set autotrim_wires 1\n"
-            "set toolbar_visible 1\n"
-            "set tabbed_interface 1\n"
-            "set live_cursor2_backannotate 1\n"
-            "set to_pdf {ps2pdf -dAutoRotatePages=/None}\n"
-            "\n"
-            "###########################################################################\n"
-            "#### TCL FILES TO LOAD AT STARTUP\n"
-            "###########################################################################\n"
-            "set tcl_files {}\n"
-            "lappend tcl_files ${XSCHEM_SHAREDIR}/ngspice_backannotate.tcl\n"
-            "\n"
-            "###########################################################################\n"
-            "#### PROJECT-SPECIFIC CUSTOM MENU\n"
-            "###########################################################################\n"
-            "#### Sourced only if this project's own real xschem-menu file exists\n"
-            "#### (Library Manager tab's own Xschem Custom Menu row).\n"
-            f'if {{[file exists {{{menu_path}}}]}} {{\n'
-            f"  source {menu_path}\n"
-            "}\n"
-        )
+        return tool_env_mod.default_xschem_rcfile_content(self.app.pdk_root)
 
     def _refresh_xschem_rcfile_row(self):
         path = self._xschem_project_rcfile_path()
@@ -962,65 +884,7 @@ class LibraryManagerView(ttk.Frame):
         self._refresh_xschem_rcfile_row()
 
     def _xschem_rcfile(self) -> str | None:
-        """The real ``--rcfile <path>`` value for the next **Open in
-        xschem** launch. If this project has its own real, persistent
-        ``libs.tech/xschem/xschemrc`` (created/edited via the Xschem
-        RC File row -- ``_xschem_project_rcfile_path``), that real
-        file is used directly, unmodified. Otherwise falls back to a
-        real, freshly-written, minimal rc file (just the real
-        ``XSCHEM_LIBRARY_PATH`` append plus a conditional
-        ``xschem-menu`` source) so **Open in xschem** still works
-        correctly out of the box before a project bothers to create
-        one -- or ``None`` if this technology has no real
-        ``libs.tech/xschem`` directory at all yet.
-
-        Exists as a real, found-not-assumed bug fix, same class as
-        ``_tech_load_line`` above: this dev container's own real,
-        global ``~/.xschem/xschemrc`` (part of the base image, not
-        this project) unconditionally sources
-        ``$PDK_ROOT/$PDK/libs.tech/xschem/xschemrc``, with both
-        ``PDK_ROOT`` and ``PDK`` hardcoded container-wide to IHP's own
-        real values -- so a plain ``xschem <file>`` launch for *any*
-        project (including a from-scratch, non-IHP one) silently pulls
-        in IHP's own real symbol library path and its own real custom
-        menu (confirmed live: a real "IHP" menu appears in the menu
-        bar even when opening a real memristor symbol), never this
-        project's own. Passed via xschem's own real ``--rcfile <file>``
-        flag (confirmed from its own real, installed man page --
-        "Use <file> as a rc file for startup instead of the default
-        xschemrc"), so the wrong, hardcoded default chain is replaced
-        outright rather than layered under."""
-
-        project_rcfile = self._xschem_project_rcfile_path()
-        if project_rcfile.is_file():
-            return str(project_rcfile)
-
-        xschem_dir = self.app.pdk_root / "libs.tech" / "xschem"
-        if not xschem_dir.is_dir():
-            return None
-        handle = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".tcl", prefix="openpdkcreator_xschemrc_", delete=False, encoding="utf-8",
-        )
-        with handle:
-            handle.write(f"append XSCHEM_LIBRARY_PATH :{xschem_dir}\n")
-            # This project's own real technology may ship a real
-            # ``xschem-menu`` file right here (real, confirmed: IHP's
-            # own real sg13g2 PDK does, adding real, useful
-            # sg13g2-specific menu commands -- corner-model shortcuts,
-            # FET/BIP parameter annotators -- that reference IHP's own
-            # real symbol library and model filenames by name, so
-            # they'd be actively wrong for any other real technology).
-            # Sourced generically, by real, on-disk presence alone,
-            # never by hardcoding "IHP" here: whichever real PDK
-            # happens to ship one gets its own real menu back; one
-            # that doesn't (like this project's own memristor PDK)
-            # gets nothing extra, exactly as it should. Same real path
-            # the **Xschem Custom Menu** row's own Create/Edit/Remove
-            # actions build from -- see ``_xschem_menu_path``.
-            menu_file = self._xschem_menu_path()
-            if menu_file.is_file():
-                handle.write(f"source {menu_file}\n")
-        return handle.name
+        return tool_env_mod.xschem_rcfile(self.app.pdk_root)
 
     def _open_xschem(self, entry: li_mod.ViewEntry):
         rcfile = self._xschem_rcfile()
@@ -1028,52 +892,7 @@ class LibraryManagerView(ttk.Frame):
         self._launch("xschem", extra_argv=extra_argv)
 
     def _qucs_env(self) -> dict[str, str] | None:
-        """Real environment variables that redirect Qucs-S's own real
-        ``QucsHomeDir`` (its Projects panel's own real workspace root)
-        at this project's own real ``libs.tech/qucs-s``, or ``None``
-        if that directory doesn't exist yet -- same real bug class as
-        ``_tech_load_line``/``_xschem_rcfile`` above: this dev
-        container's own real, global ``~/.config/qucs/qucs_s.conf``
-        hardcodes ``QucsHomeDir=/headless/QucsWorkspace``, itself a
-        real symlink farm pointing at IHP's own real
-        ``/foss/pdks`` -- so a plain ``qucs-s`` launch for *any*
-        project shows IHP's own real Projects panel, never this
-        project's own.
-
-        Unlike Magic/xschem, Qucs-S has no real CLI flag for this
-        (confirmed from its own real, fetched ``main.cpp`` -- a full
-        ``QCommandLineParser`` list with nothing for the home/
-        workspace directory) and its settings live in one real,
-        shared, global file (``QSettings("qucs", "qucs_s")``, its own
-        real, fetched ``settings.cpp`` shows no explicit path/format,
-        so Qt's own standard ``$XDG_CONFIG_HOME``-aware lookup
-        applies) -- so rather than mutating that real, shared file
-        (which would leak into every other real Qucs-S session,
-        including ones for a different project entirely), a real,
-        fresh copy of it is written into a real, disposable temp
-        directory each launch, with only ``QucsHomeDir=`` swapped,
-        and pointed at via ``XDG_CONFIG_HOME`` for that one real
-        subprocess alone -- verified live: the real Projects panel
-        then correctly lists a redirected project's own real
-        subdirectories, and the real, shared global file is never
-        touched."""
-
-        qucs_dir = self.app.pdk_root / "libs.tech" / "qucs-s"
-        if not qucs_dir.is_dir():
-            return None
-        real_conf = Path.home() / ".config" / "qucs" / "qucs_s.conf"
-        if not real_conf.is_file():
-            return None
-        lines = real_conf.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-        lines = [
-            f"QucsHomeDir={qucs_dir}\n" if line.startswith("QucsHomeDir=") else line
-            for line in lines
-        ]
-        tmp_config_home = Path(tempfile.mkdtemp(prefix="openpdkcreator_qucs_xdg_"))
-        conf_dir = tmp_config_home / "qucs"
-        conf_dir.mkdir(parents=True)
-        (conf_dir / "qucs_s.conf").write_text("".join(lines), encoding="utf-8")
-        return {"XDG_CONFIG_HOME": str(tmp_config_home)}
+        return tool_env_mod.qucs_env(self.app.pdk_root)
 
     def _open_qucs_s(self, entry: li_mod.ViewEntry):
         messagebox.showinfo(
@@ -1111,21 +930,7 @@ class LibraryManagerView(ttk.Frame):
         )
 
     def _tech_load_line(self) -> str:
-        """A real ``tech load <path>`` Tcl line for this project's own
-        real technology, or an empty string if none exists yet -- a
-        real, found-not-assumed bug fix: without this, Magic falls
-        back to auto-sourcing whatever ``.magicrc`` its own compiled
-        default/environment happens to point at (real, confirmed
-        empirically: in this project's own real dev container, that's
-        IHP's own sg13g2 technology, *not* whatever real, non-IHP
-        project the GUI is actually pointed at) -- silently loading
-        the wrong real technology and then failing to open the
-        requested real cell at all (its own real ``tech`` header names
-        a technology Magic never loaded), rather than erroring
-        loudly."""
-
-        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
-        return f"tech load {tech_file}\n" if tech_file is not None else ""
+        return tool_env_mod.magic_tech_load_line(self.app.pdk_root)
 
     def _open_magic_gds(self, entry: li_mod.ViewEntry):
         handle = tempfile.NamedTemporaryFile(

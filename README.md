@@ -4778,6 +4778,73 @@ models, ...), not just read/display layers. Concretely, still open:
   made there; xschem's own `--rcfile <file>` was already the single,
   dedicated flag for exactly this purpose, likewise unchanged.
 
+- **The rest of the real tool registry, checked as asked ("check
+  openroad and yosys too, as well as any other remaining tool")** --
+  Icarus Verilog, Verilator, OpenLane2 (the separate, older
+  orchestrator -- distinct from LibreLane below, and genuinely never
+  wired up here, direct or indirect), GTKWave, cocotb, Xyce, and
+  OpenVAF have **zero** real `subprocess` invocations anywhere in
+  this codebase, direct or indirect (confirmed exhaustively -- every
+  real `subprocess.run`/`subprocess.Popen` call site was found and
+  inspected, not just grepped for a tool name in a comment): nothing
+  points any of them at real project data yet, right or wrong, so
+  there was nothing to fix for them specifically.
+
+  Pushed on directly ("How is it possible they are not invoked? ...
+  check whether we should care about providing a right path for them
+  to use the correct libraries") -- a fair challenge, and it surfaced
+  a real, already-existing mechanism this initial sweep missed:
+  OpenROAD, Yosys, OpenSTA, and Netgen (LVS, already separately
+  correct -- see `pdklib/extraction.py`) *are* used, but indirectly,
+  orchestrated internally by LibreLane, not launched directly by this
+  project's own Python code. `pdklib/shell_env.py` (surfaced in
+  Settings > Environment) already generates a real, correctly
+  per-project `librelane_pdk()` shell function --
+  `librelane --manual-pdk --pdk-root "$PDK_ROOT" --pdk "$PDK"`, with
+  both real values derived from `self.app.pdk_root` (whichever real
+  project is currently loaded), never hardcoded to IHP. Re-verified
+  directly rather than trusting that docstring's own prior claim: the
+  generated script was produced and inspected for *both* real
+  projects -- IHP's own real data yields
+  `PDK_ROOT=data/ihp-sg13g2 PDK=ihp-sg13g2`, `openMemristorPDK`'s own
+  yields `PDK_ROOT=openMemristorPDK/data PDK=openmemristorpdk` -- each
+  one's own real, correct, distinct path, confirming no IHP leakage.
+  Architecturally this is a fundamentally different, safer situation
+  than Magic/xschem/Qucs-S/KLayout's own real bugs: LibreLane's own
+  `--pdk-root`/`--pdk` are explicit, required arguments with no
+  silent fallback to any hidden global config to get wrong in the
+  first place -- so no fix was needed here, just real, independent
+  confirmation that the existing mechanism is genuinely correct
+  rather than assuming so. `ngspice_pdk()` (real, CWD-relative
+  `.spiceinit` auto-load from the current project's own real
+  `libs.tech/ngspice/`) was checked the same way and is likewise
+  already correct. GTKWave/cocotb/Xyce/OpenVAF remain genuinely
+  unused -- no direct or indirect launch mechanism exists for them
+  yet in this project at all.
+
+  The initial sweep also found a real, deeper architectural gap:
+  `gui/tools_view.py`'s own separate **Launch Selected** button
+  (Settings > Tools tab) had no `app`/`pdk_root` reference at all,
+  calling a bare `subprocess.Popen(argv, cwd=cwd)` directly --
+  completely bypassing every one of today's real fixes (xschem
+  `--rcfile`, Qucs-S `XDG_CONFIG_HOME`, Magic `tech load`), which had
+  all only ever lived in `library_manager_view.py`'s own per-cell
+  `_open_*` methods. Fixed by pulling the shared logic out into a new
+  module, `pdklib/tool_env.py` (matching this project's own
+  established "don't duplicate a fix a second call site also needs"
+  precedent from the earlier Wizard audit): `library_manager_view.py`'s
+  own methods are now thin, one-line wrappers around it, and
+  `tools_view.py` was given a real `app` reference (same
+  `app`-taking constructor convention `settings_view.py` already
+  uses) so its own **Launch Selected** can call the exact same real
+  functions for xschem/Qucs-S/Magic. Verified live, through the
+  actual driven GUI, for all three, launched via **this** second path
+  specifically (not re-verifying the already-proven per-cell path):
+  xschem shows no "IHP" menu, Qucs-S's own real Projects panel lists
+  the right project's own real subdirectories, and Magic's own title
+  bar correctly reads `Technology: openmemristorpdk` with the real
+  memristor layers loaded. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

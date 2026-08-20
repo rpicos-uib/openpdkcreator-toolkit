@@ -1137,7 +1137,7 @@ class App(ttk.Frame):
 
         tools_frame = ttk.Frame(self.settings_notebook)
         self.settings_notebook.add(tools_frame, text="Tools")
-        self.tools_view = ToolsView(tools_frame)
+        self.tools_view = ToolsView(tools_frame, self)
         self.tools_view.pack(fill="both", expand=True)
 
         environment_frame = ttk.Frame(self.settings_notebook)
