@@ -4883,6 +4883,24 @@ models, ...), not just read/display layers. Concretely, still open:
   shell's own real `$HOME` is provably untouched afterward. Full
   suite: 82 passed, 0 failed.
 
+- **A real gap in the Wizard's own flowchart, found by the user
+  directly** ("I don't see the extraction step documented"): layout
+  extraction, LVS, and DRC (`pdklib/extraction.py`, `pdklib/drc.py`)
+  are real, substantial capabilities this project has had for a
+  while -- used throughout `digital_aspects.tex`'s own real
+  walkthrough -- but had no representation at all in the PDK Wizard's
+  own real flowchart, unlike every other real domain. Added a new
+  stage, **Extraction / LVS / DRC**, with a real status function that
+  globs both `pdk_root` and `PROJECT_ROOT` for real
+  `*_extracted.spice`/`*_lvs.spice`/`*.lvs_report.out`/`*.lyrdb`
+  output (unlike a couple of older status functions that only ever
+  checked `libs.ref/`, which would have silently missed a
+  from-scratch project's own real work under `PROJECT_ROOT/
+  libraries/`). Verified live: correctly reports real counts for
+  already-existing extraction/LVS/DRC output, and **Go to Tab**
+  correctly jumps to the Library Manager, where these three actions
+  actually live. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

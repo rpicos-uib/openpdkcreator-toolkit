@@ -289,6 +289,35 @@ def _status_gds(app):
     return True, f"{n} real .gds file(s) found across libs.ref/*/gds/.", None
 
 
+def _status_extraction(app):
+    """Real extraction/LVS/DRC output files -- ``pdklib/extraction.py``'s
+    own real ``run_extract``/``run_lvs`` and ``pdklib/drc.py``'s own
+    real ``run_drc`` all write next to the real ``.mag`` file they were
+    run against, wherever that file actually lives -- a real,
+    downloaded cell under ``libs.ref/`` (rare) or, far more commonly
+    for a from-scratch project, one this project itself created under
+    ``PROJECT_ROOT/libraries/`` -- so both real roots are searched,
+    unlike a few older status functions above that only ever checked
+    ``libs.ref/`` and would silently miss a from-scratch project's own
+    real work."""
+
+    roots = (app.pdk_root, export_mod.PROJECT_ROOT)
+    extracted = sum(len(list(root.glob("**/*_extracted.spice"))) for root in roots)
+    extracted += sum(len(list(root.glob("**/*_lvs.spice"))) for root in roots)
+    lvs_reports = sum(len(list(root.glob("**/*.lvs_report.out"))) for root in roots)
+    drc_reports = sum(len(list(root.glob("**/*.lyrdb"))) for root in roots)
+    if not (extracted or lvs_reports or drc_reports):
+        return False, "No real extraction/LVS/DRC output found yet.", None
+    parts = []
+    if extracted:
+        parts.append(f"{extracted} real extracted netlist(s)")
+    if lvs_reports:
+        parts.append(f"{lvs_reports} real LVS report(s)")
+    if drc_reports:
+        parts.append(f"{drc_reports} real DRC report(s)")
+    return True, ", ".join(parts) + " found.", None
+
+
 def _status_export(app):
     return True, "Available any time via File > Export Edited ... .", None
 
@@ -462,6 +491,26 @@ _STAGES: list[WizardStage] = [
         _status_by_cell,
     ),
     WizardStage(
+        "extraction", "Extraction / LVS / DRC", 3, 11, ("Library Manager",),
+        "Layout-to-netlist, for real: Extract to SPICE runs real batch "
+        "Magic (extract + ext2spice) against a cell's own real Magic "
+        "Layout view, using its own real Connect/Extract device-"
+        "recognition rules; Run LVS extracts again (a faster, "
+        "connectivity-only preset) and compares the result against the "
+        "cell's own real CDL/SPICE reference via real, batch Netgen; "
+        "Run DRC exports a real GDS and runs it through real, batch "
+        "KLayout DRC. All three live as buttons on the Magic Layout "
+        "row in Library Manager, not a tab of their own.",
+        "The real path from a drawn memristor cell to a real, "
+        "extracted netlist you can simulate: Extract to SPICE writes a "
+        "real .spice file with the BE/oxide/TE stack recognized as one "
+        "real device (not three disconnected shapes) once Magic Tech's "
+        "own Devices rows exist -- .include that file in a real ngspice "
+        "testbench (pre_osdi-loading the compact model first) to "
+        "simulate the physical layout itself, not just its schematic.",
+        _status_extraction,
+    ),
+    WizardStage(
         "gds", "GDS", 2, 12, ("Cells", "By Cell"),
         "The real physical layout -- view-only here (bounding box, "
         "per-layer shape counts via KLayout's own Python API).",
@@ -502,6 +551,7 @@ _EDGES: list[tuple[str, str]] = [
     ("qucs_components", "ngspice"),
     ("user_models", "by_cell"),
     ("by_cell", "gds"),
+    ("by_cell", "extraction"),
     ("gds", "export"),
 ]
 
