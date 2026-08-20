@@ -4593,6 +4593,37 @@ models, ...), not just read/display layers. Concretely, still open:
   real 0.1s; exactly one real KLayout process stays running across
   both. Full suite: 82 passed, 0 failed.
 
+- **"Open in Magic" loaded the wrong technology for non-IHP
+  projects.** Found while actually verifying (rather than assuming)
+  that every Library Manager launch points at the correct real PDK
+  paths, as asked directly: does opening a cell in Magic from a
+  from-scratch, non-IHP project (`openMemristorPDK`) really load
+  *that* project's own real technology? It did not.
+  `_open_magic_gds`/`_open_magic_mag` never wrote an explicit
+  `tech load <path>` line into their generated Tcl scripts, relying
+  entirely on Magic's own cwd-based `.magicrc` auto-sourcing -- which
+  has no real equivalent for a project with no `.magicrc` of its own.
+  Confirmed empirically, live, in this project's own real dev
+  container: Magic silently fell back to whatever technology its own
+  compiled default happens to be (IHP's `ihp-sg13g2`), loading the
+  wrong real layers (`nwell`/`pwell`/`ntransistor`/...) instead of
+  `openMemristorPDK`'s own real ones (`be_au`/`te_au`/`mem_tio2`/...)
+  and failing to open the requested real cell at all, silently,
+  rather than erroring loudly. Fixed with a new `_tech_load_line()`
+  helper, reusing the same real, already-established
+  `extraction.default_tech_file()` "shortest tech-file stem wins"
+  convention (also used to refactor `_default_tech_name()`, which had
+  its own independent, duplicate copy of the exact same logic),
+  prepended to both `_open_magic_gds` and `_open_magic_mag`'s
+  generated scripts. Verified for real, driven, twice: against
+  `openMemristorPDK` (title bar and layer panel now correctly show
+  `Loaded: memristor_tio2_au` and the real `be_au`/`te_au`/`te_ti`/
+  `te_al`/`mem_tio2`/`mem_hfo2` layers, previously `(UNNAMED)` and
+  IHP's own layers) and, as a regression check, against the real IHP
+  project itself (generated script still correctly loads
+  `ihp-sg13g2.tech`, no change in behavior). Full suite: 82 passed,
+  0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

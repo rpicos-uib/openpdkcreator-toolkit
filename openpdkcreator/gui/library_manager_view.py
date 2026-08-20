@@ -133,7 +133,6 @@ from ..pdklib import drc as drc_mod
 from ..pdklib import extraction as extraction_mod
 from ..pdklib import klayout_server as klayout_server_mod
 from ..pdklib import mag as mag_mod
-from ..pdklib import magic_tech as magic_tech_mod
 from ..pdklib import netlist as netlist_mod
 from ..pdklib import qucs_sym as qucs_sym_mod
 from ..pdklib import user_models as user_models_mod
@@ -595,23 +594,18 @@ class LibraryManagerView(ttk.Frame):
 
     def _default_tech_name(self) -> str:
         """The real Magic technology name a newly-created ``.mag``
-        file's own ``tech`` line should declare. Real IHP data (found
-        empirically: ``libs.tech/magic/*.tech``) has one complete,
-        loadable tech file (``ihp-sg13g2.tech``, the one the real
-        ``.magicrc``'s own ``tech load`` line references) plus several
-        per-domain *fragments* meant to be ``include``d by it
-        (``ihp-sg13g2-GDS.tech``, ``-cifin``, ``-cifout``, ``-drc``,
-        ``-extract``) -- each fragment's stem is the main file's own
-        stem plus a ``-suffix``, so the shortest stem among every real
-        ``.tech`` file found is always the main, real, active
-        technology's name. Falls back to the pdk_root's own directory
-        name if no ``.tech`` file exists yet (a genuinely from-scratch
-        project)."""
+        file's own ``tech`` line should declare -- the same real
+        "shortest stem among every real .tech file wins" convention
+        ``extraction.default_tech_file`` already established (real
+        IHP data has one complete, loadable tech file plus several
+        per-domain *fragments* whose own stem is always the main
+        file's stem plus a ``-suffix``); reused here rather than
+        re-derived so every real call site agrees on the same real
+        file. Falls back to the pdk_root's own directory name if no
+        ``.tech`` file exists yet (a genuinely from-scratch project)."""
 
-        tech_files = magic_tech_mod.find_tech_files(self.app.pdk_root)
-        if tech_files:
-            return min(tech_files, key=lambda p: (len(p.stem), p.stem)).stem
-        return self.app.pdk_root.name
+        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
+        return tech_file.stem if tech_file is not None else self.app.pdk_root.name
 
     def _create_view(self, view_kind: str):
         if self.current_library is None or self.current_cell is None:
@@ -721,27 +715,44 @@ class LibraryManagerView(ttk.Frame):
             else f"Launched a new KLayout for {self.current_cell!r}."
         )
 
+    def _tech_load_line(self) -> str:
+        """A real ``tech load <path>`` Tcl line for this project's own
+        real technology, or an empty string if none exists yet -- a
+        real, found-not-assumed bug fix: without this, Magic falls
+        back to auto-sourcing whatever ``.magicrc`` its own compiled
+        default/environment happens to point at (real, confirmed
+        empirically: in this project's own real dev container, that's
+        IHP's own sg13g2 technology, *not* whatever real, non-IHP
+        project the GUI is actually pointed at) -- silently loading
+        the wrong real technology and then failing to open the
+        requested real cell at all (its own real ``tech`` header names
+        a technology Magic never loaded), rather than erroring
+        loudly."""
+
+        tech_file = extraction_mod.default_tech_file(self.app.pdk_root)
+        return f"tech load {tech_file}\n" if tech_file is not None else ""
+
     def _open_magic_gds(self, entry: li_mod.ViewEntry):
         handle = tempfile.NamedTemporaryFile(
             mode="w", suffix=".tcl", prefix="openpdkcreator_magic_gds_", delete=False, encoding="utf-8",
         )
         with handle:
-            handle.write(f"gds read {entry.path}\nload {self.current_cell}\n")
+            handle.write(f"{self._tech_load_line()}gds read {entry.path}\nload {self.current_cell}\n")
         self._launch("magic", extra_argv=(handle.name,))
 
     def _open_magic_mag(self, entry: li_mod.ViewEntry):
         """Unlike GDS (which needs the real ``gds read`` + ``load``
         two-step -- see ``_open_magic_gds`` above), a ``.mag`` file is
         already Magic's own real, native format: a real, freshly-
-        written 1-line Tcl script (``cd <dir>; load <cell>``, self-
-        contained rather than relying on Magic's own cwd) is enough to
-        open it directly, ready for real drawing."""
+        written Tcl script (``tech load`` + ``cd <dir>; load <cell>``,
+        self-contained rather than relying on Magic's own cwd) is
+        enough to open it directly, ready for real drawing."""
 
         handle = tempfile.NamedTemporaryFile(
             mode="w", suffix=".tcl", prefix="openpdkcreator_magic_mag_", delete=False, encoding="utf-8",
         )
         with handle:
-            handle.write(f"cd {entry.path.parent}\nload {entry.path.stem}\n")
+            handle.write(f"{self._tech_load_line()}cd {entry.path.parent}\nload {entry.path.stem}\n")
         self._launch("magic", extra_argv=(handle.name,))
 
     def _ask_extract_mode(self) -> str | None:
