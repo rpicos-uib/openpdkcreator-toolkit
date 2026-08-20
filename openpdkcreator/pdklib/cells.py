@@ -71,6 +71,20 @@ from . import verilog as verilog_mod
 from . import xschem as xschem_mod
 from . import xschem_sch as xschem_sch_mod
 
+# The real, fixed ``libs.ref/<family>/<X>/`` sub-directory names this
+# module's own ``build_cell_index`` globs below -- also the single,
+# shared source of truth ``gui/pdk_wizard_view.py``'s own cheap,
+# glob-only status checks build their patterns from, instead of each
+# re-typing the same real convention independently (found to have
+# drifted apart once already: the Wizard's own glob strings duplicated
+# these by hand).
+LEF_SUBDIR = "lef"
+CDL_SUBDIR = "cdl"
+SPICE_SUBDIR = "spice"
+VERILOG_SUBDIR = "verilog"
+LIBERTY_SUBDIR = "lib"
+GDS_SUBDIR = "gds"
+
 
 @dataclass
 class CellViews:
@@ -163,7 +177,7 @@ def build_cell_index(
             index[name] = CellViews(name=name, family=family)
         return index[name]
 
-    lef_dir = family_dir / "lef"
+    lef_dir = family_dir / LEF_SUBDIR
     if lef_dir.is_dir():
         for lef_path in sorted(lef_dir.glob("*.lef")):
             for macro in parse_lef(lef_path).macros:
@@ -171,7 +185,7 @@ def build_cell_index(
                 cv.lef_macro = macro
                 cv.lef_source = lef_path
 
-    cdl_dir = family_dir / "cdl"
+    cdl_dir = family_dir / CDL_SUBDIR
     if cdl_dir.is_dir():
         for cdl_path in sorted(cdl_dir.glob("*.cdl")):
             for cell in parse_netlist(cdl_path):
@@ -179,7 +193,7 @@ def build_cell_index(
                 cv.cdl_cell = cell
                 cv.cdl_source = cdl_path
 
-    spice_dir = family_dir / "spice"
+    spice_dir = family_dir / SPICE_SUBDIR
     if spice_dir.is_dir():
         for spice_path in sorted(spice_dir.glob("*.spice")):
             for cell in parse_netlist(spice_path):
@@ -187,7 +201,7 @@ def build_cell_index(
                 cv.spice_cell = cell
                 cv.spice_source = spice_path
 
-    verilog_dir = family_dir / "verilog"
+    verilog_dir = family_dir / VERILOG_SUBDIR
     if verilog_dir.is_dir():
         for v_path in sorted(verilog_dir.glob("*.v")):
             for module in parse_verilog(v_path):
@@ -195,14 +209,14 @@ def build_cell_index(
                 cv.verilog_module = module
                 cv.verilog_source = v_path
 
-    lib_dir = family_dir / "lib"
+    lib_dir = family_dir / LIBERTY_SUBDIR
     if lib_dir.is_dir():
         for lib_path in sorted(lib_dir.glob("*.lib")):
             for cell in parse_liberty(lib_path):
                 cv = get_or_create(cell.name)
                 cv.liberty_entries.append((cell, lib_path))
 
-    gds_dir = family_dir / "gds"
+    gds_dir = family_dir / GDS_SUBDIR
     if gds_dir.is_dir():
         gds_paths = sorted(gds_dir.glob("*.gds"))
         gds_names = {p.stem for p in gds_paths}

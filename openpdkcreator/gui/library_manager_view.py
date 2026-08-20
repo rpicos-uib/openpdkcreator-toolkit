@@ -131,6 +131,7 @@ from ..pdklib import libman_project as libman_mod
 from ..pdklib import library_index as li_mod
 from ..pdklib import drc as drc_mod
 from ..pdklib import extraction as extraction_mod
+from ..pdklib import klayout_server as klayout_server_mod
 from ..pdklib import mag as mag_mod
 from ..pdklib import magic_tech as magic_tech_mod
 from ..pdklib import netlist as netlist_mod
@@ -696,13 +697,29 @@ class LibraryManagerView(ttk.Frame):
         self._launch("qucs-s")
 
     def _open_klayout(self, entry: li_mod.ViewEntry):
-        handle = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".rb", prefix="openpdkcreator_klayout_cell_", delete=False, encoding="utf-8",
+        """Reuses a real, already-running KLayout instance across
+        repeated real clicks instead of spawning a new window every
+        time -- see ``pdklib/klayout_server.py``'s own docstring for
+        the real mechanism (the same real idea IHP's own LibMan tool
+        uses)."""
+
+        tool = _find_tool("klayout")
+        if tool is None:
+            messagebox.showerror("Open in KLayout", "No 'klayout' tool registered.", parent=self)
+            return
+        status = eda_tools.check_tool(tool)
+        if not status.found:
+            messagebox.showerror("Open in KLayout", f"{tool.name} isn't on PATH.", parent=self)
+            return
+        self.status_var.set("Opening in KLayout...")
+        self.update_idletasks()
+        reused = klayout_server_mod.open_cell(
+            self.app.pdk_root, status.path, entry.path, self.current_cell or "", lyp_path=self.app.lyp_path,
         )
-        cell_name = self.current_cell.replace('"', '\\"') if self.current_cell else ""
-        with handle:
-            handle.write(f'RBA::CellView::active.cell_name = "{cell_name}"\n')
-        self._launch("klayout", extra_argv=(str(entry.path), "-rr", handle.name))
+        self.status_var.set(
+            f"Sent {self.current_cell!r} to the real, already-running KLayout." if reused
+            else f"Launched a new KLayout for {self.current_cell!r}."
+        )
 
     def _open_magic_gds(self, entry: li_mod.ViewEntry):
         handle = tempfile.NamedTemporaryFile(

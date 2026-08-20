@@ -4525,6 +4525,88 @@ models, ...), not just read/display layers. Concretely, still open:
   violation-counting path is verified directly against a real-shaped
   report instead; see the test's own docstring.) Full suite: 81
   passed, 0 failed.
+- **PDK Wizard duplication audit, plus a real, adopted idea from
+  IHP-GmbH's own LibMan tool** -- per direct request ("check that all
+  the code in the wizard is useful... equivalent functions... using
+  the same subroutine", then, mid-task, "check how the IHP equivalent
+  file manager deals with launching the tools... if theirs is better,
+  use their ideas shamelessly"). Two real, concrete findings:
+
+  1. `gui/pdk_wizard_view.py`'s own cheap, glob-only status checks for
+     Verilog/Liberty/CDL/SPICE/GDS re-typed the same real
+     `libs.ref/<family>/<X>/` sub-directory convention `pdklib/
+     cells.py`'s own `build_cell_index` *also* hard-codes independently
+     -- a real, found-not-assumed duplication (confirmed by grepping
+     both files for the same literal strings), not just a hypothetical
+     one. Fixed by extracting real, shared `LEF_SUBDIR`/`CDL_SUBDIR`/
+     `SPICE_SUBDIR`/`VERILOG_SUBDIR`/`LIBERTY_SUBDIR`/`GDS_SUBDIR`
+     constants into `cells.py` (the module that already owns this real
+     convention) and having the Wizard build its own glob patterns
+     from them instead of its own copy. Deliberately *not* switched to
+     calling `build_cell_index` itself for these -- that would trade a
+     real, cheap glob for a real, full per-file parse across every
+     stage's own status check, undoing the Wizard's own stated "never
+     a full parse" design goal for a dashboard rendering 14 stages on
+     every refresh.
+  2. `gui/library_manager_view.py`'s own **Open in KLayout** always
+     spawned a brand-new KLayout process/window per click -- opening
+     five real cells in a row left five real, separate KLayout windows
+     running. IHP's own real LibMan tool (installed in the dev
+     container at `/foss/tools/libman`) does better: `strings` on its
+     own real compiled binary turned up a real, embedded pya
+     server-script fragment (a real `pya.Timer`-polling loop, an
+     "alive file" freshness check, `lv.select_cell(...)`) -- LibMan
+     keeps one real KLayout instance alive and just hands it new
+     open-cell requests instead of relaunching. Re-derived and
+     independently, empirically verified end to end against this
+     project's own real, installed KLayout 0.30.9 (two real API
+     guesses from the strings alone turned out wrong and needed a real
+     fix: `pya.Timer` is a real elapsed-time stopwatch, not a callback
+     timer -- the real callback class is `pya.QTimer`; and
+     `LayoutView.select_cell` takes a real integer cell index, not the
+     real `Cell` object itself). New `pdklib/klayout_server.py`
+     implements the same real idea: `open_cell()` checks a real,
+     shared alive-file's freshness and either sends a new real request
+     to the already-running instance or launches a fresh one (with a
+     real, generated pya polling script) and waits for it. Also found,
+     while getting this working end to end: a real, first-use KLayout
+     "Tip" dialog (there are several, distinct real ones -- e.g. one
+     about empty layers, a different one about viewer-vs-editor mode)
+     blocks the real `-rr` script from ever running until dismissed;
+     handled with a best-effort, generic synthetic-Enter-keypress
+     watchdog (`python-xlib`'s real XTEST extension, optional --
+     silently skipped if not installed) rather than chasing each real
+     tip's own specific, undiscovered config key. Wired into
+     `_open_klayout`, which also now correctly still passes the real
+     `.lyp` layer-properties file on a fresh launch (`eda_tools.py`'s
+     own existing `LaunchGuidance` convention for KLayout), a real
+     regression the first version of this fix introduced and
+     `tests/test_library_manager_view.py` caught.
+
+  Verified for real, driven, against real, installed KLayout 0.30.9 on
+  a real X11 display (`tests/test_klayout_server.py`, new): a first
+  real call launches a real, fresh server and it's genuinely alive
+  afterward (not a silent 15s timeout mistaken for success -- an
+  earlier version of this test *did* pass while silently timing out,
+  caught by actually checking `is_server_alive` after the call, not
+  just the return value); a second real call reuses it in under a
+  real 0.1s; exactly one real KLayout process stays running across
+  both. Full suite: 82 passed, 0 failed.
+
+## About Us
+
+Not a company -- just a note on real ideas borrowed from elsewhere,
+credited rather than silently absorbed:
+
+- **IHP-GmbH's own LibMan** (`github.com/IHP-GmbH/LibMan`) -- already
+  credited above for its own real project-file format (`pdklib/
+  libman_project.py`); its own real, persistent-KLayout-instance
+  reuse idea (found by inspecting its own real compiled binary,
+  installed in the dev container at `/foss/tools/libman`) is what
+  `pdklib/klayout_server.py`'s own real **Open in KLayout** now uses
+  too -- one real, already-running KLayout instance handed new
+  open-cell requests, instead of a fresh window every click.
+
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project

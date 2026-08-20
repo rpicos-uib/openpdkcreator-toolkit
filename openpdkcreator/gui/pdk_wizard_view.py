@@ -165,7 +165,7 @@ def _status_lef(app):
 
 
 def _status_verilog(app):
-    n = _glob_count(app, "libs.ref/*/verilog/*.v")
+    n = _glob_count(app, f"libs.ref/*/{cells_mod.VERILOG_SUBDIR}/*.v")
     if n == 0:
         return (
             False,
@@ -179,7 +179,7 @@ def _status_verilog(app):
 
 
 def _status_liberty(app):
-    n = _glob_count(app, "libs.ref/*/lib/*.lib")
+    n = _glob_count(app, f"libs.ref/*/{cells_mod.LIBERTY_SUBDIR}/*.lib")
     if n == 0:
         return (
             False,
@@ -192,7 +192,10 @@ def _status_liberty(app):
 
 
 def _status_cdl_spice(app):
-    n = _glob_count(app, "libs.ref/*/cdl/*.cdl") + _glob_count(app, "libs.ref/*/spice/*.spice")
+    n = (
+        _glob_count(app, f"libs.ref/*/{cells_mod.CDL_SUBDIR}/*.cdl")
+        + _glob_count(app, f"libs.ref/*/{cells_mod.SPICE_SUBDIR}/*.spice")
+    )
     if n == 0:
         return (
             False,
@@ -256,7 +259,7 @@ def _status_by_cell(app):
 
 
 def _status_gds(app):
-    n = _glob_count(app, "libs.ref/*/gds/*.gds")
+    n = _glob_count(app, f"libs.ref/*/{cells_mod.GDS_SUBDIR}/*.gds")
     if n == 0:
         return (
             False,

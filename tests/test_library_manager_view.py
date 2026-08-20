@@ -131,23 +131,33 @@ lmv.library_tree.selection_set("sg13g2_stdcell")
 root.update()
 lmv.cell_tree.selection_set("sg13g2_inv_1")
 root.update()
-launched.clear()
-subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
+
+# _open_klayout now delegates to pdklib/klayout_server.py's own real,
+# driven-tested (tests/test_klayout_server.py) persistent-instance-
+# reuse mechanism -- mocked at that boundary here, not at
+# subprocess.Popen, since the real open_cell() itself blocks for real
+# wall-clock seconds waiting for a real KLayout alive-file when not
+# mocked, and this file's own job is just to confirm _open_klayout
+# wires up the real call correctly, not to re-verify klayout_server.py
+# itself again.
+from openpdkcreator.pdklib import klayout_server as klayout_server_mod
+
+open_cell_calls = []
+original_open_cell = klayout_server_mod.open_cell
+klayout_server_mod.open_cell = lambda pdk_root, binary, gds_path, cell_name, lyp_path=None: (
+    open_cell_calls.append((pdk_root, binary, gds_path, cell_name, lyp_path)) or False
+)
 try:
     lmv._open_klayout(lmv._entries["gds"])
 finally:
-    subprocess_mod.Popen = original_popen
-argv2, cwd2 = launched[-1]
-print("klayout launch argv:", argv2)
-assert str(lmv._entries["gds"].path) in argv2
-assert "-l" in argv2
-assert "-rr" in argv2
-rb_script_path = Path(argv2[-1])
-rb_script_text = rb_script_path.read_text()
-print("generated Ruby script:\n" + rb_script_text)
-assert 'RBA::CellView::active.cell_name = "sg13g2_inv_1"' in rb_script_text
-rb_script_path.unlink()
-print("PASS: Open in KLayout resolves a real argv (real .lyp + the real, per-cell .gds + a real, correct cell-selection Ruby script via -rr).")
+    klayout_server_mod.open_cell = original_open_cell
+pdk_root_arg, binary_arg, gds_path_arg, cell_name_arg, lyp_path_arg = open_cell_calls[-1]
+print("open_cell call:", open_cell_calls[-1])
+assert pdk_root_arg == app.pdk_root
+assert gds_path_arg == lmv._entries["gds"].path
+assert cell_name_arg == "sg13g2_inv_1"
+assert lyp_path_arg == app.lyp_path and lyp_path_arg is not None
+print("PASS: Open in KLayout calls the real klayout_server.open_cell with the real pdk_root/gds path/cell name/.lyp.")
 
 launched.clear()
 subprocess_mod.Popen = lambda argv, cwd=None: launched.append((argv, cwd))
