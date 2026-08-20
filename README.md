@@ -4901,6 +4901,52 @@ models, ...), not just read/display layers. Concretely, still open:
   correctly jumps to the Library Manager, where these three actions
   actually live. Full suite: 82 passed, 0 failed.
 
+- **Per-instance "switch view list" for xschem schematics**, built at
+  the user's explicit request after asking about the Cadence ADE flow
+  of picking, per device, whether simulation should use its
+  behavioral or extracted-layout view. Checked first, not guessed:
+  xschem has no native equivalent -- its own real `Simulation > LVS`
+  submenu only controls netlist *formatting* for LVS comparison, and
+  `Options > Netlist format / Symbol mode` only controls output
+  *language*. Built as two real, cooperating halves
+  (`pdklib/xschem_view_switch.py`):
+  1. A real **View Switch** xschem menu, injected into every real
+     xschem launch via `tool_env.xschem_rcfile`/
+     `default_xschem_rcfile_content` (only baked into a *freshly
+     created* persistent project `xschemrc` going forward -- an
+     already-existing one is never rewritten, a real, disclosed
+     limitation, not a silent gap). Its one command toggles a real,
+     plain `view=extracted` property on every selected instance using
+     xschem's own real, confirmed Tcl API (`xschem selected_set`/
+     `getprop`/`setprop instance <i> <prop> <value>`, the same real
+     calls IHP's own `xschem-menu` and xschem's own bundled
+     `change_index.tcl`/`hspice_backannotate.tcl` use) and saves
+     immediately via xschem's own real `save` command. Verified live,
+     round-trip, both directions: toggling on then off against a real
+     memristor schematic correctly wrote and then cleared
+     `view=extracted` in the saved `.sch` file on disk.
+  2. `apply_view_switches` (Python side): given a netlist xschem
+     already generated normally (it has no idea this property exists,
+     so it always nets the behavioral view) and the same schematic
+     re-parsed via `pdklib/xschem_sch.py`, swaps every real
+     `view=extracted` instance's default call for a real `.include` of
+     its own `pdklib/extraction.py`-written `<cell>_extracted.spice`
+     plus a call into that file's own top-level subcircuit -- caught
+     live, not assumed: the file carries the `_extracted` suffix, but
+     the real `.subckt` statement inside it is plain `<cell>`, so the
+     substituted call has to stay unsuffixed too, or it references an
+     undefined subcircuit. Wired to a new **Netlist (View Switches)**
+     button on the xschem Schematic row in Library Manager (real,
+     headless batch netlist via `xschem -n -s -q`, the same flags
+     `walkthrough_full.tex` Step 27 documents -- confirmed live to need
+     no real X11/Tk display at all), writing a derived, regenerated-
+     every-click `<cell>_viewswitch.spice` next to the schematic, the
+     same real rule `Extract to SPICE` already follows for its own
+     output. Verified fully end-to-end against the real memristor
+     fixture: real xschem netlist in, correct real substitution out,
+     and the substituted result actually ran to completion in real
+     ngspice via `pre_osdi`. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

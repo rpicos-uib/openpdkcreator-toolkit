@@ -165,6 +165,7 @@ from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
 from ..pdklib import xschem as xschem_mod
 from ..pdklib import xschem_sch as xschem_sch_mod
+from ..pdklib import xschem_view_switch as xschem_view_switch_mod
 from .file_view_dialog import view_file_dialog
 from .text_dialog import show_text_dialog
 from .tooltip import add_help_icon
@@ -590,8 +591,13 @@ class LibraryManagerView(ttk.Frame):
 
         if view_kind in ("xschem_symbol", "xschem_schematic"):
             ttk.Button(row_frame, text="Open in xschem", command=lambda e=entry: self._open_xschem(e)).pack(
-                side="left"
+                side="left", padx=(0, 4)
             )
+            if view_kind == "xschem_schematic":
+                ttk.Button(
+                    row_frame, text="Netlist (View Switches)",
+                    command=lambda e=entry: self._netlist_view_switches(e),
+                ).pack(side="left")
         elif view_kind in ("qucs_symbol", "qucs_component"):
             ttk.Button(row_frame, text="Open in Qucs-S", command=lambda e=entry: self._open_qucs_s(e)).pack(
                 side="left"
@@ -890,6 +896,85 @@ class LibraryManagerView(ttk.Frame):
         rcfile = self._xschem_rcfile()
         extra_argv = ("--rcfile", rcfile, str(entry.path)) if rcfile is not None else (str(entry.path),)
         self._launch("xschem", extra_argv=extra_argv)
+
+    def _resolve_extracted_for_cell(self, cell_name: str, sch_path: Path) -> Path | None:
+        """Real search for *cell_name*'s own real
+        ``pdklib/extraction.py``-written ``<cell>_extracted.spice`` --
+        first right next to *sch_path* itself (this project's own real
+        convention: every view of one cell lives together in one real
+        per-library directory, confirmed live for the memristor
+        fixture used to build/verify this feature), then the same real
+        dual-root fallback ``pdk_wizard_view.py``'s own
+        ``_status_extraction`` already established (a from-scratch
+        project's own real ``libraries/`` tree may sit under
+        ``export_mod.PROJECT_ROOT`` rather than ``app.pdk_root``)."""
+
+        candidate = sch_path.with_name(f"{cell_name}_extracted.spice")
+        if candidate.is_file():
+            return candidate
+        for root in (self.app.pdk_root, self.project_root):
+            for match in root.glob(f"**/{cell_name}_extracted.spice"):
+                return match
+        return None
+
+    def _netlist_view_switches(self, entry: li_mod.ViewEntry):
+        """Real, batch-mode xschem netlist (``xschem_view_switch.
+        run_netlist`` -- the same real ``-n -s -q`` flags
+        ``walkthrough_full.tex`` Step 27 documents) with this
+        schematic's own real per-instance ``view=extracted`` switches
+        (set via the real **View Switch** menu this app now injects
+        into every xschem launch -- ``xschem_view_switch.py``'s own
+        module docstring) applied: each such instance's own default
+        behavioral call is replaced with a real ``.include`` of its
+        own Magic-extracted netlist plus a call into that file's own
+        real top-level subcircuit. Confirmed live end-to-end against a
+        real memristor fixture, including a real ngspice run of the
+        substituted result via ``pre_osdi``.
+
+        Deliberately writes a derived, regenerated-every-click
+        ``<cell>_viewswitch.spice`` next to the schematic rather than
+        registering a new view -- the same real rule ``_extract_spice``
+        above already documents for its own output."""
+
+        tool = _find_tool("xschem")
+        if tool is None:
+            messagebox.showerror("Netlist (View Switches)", "No 'xschem' tool registered.", parent=self)
+            return
+        status = eda_tools.check_tool(tool)
+        if not status.found:
+            messagebox.showerror("Netlist (View Switches)", f"{tool.name} isn't on PATH.", parent=self)
+            return
+        self.status_var.set("Running xschem batch netlist...")
+        self.update_idletasks()
+        rcfile = self._xschem_rcfile()
+        try:
+            netlist_text, log = xschem_view_switch_mod.run_netlist(entry.path, status.path, rcfile)
+        except subprocess.TimeoutExpired:
+            messagebox.showerror("Netlist (View Switches)", "xschem did not finish within 60s.", parent=self)
+            self.status_var.set("Netlist generation timed out.")
+            return
+        if netlist_text is None:
+            show_text_dialog(
+                self, f"Netlist (View Switches) -- {entry.path.stem}",
+                f"No output file was written -- netlist generation failed.\n\n{log}",
+            )
+            self.status_var.set("Netlist generation failed.")
+            return
+
+        schematic = xschem_sch_mod.parse_sch_file(entry.path)
+        new_text, switched = xschem_view_switch_mod.apply_view_switches(
+            netlist_text, schematic, lambda cell_name: self._resolve_extracted_for_cell(cell_name, entry.path),
+        )
+        out_path = entry.path.with_name(entry.path.stem + "_viewswitch.spice")
+        out_path.write_text(new_text, encoding="utf-8")
+        self.status_var.set(f"Wrote {out_path}.")
+        header = (
+            f"Real per-instance view switches applied for: {', '.join(switched)}\n\n" if switched else
+            "No instance carried a real view=extracted property -- identical to xschem's own plain netlist.\n\n"
+        )
+        show_text_dialog(
+            self, f"Netlist (View Switches) -- {entry.path.stem}", header + f"Wrote {out_path}\n\n" + new_text,
+        )
 
     def _qucs_env(self) -> dict[str, str] | None:
         return tool_env_mod.qucs_env(self.app.pdk_root)

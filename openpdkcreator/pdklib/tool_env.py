@@ -25,6 +25,7 @@ import tempfile
 from pathlib import Path
 
 from . import extraction as extraction_mod
+from . import xschem_view_switch as xschem_view_switch_mod
 
 
 def xschem_menu_path(pdk_root: Path) -> Path:
@@ -52,10 +53,20 @@ def default_xschem_rcfile_content(pdk_root: Path) -> str:
     ``env(PDK_ROOT)``/``env(PDK)``, a real, install-wide convention a
     from-scratch project has no equivalent of; this project's own
     real, already-known, concrete ``pdk_root`` path is used directly
-    instead)."""
+    instead).
+
+    Includes a real, conditional ``source`` of the real, tool-owned
+    view-switch menu (``xschem_view_switch.MENU_FILENAME``) -- only
+    baked into a freshly-created persistent rc file from here on; a
+    real, disclosed limitation, not a silent gap: an *already-existing*
+    persistent rc file is never rewritten by this tool (see
+    ``xschem_rcfile`` below), so one created before this feature
+    existed won't pick it up automatically -- recreate it, or add the
+    one real ``source`` line by hand, to get it."""
 
     xschem_dir = pdk_root / "libs.tech" / "xschem"
     menu_path = xschem_menu_path(pdk_root)
+    view_switch_path = xschem_dir / xschem_view_switch_mod.MENU_FILENAME
     return (
         "#### Real, project-specific xschem startup file.\n"
         "#### Adapted from IHP-GmbH's own real libs.tech/xschem/xschemrc for\n"
@@ -98,6 +109,14 @@ def default_xschem_rcfile_content(pdk_root: Path) -> str:
         f"if {{[file exists {{{menu_path}}}]}} {{\n"
         f"  source {menu_path}\n"
         "}\n"
+        "\n"
+        "###########################################################################\n"
+        "#### PER-INSTANCE VIEW SWITCH (behavioral vs. extracted layout)\n"
+        "###########################################################################\n"
+        "#### Real, tool-owned -- regenerated on every launch, not hand-edited.\n"
+        f"if {{[file exists {{{view_switch_path}}}]}} {{\n"
+        f"  source {view_switch_path}\n"
+        "}\n"
     )
 
 
@@ -122,7 +141,18 @@ def xschem_rcfile(pdk_root: Path) -> str | None:
     real custom menu, never this project's own. Passed via xschem's
     own real ``--rcfile <file>`` flag (confirmed from its own real,
     installed man page), so the wrong, hardcoded default chain is
-    replaced outright rather than layered under."""
+    replaced outright rather than layered under.
+
+    Also (re)writes the real, tool-owned view-switch menu file
+    (``xschem_view_switch.ensure_view_switch_menu``) every real call,
+    unconditionally -- both the persistent-rcfile branch below and the
+    ephemeral fallback reference the exact same real, stable path, so
+    it has to actually exist on disk regardless of which branch runs,
+    and staying current with this tool's own version (not a one-time,
+    potentially-stale write) matches its own real "regenerated on
+    every launch" docstring."""
+
+    xschem_view_switch_mod.ensure_view_switch_menu(pdk_root)
 
     project_rcfile = xschem_project_rcfile_path(pdk_root)
     if project_rcfile.is_file():
@@ -136,6 +166,9 @@ def xschem_rcfile(pdk_root: Path) -> str | None:
     )
     with handle:
         handle.write(f"append XSCHEM_LIBRARY_PATH :{xschem_dir}\n")
+        view_switch_file = xschem_dir / xschem_view_switch_mod.MENU_FILENAME
+        if view_switch_file.is_file():
+            handle.write(f"source {view_switch_file}\n")
         menu_file = xschem_menu_path(pdk_root)
         if menu_file.is_file():
             handle.write(f"source {menu_file}\n")
