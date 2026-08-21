@@ -40,12 +40,17 @@ from IHP's real, downloaded data.
 from __future__ import annotations
 
 import dataclasses
+import re
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
 from . import verilog as verilog_mod
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 VERILOG_DIRNAME = "verilog"
 VERILOGA_DIRNAME = "veriloga"
@@ -165,6 +170,55 @@ def osdi_snippet(project_root: Path, model_file: UserModelFile, module: verilog_
         f"# instance-line syntax your module's own real disciplines/ports\n"
         f"# require.\n"
     )
+
+
+@dataclass
+class CompileCheckResult:
+    ok: bool
+    log: str
+    """Real compiler stdout+stderr, ANSI color codes stripped for
+    clean display in a plain Tk Text widget -- empty on a real, clean
+    pass (both real tools stay silent on success unless the compiler
+    itself prints diagnostics)."""
+
+
+def run_compile_check(model_file: UserModelFile, tool_binary: str, timeout: float = 30.0) -> CompileCheckResult:
+    """Runs a real, quick syntax/elaboration check against
+    *model_file*'s own real, current source on disk -- the same real
+    "does this actually compile" question Cadence's own Verilog/
+    Verilog-A editors answer automatically on every save, run here on
+    demand instead (this project has no in-GUI text editor for a
+    model's own behavioral body to hook a live check into -- editing
+    happens in the user's own external editor; this is the real
+    equivalent trigger point).
+
+    ``"veriloga"``: ``openvaf -D__NGSPICE__ -o <tmp>.osdi <path>`` --
+    the exact same real compile step ``osdi_snippet``'s own recipe
+    above already documents, just actually run here (to a real,
+    disposable temp file, discarded immediately after) instead of only
+    printed for the user to run themselves.
+
+    ``"verilog"``: ``iverilog -t null <path>`` -- Icarus Verilog's own
+    real, documented ``null`` target: parses and elaborates but
+    generates no output file, confirmed live to exit ``0`` on a real,
+    clean parse and non-zero with real, line-numbered errors on
+    stderr otherwise.
+
+    *tool_binary*: the already-resolved real ``openvaf``/``iverilog``
+    path (``eda_tools.check_tool``), matching *model_file.kind* --
+    never re-resolved here."""
+
+    if model_file.kind == "veriloga":
+        with tempfile.TemporaryDirectory(prefix="openpdkcreator_vacheck_") as tmp_dir:
+            out_path = Path(tmp_dir) / f"{model_file.path.stem}.osdi"
+            argv = [tool_binary, "-D__NGSPICE__", "-o", str(out_path), str(model_file.path)]
+            proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    else:
+        argv = [tool_binary, "-t", "null", str(model_file.path)]
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+
+    log = _ANSI_RE.sub("", proc.stdout + proc.stderr)
+    return CompileCheckResult(ok=proc.returncode == 0, log=log)
 
 
 def group_by_cell(

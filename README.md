@@ -4947,6 +4947,62 @@ models, ...), not just read/display layers. Concretely, still open:
      and the substituted result actually ran to completion in real
      ngspice via `pre_osdi`. Full suite: 82 passed, 0 failed.
 
+- **Two real, user-requested Library Manager features: cross-view pin
+  propagation with a real consistency check, and a real compile-check
+  for user Verilog/Verilog-A models.**
+  - `infer_ports_for_cell` (used to seed a newly **Create**d Verilog/
+    Verilog-A/CDL/SPICE/Liberty view with a cell's already-known real
+    pins) used to check only LEF, xschem symbol, and an existing
+    Verilog/Verilog-A module -- now also checks CDL, SPICE, and
+    Liberty (`pdklib/library_index.py`'s new `all_port_lists_for_cell`,
+    the real, shared source both this and the new
+    `check_port_consistency` build on). A new real
+    `_check_and_report_port_consistency` runs automatically right
+    after every real **Create**, comparing every real pin-list source
+    a cell now has against each other and, via a real
+    `messagebox.showwarning`, telling the user exactly which real
+    sources disagree on which real pin names/directions -- silent
+    when everything agrees, matching this tab's own established
+    no-news-is-good-news convention. Verified live: a deliberately
+    inconsistent CDL (`A`:input, `B`:output) vs. Verilog
+    (`A`:output, `B`:input) pair correctly produced both the real
+    seeded Liberty view (from CDL, the higher-priority real source)
+    and a real, precise warning dialog. A real, found-and-fixed bug
+    from the full test suite, not from that live check alone: the
+    first version compared *direction* against a real `veriloga`
+    source too, but `create_new_veriloga_file`'s own real, intentional
+    design declares every port `inout` regardless of its own true
+    direction (a real analog terminal has no directional concept) --
+    so it false-flagged *every* real Verilog-A **Create** from a
+    directional symbol/LEF/CDL source, hanging
+    `test_verilog_veriloga_editors.py` on its own now-unreachable
+    modal warning. Fixed by excluding `veriloga` from direction
+    comparisons (name presence/absence still checked); full suite
+    re-confirmed clean afterward.
+  - Asked directly: "In Cadence, editing a Verilog file automatically
+    compiles it and reports errors -- can we do the same?" This
+    project has no in-GUI text editor for a model's own behavioral
+    body (editing happens in the user's own external editor), so the
+    real equivalent trigger points are **Rescan**/opening the User
+    Models tab (picks up an external edit) and right after **Create**
+    (the "adding" half). `pdklib/user_models.py`'s new
+    `run_compile_check` actually runs the real compiler -- `openvaf
+    -D__NGSPICE__ -o <tmp>.osdi <path>` for Verilog-A (the exact same
+    real recipe `osdi_snippet` already documented but never executed),
+    `iverilog -t null <path>` for plain Verilog (Icarus's own real,
+    confirmed-live syntax/elaboration-only target) -- never guessed,
+    never a new parser. The User Models tab gained a real **Compile**
+    column (refreshed automatically every real `refresh()`) and a
+    **Compile Log** button showing that row's own real, ANSI-stripped
+    compiler output; Library Manager's own **Create** for
+    Verilog/Verilog-A now runs the same real check immediately
+    afterward, warning (only) on a real failure. Verified live, both
+    directions: all 7 real, existing memristor modules report "compiles
+    clean"; a deliberately broken `.va` (an undefined variable
+    reference) correctly showed "compile error" in the tree and the
+    exact real OpenVAF diagnostic (file/line/column, "not found in the
+    current scope") in Compile Log. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

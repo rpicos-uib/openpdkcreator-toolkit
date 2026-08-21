@@ -34,13 +34,28 @@ IHP's own real, documented OpenVAF-compile-then-``osdi``-load
 recipe (``pdklib/user_models.py``'s own ``osdi_snippet``), pointed at the
 selected module -- a real, copy-pasteable two-step wiring recipe, not
 executed or written to disk by this tool.
+
+**Real, automatic compile-check on every refresh** (``pdklib/
+user_models.py``'s own ``run_compile_check``) -- the closest real
+equivalent this project has to Cadence's own "compile on save"
+Verilog/Verilog-A editors: this tool has no in-GUI text editor for a
+model's own behavioral body (editing happens in the user's own
+external editor), so **Rescan**/opening this tab is the real trigger
+point instead. Every real module's own file is actually run through
+``openvaf``/``iverilog`` (not just linted or guessed), and the
+**Compile** column shows the real, current verdict; **Compile Log**
+shows that real run's full stdout/stderr for the one selected row,
+instantly (cached from the last real ``refresh()``, never re-run just
+to view it).
 """
 
 from __future__ import annotations
 
+import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from .. import eda_tools
 from .. import export as export_mod
 from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
@@ -49,11 +64,21 @@ from .port_dialog import edit_ports_dialog
 from .text_dialog import show_text_dialog
 
 
+def _find_tool(tool_id: str) -> eda_tools.Tool | None:
+    return next((t for t in eda_tools.TOOL_REGISTRY if t.id == tool_id), None)
+
+
 class UserModelsView(ttk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
         self.row_by_iid: dict[str, tuple[user_models_mod.UserModelFile, verilog_mod.VerilogModule]] = {}
+        self.compile_results: dict[str, user_models_mod.CompileCheckResult | None] = {}
+        """Real ``run_compile_check`` result per row iid, refreshed
+        every real ``refresh()`` -- ``None`` means the matching real
+        compiler (``openvaf``/``iverilog``) isn't on ``PATH``, told
+        apart from a real pass/fail so **Compile Log** can say which
+        one honestly, not guess."""
 
         self._build()
         self.refresh()
@@ -67,9 +92,9 @@ class UserModelsView(ttk.Frame):
         ttk.Button(top, text="Rescan", command=self.refresh).pack(side="left", padx=(8, 0))
         ttk.Button(top, text="Link All Auto-Matches", command=self._link_all_auto).pack(side="left", padx=(8, 0))
 
-        columns = ("file", "kind", "module", "ports", "linked_cell")
+        columns = ("file", "kind", "module", "ports", "linked_cell", "compile")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", selectmode="extended")
-        widths = {"file": 220, "kind": 70, "module": 160, "ports": 320, "linked_cell": 160}
+        widths = {"file": 220, "kind": 70, "module": 160, "ports": 280, "linked_cell": 140, "compile": 160}
         for col in columns:
             self.tree.heading(col, text=col.replace("_", " ").title())
             self.tree.column(col, width=widths[col], anchor="w")
@@ -91,6 +116,10 @@ class UserModelsView(ttk.Frame):
             form, text="Generate ngspice OSDI Snippet", command=self._generate_osdi, state="disabled",
         )
         self.osdi_button.pack(side="left", padx=(4, 0))
+        self.compile_log_button = ttk.Button(
+            form, text="Compile Log", command=self._show_compile_log, state="disabled",
+        )
+        self.compile_log_button.pack(side="left", padx=(4, 0))
 
         self.status_var = tk.StringVar()
         ttk.Label(self, textvariable=self.status_var, foreground="#666").grid(
@@ -102,6 +131,12 @@ class UserModelsView(ttk.Frame):
         for row in self.tree.get_children():
             self.tree.delete(row)
         self.row_by_iid.clear()
+        self.compile_results.clear()
+
+        openvaf_tool = _find_tool("openvaf")
+        iverilog_tool = _find_tool("iverilog")
+        openvaf_status = eda_tools.check_tool(openvaf_tool) if openvaf_tool is not None else None
+        iverilog_status = eda_tools.check_tool(iverilog_tool) if iverilog_tool is not None else None
 
         link_by_key = {
             (link.file_relpath, link.module_name): link.cell_name for link in self.app.user_model_links
@@ -109,19 +144,33 @@ class UserModelsView(ttk.Frame):
         project_root = self._project_root()
         for model_file in self.app.user_models:
             relpath = user_models_mod.relpath_for(project_root, model_file.path)
+            tool_status = openvaf_status if model_file.kind == "veriloga" else iverilog_status
+            if tool_status is not None and tool_status.found:
+                try:
+                    result = user_models_mod.run_compile_check(model_file, tool_status.path)
+                except subprocess.TimeoutExpired:
+                    result = user_models_mod.CompileCheckResult(ok=False, log="Compiler did not finish within 30s.")
+                compile_text = "compiles clean" if result.ok else "compile error -- see Compile Log"
+            else:
+                result = None
+                tool_name = "openvaf" if model_file.kind == "veriloga" else "iverilog"
+                compile_text = f"({tool_name} not on PATH)"
             for module in model_file.modules:
                 explicit = link_by_key.get((relpath, module.name))
                 linked_text = explicit if explicit else f"(auto: {module.name})"
                 ports_text = ", ".join(f"{p.name}:{p.direction or '?'}" for p in module.ports)
                 iid = f"{relpath}::{module.name}"
                 self.row_by_iid[iid] = (model_file, module)
+                self.compile_results[iid] = result
                 self.tree.insert(
                     "", "end", iid=iid,
-                    values=(relpath, model_file.kind, module.name, ports_text, linked_text),
+                    values=(relpath, model_file.kind, module.name, ports_text, linked_text, compile_text),
                 )
 
         count = sum(len(mf.modules) for mf in self.app.user_models)
-        self.status_var.set(f"{len(self.app.user_models)} real file(s), {count} real module(s).")
+        error_count = sum(1 for r in self.compile_results.values() if r is not None and not r.ok)
+        suffix = f" -- {error_count} real compile error(s)" if error_count else ""
+        self.status_var.set(f"{len(self.app.user_models)} real file(s), {count} real module(s){suffix}.")
         self._on_select()
 
     def _project_root(self):
@@ -140,6 +189,7 @@ class UserModelsView(ttk.Frame):
             self.cell_name_var.set("")
             self.edit_ports_button.configure(state="disabled")
             self.osdi_button.configure(state="disabled")
+            self.compile_log_button.configure(state="disabled")
             return
 
         if len(selection) == 1:
@@ -151,6 +201,9 @@ class UserModelsView(ttk.Frame):
             self.edit_ports_button.configure(state="normal")
             model_file, _module = self.row_by_iid[selection[0]]
             self.osdi_button.configure(state="normal" if model_file.kind == "veriloga" else "disabled")
+            self.compile_log_button.configure(
+                state="normal" if self.compile_results.get(selection[0]) is not None else "disabled"
+            )
         else:
             # Batch mode: don't show one row's own link text as if it
             # applied to all of them; ports/OSDI generation are both
@@ -158,6 +211,7 @@ class UserModelsView(ttk.Frame):
             self.cell_name_var.set("")
             self.edit_ports_button.configure(state="disabled")
             self.osdi_button.configure(state="disabled")
+            self.compile_log_button.configure(state="disabled")
 
     def _save_link(self):
         keys = self._selected_keys()
@@ -233,3 +287,21 @@ class UserModelsView(ttk.Frame):
             messagebox.showerror("Cannot generate OSDI snippet", str(exc), parent=self)
             return
         show_text_dialog(self, f"ngspice OSDI snippet -- {module.name}", snippet)
+
+    def _show_compile_log(self):
+        """Shows the real, already-computed ``run_compile_check``
+        result for the one selected row (refreshed every real
+        ``refresh()`` -- not re-run here, so this is always instant,
+        no matter how slow the real compiler itself is)."""
+
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            return
+        result = self.compile_results.get(selection[0])
+        if result is None:
+            return
+        model_file, module = self.row_by_iid[selection[0]]
+        tool_name = "openvaf" if model_file.kind == "veriloga" else "iverilog"
+        verdict = "compiles clean" if result.ok else "COMPILE ERROR"
+        body = result.log if result.log else "(no output -- a real, clean, silent pass.)"
+        show_text_dialog(self, f"Compile Log ({tool_name}) -- {module.name} [{verdict}]", body)

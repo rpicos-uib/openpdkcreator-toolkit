@@ -726,6 +726,64 @@ class LibraryManagerView(ttk.Frame):
         else:
             self.status_var.set(f"Created {li_mod.VIEW_KIND_LABELS[view_kind]} at {default_path}.")
 
+        if view_kind in ("verilog", "veriloga", "cdl", "spice", "liberty"):
+            self._check_and_report_port_consistency(library, cell)
+        if view_kind in ("verilog", "veriloga"):
+            self._check_and_report_compile(view_kind, default_path)
+
+    def _check_and_report_compile(self, view_kind: str, path: Path):
+        """Real, immediate compile-check right after **Create** writes
+        a new Verilog/Verilog-A skeleton -- the closest real
+        equivalent this project has to Cadence's own compile-on-save,
+        run at the one real point a freshly created file's own content
+        is guaranteed to have just changed (see ``gui/
+        user_models_view.py``'s own docstring for the other real
+        trigger point, **Rescan**, covering files edited externally
+        afterward). Silent on a real, clean pass; a real
+        ``messagebox.showwarning`` on a real compile error, quoting
+        the compiler's own real output directly, never summarized."""
+
+        tool_id = "openvaf" if view_kind == "veriloga" else "iverilog"
+        tool = _find_tool(tool_id)
+        if tool is None:
+            return
+        status = eda_tools.check_tool(tool)
+        if not status.found:
+            return
+        model_file = user_models_mod.UserModelFile(path=path, kind=view_kind)
+        try:
+            result = user_models_mod.run_compile_check(model_file, status.path)
+        except subprocess.TimeoutExpired:
+            return
+        if not result.ok:
+            messagebox.showwarning(
+                "Compile check",
+                f"{path.name} does not compile cleanly with real {tool.name}:\n\n{result.log}",
+                parent=self,
+            )
+
+    def _check_and_report_port_consistency(self, library: str, cell: str):
+        """Real cross-check of every real pin-list source *cell* now
+        has (``li_mod.check_port_consistency``) -- run right after
+        **Create** seeds a new view from an existing one, since that's
+        exactly when a real, previously invisible disagreement between
+        two *older* real views becomes worth surfacing (the new view
+        only ever inherits from one of them; the others might quietly
+        disagree). Silent when consistent -- only a real popup, never a
+        dialog on the happy path, matching this tab's own established
+        no-news-is-good-news convention for a real, successful
+        **Create**."""
+
+        problems = li_mod.check_port_consistency(self.app.pdk_root, self.project_root, library, cell)
+        if not problems:
+            return
+        messagebox.showwarning(
+            "Pin consistency",
+            f"{cell}: real pin-list disagreement between existing views:\n\n"
+            + "\n".join(f"- {p}" for p in problems),
+            parent=self,
+        )
+
     def _add_view(self, view_kind: str):
         """Registers a real, existing file for this view -- unlike
         **Create**, works for *every* view kind (including the six

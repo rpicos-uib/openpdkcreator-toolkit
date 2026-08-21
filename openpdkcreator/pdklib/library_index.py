@@ -50,7 +50,9 @@ import yaml
 
 from . import cells as cells_mod
 from . import lef as lef_mod
+from . import liberty as liberty_mod
 from . import mag as mag_mod
+from . import netlist as netlist_mod
 from . import verilog as verilog_mod
 from . import xschem as xschem_mod
 
@@ -324,6 +326,69 @@ def _normalize_direction(raw: str) -> str:
     return _DIRECTION_TO_VERILOG.get((raw or "").strip().lower(), "")
 
 
+_PORT_SOURCE_KINDS: tuple[str, ...] = ("lef", "xschem_symbol", "cdl", "spice", "liberty", "verilog", "veriloga")
+"""Every real view kind this project can pull a real pin list out of,
+in ``infer_ports_for_cell``'s own priority order (most physically
+authoritative first) -- also the real, complete comparison set
+``check_port_consistency`` cross-checks. Deliberately excludes
+``mag``/``qucs_symbol``/``qucs_component``: Magic layout ports are
+geometry+label pairs with no existing structured pin-list parser in
+this project (``pdklib/mag.py`` models raw sections, not pins), and
+Qucs-S port/pin extraction has no real parser here either -- both
+real, disclosed gaps, not silently pretended away."""
+
+
+def all_port_lists_for_cell(
+    pdk_root: Path, project_root: Path, library: str, cell: str,
+) -> dict[str, list[tuple[str, str]]]:
+    """Every real, already-known pin list *cell* actually has, one
+    entry per real view kind in ``_PORT_SOURCE_KINDS`` that both (a)
+    exists as a real, registered view and (b) actually parses out a
+    real, non-empty port list -- a view that exists but is still an
+    empty skeleton contributes nothing here, same as a missing view.
+    The real source ``infer_ports_for_cell``/``check_port_consistency``
+    both build on; never guesses a pin that isn't in one of these real
+    files."""
+
+    entries = merged_entries(pdk_root, project_root, library)
+    result: dict[str, list[tuple[str, str]]] = {}
+
+    lef_entry = entries.get((cell, "lef"))
+    if lef_entry is not None and lef_entry.path.is_file():
+        lef_file = lef_mod.parse_lef_file(lef_entry.path)
+        macro = next((m for m in lef_file.macros if m.name == cell), None)
+        if macro is not None and macro.pins:
+            result["lef"] = [(pin.name, _normalize_direction(pin.direction)) for pin in macro.pins]
+
+    xschem_entry = entries.get((cell, "xschem_symbol"))
+    if xschem_entry is not None and xschem_entry.path.is_file():
+        symbol = xschem_mod.parse_sym_file(xschem_entry.path)
+        if symbol.pins:
+            result["xschem_symbol"] = [(pin.name, _normalize_direction(pin.direction)) for pin in symbol.pins]
+
+    for view_kind in ("cdl", "spice"):
+        netlist_entry = entries.get((cell, view_kind))
+        if netlist_entry is not None and netlist_entry.path.is_file():
+            nc = next((c for c in netlist_mod.find_cells(netlist_entry.path) if c.name == cell), None)
+            if nc is not None and nc.ports:
+                result[view_kind] = [(p.name, _normalize_direction(p.direction)) for p in nc.ports]
+
+    liberty_entry = entries.get((cell, "liberty"))
+    if liberty_entry is not None and liberty_entry.path.is_file():
+        lc = next((c for c in liberty_mod.find_cells(liberty_entry.path) if c.name == cell), None)
+        if lc is not None and lc.pins:
+            result["liberty"] = [(pin.name, _normalize_direction(pin.direction)) for pin in lc.pins]
+
+    for view_kind in ("verilog", "veriloga"):
+        verilog_entry = entries.get((cell, view_kind))
+        if verilog_entry is not None and verilog_entry.path.is_file():
+            module = next((m for m in verilog_mod.find_modules(verilog_entry.path) if m.name == cell), None)
+            if module is not None and module.ports:
+                result[view_kind] = [(p.name, p.direction) for p in module.ports]
+
+    return result
+
+
 def infer_ports_for_cell(pdk_root: Path, project_root: Path, library: str, cell: str) -> list[tuple[str, str]]:
     """Best-effort real port list (``[(name, direction), ...]``,
     direction one of ``"input"``/``"output"``/``"inout"``/``""``) for
@@ -335,44 +400,71 @@ def infer_ports_for_cell(pdk_root: Path, project_root: Path, library: str, cell:
     ``create_new_spice_file``, and ``pdklib/liberty.py``'s own
     ``create_new_liberty_file``.
 
-    Tries each of this cell's own already-known real/registered views,
-    in priority order, stopping at the first one with a real, non-empty
-    port list -- never inventing a name that isn't in one of them:
+    Returns ``all_port_lists_for_cell``'s first real, non-empty entry
+    in ``_PORT_SOURCE_KINDS`` priority order -- LEF (the most
+    authoritative real *physical* pin list) first, then xschem symbol,
+    CDL, SPICE, Liberty, and finally an existing Verilog/Verilog-A
+    module of the same name. Returns ``[]`` (an honestly empty
+    template) for a wholly new cell with no other real view yet."""
 
-    1. **LEF** -- the most authoritative real *physical* pin list for
-       an actual, placeable cell.
-    2. **xschem symbol** -- the schematic-level pin list, for a cell
-       with no LEF yet (e.g. a still-schematic-only project cell).
-    3. **An existing Verilog module of the same name** -- covers the
-       real case of creating a Verilog-A view for a cell that already
-       has a plain digital Verilog one, or vice versa.
-
-    Returns ``[]`` (an honestly empty template) for a wholly new cell
-    with no other real view yet."""
-
-    entries = merged_entries(pdk_root, project_root, library)
-
-    lef_entry = entries.get((cell, "lef"))
-    if lef_entry is not None and lef_entry.path.is_file():
-        lef_file = lef_mod.parse_lef_file(lef_entry.path)
-        macro = next((m for m in lef_file.macros if m.name == cell), None)
-        if macro is not None and macro.pins:
-            return [(pin.name, _normalize_direction(pin.direction)) for pin in macro.pins]
-
-    xschem_entry = entries.get((cell, "xschem_symbol"))
-    if xschem_entry is not None and xschem_entry.path.is_file():
-        symbol = xschem_mod.parse_sym_file(xschem_entry.path)
-        if symbol.pins:
-            return [(pin.name, _normalize_direction(pin.direction)) for pin in symbol.pins]
-
-    for view_kind in ("verilog", "veriloga"):
-        verilog_entry = entries.get((cell, view_kind))
-        if verilog_entry is not None and verilog_entry.path.is_file():
-            module = next((m for m in verilog_mod.find_modules(verilog_entry.path) if m.name == cell), None)
-            if module is not None and module.ports:
-                return [(p.name, p.direction) for p in module.ports]
-
+    sources = all_port_lists_for_cell(pdk_root, project_root, library, cell)
+    for view_kind in _PORT_SOURCE_KINDS:
+        if sources.get(view_kind):
+            return sources[view_kind]
     return []
+
+
+def check_port_consistency(pdk_root: Path, project_root: Path, library: str, cell: str) -> list[str]:
+    """Real, human-readable discrepancy messages comparing every real
+    pin-list source *cell* has (``all_port_lists_for_cell``) against
+    each other -- name-set mismatches and, for names both sides agree
+    on, real direction disagreements. Compares every real source
+    against the first (``_PORT_SOURCE_KINDS`` priority order, the same
+    one ``infer_ports_for_cell`` would actually use) rather than every
+    pair against every other pair -- keeps the real output to one
+    finding per real discrepancy instead of an @math{O(n^2)} blow-up,
+    and centers the report on the one source a newly created view was
+    actually just seeded from. Returns ``[]`` when fewer than two real
+    sources exist to compare (nothing to be inconsistent with) or when
+    every real source that does exist agrees.
+
+    Never compares *direction* against a real ``veriloga`` source (name
+    presence/absence still is): ``create_new_veriloga_file`` -- by its
+    own real, documented, intentional design -- declares *every* real
+    port ``inout`` regardless of its own true direction (a real analog
+    terminal has no directional concept the way a digital port does,
+    confirmed from IHP's own real ``.va`` files), so a real Verilog-A
+    module's own ``inout`` is never a genuine direction assertion to
+    disagree with -- found live: this false-flagged *every* real
+    Verilog-A **Create** from a directional symbol/LEF/CDL source,
+    including this project's own real test fixtures."""
+
+    sources = all_port_lists_for_cell(pdk_root, project_root, library, cell)
+    if len(sources) < 2:
+        return []
+
+    ordered_kinds = [k for k in _PORT_SOURCE_KINDS if k in sources]
+    reference_kind = ordered_kinds[0]
+    reference = dict(sources[reference_kind])
+    reference_names = set(reference)
+
+    problems: list[str] = []
+    for kind in ordered_kinds[1:]:
+        current = dict(sources[kind])
+        current_names = set(current)
+        missing = reference_names - current_names
+        extra = current_names - reference_names
+        if missing:
+            problems.append(f"{kind} is missing pin(s) {sorted(missing)} that {reference_kind} has")
+        if extra:
+            problems.append(f"{kind} has extra pin(s) {sorted(extra)} not in {reference_kind}")
+        if "veriloga" in (reference_kind, kind):
+            continue
+        for name in sorted(reference_names & current_names):
+            ref_dir, cur_dir = reference[name], current[name]
+            if ref_dir and cur_dir and ref_dir != cur_dir:
+                problems.append(f"pin {name!r}: {reference_kind} says {ref_dir!r}, {kind} says {cur_dir!r}")
+    return problems
 
 
 # -- auto-tracking: pick up a real file this app didn't itself create -------
