@@ -198,6 +198,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
+from ..pdklib import drc_bridge
 from ..pdklib import magic_tech as magic_tech_mod
 from .file_view_dialog import view_file_dialog
 from .list_filter import build_filter_row, matches
@@ -207,9 +208,15 @@ OBSOLETE_VALUES = ("", "yes")
 
 
 class MagicTechView(ttk.Frame):
-    def __init__(self, parent, pdk_root: Path):
+    def __init__(self, parent, pdk_root: Path, app=None):
         super().__init__(parent)
         self.pdk_root = pdk_root
+        self.app = app
+        """The owning ``gui/app.py`` ``App`` -- only needed for **Copy
+        to DRC Rules** (``drc_bridge.py``'s own real bridge into
+        ``app.project.layers``/``design_rules`` and ``app.rules_view``'s
+        own real refresh), so ``None`` is accepted for a standalone/test
+        instantiation that never clicks that one button."""
         self.technologies: dict[str, magic_tech_mod.MagicTechnology] = {}
         self.current_type: magic_tech_mod.TypeEntry | None = None
         self._suspend_trace = False
@@ -342,9 +349,12 @@ class MagicTechView(ttk.Frame):
         frame.rowconfigure(1, weight=1)
         frame.rowconfigure(3, weight=1)
 
-        ttk.Label(frame, text="width/spacing/maxwidth:").grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
+        checks_header = ttk.Frame(frame)
+        checks_header.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ttk.Label(checks_header, text="width/spacing/maxwidth:").pack(side="left")
+        ttk.Button(
+            checks_header, text="Copy to DRC Rules", command=self._copy_drc_check_to_rule,
+        ).pack(side="right")
         checks_frame = ttk.Frame(frame)
         checks_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
         self.drc_checks_editor = SimpleListEditor(
@@ -358,10 +368,20 @@ class MagicTechView(ttk.Frame):
             entry_label="DRC Check",
             help_text="Real drc-section 'width|spacing|maxwidth LAYERS VALUE [mode] \"MESSAGE\"' statement. "
                       "'Layers' is one comma-separated real type-list for width/maxwidth, two ' | '-separated "
-                      "lists for spacing. 'Mode/Exceptions' is the real, raw mode/exception-list text between "
+                      "lists for spacing -- typed here directly, or picked via 'Select Layers...' below the "
+                      "Layers field (a real multi-select against this technology's own current, real Type "
+                      "names -- Ctrl+click to union several onto one side; one list box per real side, two "
+                      "for spacing). "
+                      "'Mode/Exceptions' is the real, raw mode/exception-list text between "
                       "the value and the message (e.g. 'touching_ok') -- edited raw and positional, argument "
                       "semantics aren't asserted. A real rule ID lives inside the message's own trailing "
-                      "'(...)' -- edit the message directly to change it.",
+                      "'(...)' -- edit the message directly to change it. 'Copy to DRC Rules' above sends the "
+                      "selected row into the real, unrelated KLayout DRC-deck rule model (Technology > DRC "
+                      "Rules) when -- and only when -- the two real dialects actually agree on what the check "
+                      "means; see that button's own real coherence-check messages for anything it won't copy.",
+            combo_fields={"check_type": (magic_tech_mod.DRC_CHECK_TYPES, True)},
+            field_buttons={"layers_text": ("Select Layers...", self._select_drc_check_layers)},
+            help_popup=True,
         )
         self.drc_checks_editor.pack(fill="both", expand=True)
 
@@ -373,6 +393,8 @@ class MagicTechView(ttk.Frame):
             lambda: magic_tech_mod.MagicAngleCheck(layer="newlayer", degrees=90, message="new message"),
             entry_label="Angle Check",
             help_text="Real drc-section 'angles LAYER DEGREES \"MESSAGE\"' statement.",
+            combo_fields={"layer": ((), False)},
+            help_popup=True,
         )
         self.drc_angles_editor.pack(fill="both", expand=True)
 
@@ -390,6 +412,8 @@ class MagicTechView(ttk.Frame):
                       "positional (argument semantics vary too much per directive to assert, same 'don't guess "
                       "further' discipline as Compose/Extract Misc). A trailing quoted message, when present, "
                       "is just more whitespace-split tokens in Args -- edited as one plain string.",
+            combo_fields={"directive": (magic_tech_mod.DRC_MISC_DIRECTIVES, True)},
+            help_popup=True,
         )
         self.drc_misc_editor.pack(fill="both", expand=True)
 
@@ -604,6 +628,124 @@ class MagicTechView(ttk.Frame):
             foreground="#666", wraplength=260, justify="left",
         ).grid(row=form_row, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
+    def _select_drc_check_layers(self):
+        """A real multi-select popup for the selected check's own
+        ``layer_args`` -- one real ``tk.Listbox`` (``selectmode=
+        "extended"``, real Ctrl+click/Shift+click multi-select) per
+        real side (one for ``width``/``maxwidth``, two for
+        ``spacing``), listing this technology's own current, real
+        Type names, pre-selecting whichever ones this check's own
+        ``layer_args`` already names on that side. **Apply** writes
+        the selection straight back as ``layer_args`` -- a real,
+        comma-joined union per side when more than one real type is
+        Ctrl+click-selected, exactly ``layers_text``'s own existing
+        real format, just built from a real, closed list instead of
+        hand-typed. A real type no longer among this technology's own
+        current Types (renamed/removed since this check was last
+        edited) still shows, pre-selected, as its own extra real row
+        -- real, current state is never silently dropped just because
+        this popup can't offer it as a fresh pick."""
+
+        self.drc_checks_editor.commit_pending_edits()
+        check = self.drc_checks_editor.current_entry
+        if check is None:
+            messagebox.showinfo("Select Layers", "Select a width/spacing/maxwidth check first.", parent=self)
+            return
+        tech = self._current_tech()
+        type_names = [t.canonical_name for t in tech.types] if tech is not None else []
+
+        num_sides = 2 if check.check_type == "spacing" else 1
+        side_labels = ("Layer 1", "Layer 2") if num_sides == 2 else ("Layers",)
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Select Layers")
+        dialog.transient(self.winfo_toplevel())
+        dialog.geometry("420x360" if num_sides == 1 else "640x360")
+        dialog.minsize(240, 200)
+        dialog.resizable(True, True)
+        dialog.rowconfigure(0, weight=1)
+
+        listboxes: list[tk.Listbox] = []
+        for i in range(num_sides):
+            dialog.columnconfigure(i, weight=1)
+            col_frame = ttk.Frame(dialog)
+            col_frame.grid(row=0, column=i, padx=8, pady=8, sticky="nsew")
+            ttk.Label(col_frame, text=side_labels[i]).pack(anchor="w")
+            existing = check.layer_args[i] if i < len(check.layer_args) else []
+            height = min(max(len(type_names) + len(existing), 4), 15)
+            listbox = tk.Listbox(col_frame, selectmode="extended", exportselection=False, height=height)
+            listbox.pack(fill="both", expand=True)
+            for name in type_names:
+                listbox.insert("end", name)
+            for idx, name in enumerate(type_names):
+                if name in existing:
+                    listbox.selection_set(idx)
+            for name in existing:
+                if name not in type_names:
+                    listbox.insert("end", name)
+                    listbox.selection_set(listbox.size() - 1)
+            listboxes.append(listbox)
+
+        def _apply():
+            new_args = []
+            for listbox in listboxes:
+                selected = [listbox.get(i) for i in listbox.curselection()]
+                if not selected:
+                    messagebox.showwarning(
+                        "Select Layers", "Each side needs at least one real type selected.", parent=dialog,
+                    )
+                    return
+                new_args.append(selected)
+            check.layer_args = new_args
+            self.drc_checks_editor.refresh_current_row()
+            dialog.destroy()
+
+        button_row = ttk.Frame(dialog)
+        button_row.grid(row=1, column=0, columnspan=num_sides, pady=(0, 8))
+        ttk.Button(button_row, text="Apply", command=_apply).pack(side="left")
+        ttk.Button(button_row, text="Cancel", command=dialog.destroy).pack(side="left", padx=(6, 0))
+
+        dialog.grab_set()
+        dialog.wait_window()
+
+    def _copy_drc_check_to_rule(self):
+        """Sends the selected width/spacing check into the real,
+        unrelated KLayout DRC-deck rule model (Technology > DRC Rules)
+        -- see ``pdklib/drc_bridge.py``'s own docstring for exactly
+        which checks that real bridge can and can't cross (only a
+        single-Magic-type ``width``, or a true-self ``spacing``, ever
+        qualify), and why. Always checks real coherence first --
+        resolving the Magic type through this technology's own real
+        ``cifoutput`` mapping against this project's own registered
+        Layers -- and only ever writes a real ``DesignRule`` when that
+        check passes clean; every real mismatch found along the way is
+        reported back, whether or not it blocked the copy."""
+
+        if self.app is None:
+            messagebox.showerror("Copy to DRC Rules", "No owning app -- can't reach DRC Rules.", parent=self)
+            return
+        self.drc_checks_editor.commit_pending_edits()
+        check = self.drc_checks_editor.current_entry
+        if check is None:
+            messagebox.showinfo("Copy to DRC Rules", "Select a width/spacing check first.", parent=self)
+            return
+        tech = self._current_tech()
+        if tech is None:
+            return
+
+        result = drc_bridge.copy_magic_drc_check_to_rule(
+            check, tech.cif_layers, self.app.project.layers, self.app.project.design_rules,
+        )
+        if result.rule is None:
+            messagebox.showwarning("Copy to DRC Rules -- not copied", "\n\n".join(result.messages), parent=self)
+            return
+        self.app.project.design_rules.append(result.rule)
+        self.app.rules_view.refresh()
+        summary = f"Copied as DRC Rules entry '{result.rule.rule_id}'."
+        if result.messages:
+            summary += "\n\n" + "\n\n".join(result.messages)
+        messagebox.showinfo("Copy to DRC Rules", summary, parent=self)
+
     def _view_file(self):
         tech = self.technologies.get(self.tech_var.get())
         if tech is not None:
@@ -811,6 +953,7 @@ class MagicTechView(ttk.Frame):
         self.extract_resist_editor.set_entries(tech.extract_resist)
         self.extract_coeff_editor.set_entries(tech.extract_cap_coefficients)
         self.extract_devices_editor.set_entries(tech.extract_devices)
+        self.drc_angles_editor.combo_widgets["layer"]["values"] = [t.canonical_name for t in tech.types]
         self.drc_angles_editor.set_entries(tech.drc_angle_checks)
         self.drc_checks_editor.set_entries(tech.drc_checks)
         self.drc_misc_editor.set_entries(tech.drc_misc)

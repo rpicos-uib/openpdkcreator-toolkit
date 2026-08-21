@@ -1002,7 +1002,7 @@ class App(ttk.Frame):
 
         magic_tech_frame = ttk.Frame(self.technology_notebook)
         self.technology_notebook.add(magic_tech_frame, text="Magic Tech")
-        self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root)
+        self.magic_tech_view = MagicTechView(magic_tech_frame, self.pdk_root, self)
         self.magic_tech_view.pack(fill="both", expand=True)
 
         rules_frame = ttk.Frame(self.technology_notebook)

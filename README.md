@@ -5102,6 +5102,134 @@ models, ...), not just read/display layers. Concretely, still open:
   "downloaded PDK file... gitignored" wording; the memristor project's
   own real `.tech` file kept its correct "project-owned... tracked,
   committed" wording throughout. Full suite: 82 passed, 0 failed.
+- **Asked what actually distinguishes Magic Tech's own "DRC (Magic)"
+  sub-tab from Technology > DRC Rules, then "can we unify this?"** --
+  answer, checked before building anything: no, not fully. They're two
+  genuinely different real rule engines, not two views of the same
+  data -- Magic's own `width`/`spacing`/`maxwidth` statements reference
+  Magic *type* names (which can union several types on one side) and
+  can express a real *different*-layer separation (`spacing LAYER1
+  LAYER2`), while DRC Rules' own `min_width`/`min_spacing` reference
+  this project's own named `Layer` (one GDS layer/datatype) and
+  `min_spacing` only ever checks one real layer against itself
+  (KLayout's `.space()`) -- no representation for a real cross-layer
+  separation at all. `maxwidth`/`angles`/the 13-directive misc bucket
+  have no matching `check_type` in `schema.CHECK_TYPES` either.
+  Built the real, narrower thing that *is* coherent instead: new
+  `pdklib/drc_bridge.py`'s `copy_magic_drc_check_to_rule` -- checks
+  real coherence first, only ever writes a `DesignRule` when a
+  single-Magic-type `width` or a true-self `spacing` resolves
+  unambiguously, and reports every real mismatch either way (an
+  ineligible check_type, a multi-type union, a different-layer
+  spacing, an unresolvable/ambiguous GDS mapping, or an exact
+  duplicate already present) rather than guessing past one. A real
+  mode/exception filler (e.g. `touching_ok`) doesn't block -- reported
+  as an advisory note since KLayout has no way to represent it. Wired
+  into `gui/magic_tech_view.py` as a **Copy to DRC Rules** button next
+  to the width/spacing/maxwidth editor.
+  **A real, found-live bug surfaced while building the resolution
+  path**: `pdklib/magic_tech.py`'s own cifoutput parser silently
+  discarded the Magic-type token on a real `layer NAME TYPE ...`
+  block-start line (e.g. `layer BE_Au be_au`) -- `CifOutputLayerMapping`
+  only ever kept the CIF/GDS-side name (`BE_Au`), confirmed by
+  `pdklib/reconcile.py`'s own docstring ("keyed by Magic CIF layer
+  name"), never the Magic type. That made "resolve a Magic type to its
+  own real GDS layer/datatype" impossible for *any* real project, not
+  just this one. Fixed with a new `CifOutputLayerMapping.recipe_types`
+  field, populated only for the real, bare pass-through case (a
+  `calma` line with nothing but the layer-start line before it --
+  `()` whenever a real geometry recipe, e.g. `and-not`/`shrink`, sits
+  in between, since that's still deliberately unmodeled). Verified
+  against the real, live IHP cifoutput deck: 38 of 138 real entries
+  are genuine pass-throughs (`DIGITALID -> digisub`, `EMITTER ->
+  nec,gec`, ...), the rest correctly left unresolved; no-edit export
+  stays byte-identical (`tests/test_cifoutput_recipe_types.py`, new).
+- **Asked for real selectors wherever a DRC (Magic) field's own real
+  values are genuinely closed, plus a real multi-select for Layers
+  ("Ctrl+click for multiple, keeping the correct string union").**
+  `gui/simple_list_editor.py`'s `SimpleListEditor` gained `combo_fields`
+  (a field renders as a `ttk.Combobox` instead of a plain `ttk.Entry`
+  -- `check_type`/`directive` read-only against `magic_tech.py`'s own
+  new `DRC_CHECK_TYPES`/`DRC_MISC_DIRECTIVES` real enums; angles' own
+  `layer` field editable, refreshed live from this technology's own
+  current real Type names, since the real choice it suggests can
+  itself be mid-edit). For the Layers field itself (a real, compound
+  `width`/`maxwidth` single-group or `spacing` two-group string, not a
+  single value a combobox can hold) -- a real **Select Layers...**
+  popup instead: one `tk.Listbox` per real side (`selectmode=
+  "extended"`, real Ctrl+click/Shift+click), pre-selecting whatever
+  the check's own `layer_args` already names, **Apply** writing the
+  selection back as the correct comma-joined union per side (unioning
+  two real types onto one `width` side, or two independent per-side
+  unions for `spacing`), refusing if a side ends up empty. New
+  `SimpleListEditor.field_buttons`/`refresh_current_row()` generalize
+  this ("a button placed directly below one field's own row" / "resync
+  the form and this row's own tree display after a caller edited a
+  field directly, bypassing this editor's own text widget entirely").
+  Verified live, driven through the real, live GUI, not just the data
+  model: a two-type union on a real `width` check, two independent
+  per-side unions on a real `spacing` check, and a real empty-side
+  refusal (`tests/test_drc_layers_selector.py`, new).
+- **Follow-up polish, three real asks at once: make the multi-select
+  dialog resizable with the window, move its own trigger button below
+  Layers instead of the header, and turn this section's long inline
+  help text into a real popup.** The Select Layers dialog now sets
+  `resizable(True, True)`, a real initial geometry (420x360, or
+  640x360 for spacing's two real sides), a `minsize`, and real grid
+  weight on its row and each side's column, so every `Listbox` actually
+  stretches with the window instead of staying a fixed size. The
+  trigger button moved from the checks_frame header into
+  `field_buttons` (see entry above), so it now renders directly under
+  the real Layers row, not a sibling elsewhere on screen.
+  `SimpleListEditor` gained `help_popup=True`: the same real
+  always-visible wrapped label a caller's `help_text` used to render as
+  becomes a real **Help** button (`messagebox.showinfo`) instead --
+  applied to all three DRC (Magic) editors (checks/angles/misc) as
+  asked, every other real `SimpleListEditor` domain elsewhere keeps its
+  existing always-visible label unless it opts in too. Verified live:
+  Help buttons show the right real title/text per editor, exactly one
+  real Select Layers button and it lives inside the checks form (not a
+  header sibling), and the dialog reports real `resizable() == (1, 1)`
+  with real row/column weight (`tests/test_drc_ui_polish.py`, new).
+- **Asked to fill openMemristorPDK's own empty Magic Tech tabs, "for
+  instance, add a via between the top and bottom metal layers."**
+  Added a real `contact` entry, `via1 be_au te_au`, following IHP's own
+  confirmed real convention (`via1 metal1 metal2`, `via2 metal2
+  metal3`, ...) -- a real via between the "metal1"-equivalent (`be_au`)
+  and "metal2"-equivalent (`te_au`) layers, for real interconnect/
+  routing elsewhere on the chip, not through the active device stack.
+  Checked IHP's own real `connect` section first to confirm a contact
+  needs no separate cross-layer `connect` rule -- Magic derives the
+  real electrical connection from the geometric overlap itself.
+  Asked again to fill Aliases/Compose too ("whatever you find
+  reasonable as an example"): `aliases` gained `be_au -> m1`/`te_au ->
+  m2` (matching the metal1/metal2-style convention the Styles section
+  already establishes); `compose` gained `active_tio2 = be_au AND
+  mem_tio2`, the real bottom-electrode/oxide overlap that is the
+  actual switching interface of the primary `memristor_tio2_au`
+  variant, mirroring IHP's own real `nfet = poly AND ndiff` pattern
+  (not yet wired into `extract`/DRC, flagged as illustrative rather
+  than load-bearing). Left genuinely empty, not fabricated: nothing
+  else in this project's own real `extract`/DRC logic would consume a
+  second compose'd type, and this from-scratch project's own types
+  have no real alternate names left to alias.
+  **The same real bug, found a sixth time**: `saves/openmemristorpdk.yaml`
+  carried a stale, explicit `openmemristorpdk: []` override for
+  `magic_contacts`/`magic_aliases`/`magic_compose` (on top of the three
+  already found and fixed for the DRC-bridge work above --
+  `magic_drc_checks`/`magic_drc_angle_checks`/`magic_cif_layers`) --
+  each one silently shadowing this project's own real, freshly-parsed
+  `.tech` content on every load, `gui/app.py`'s own `load()` applying
+  a saved override unconditionally whenever the key is present, real
+  or stale. Removed each stale key outright (not replaced with an
+  empty value, which YAML would parse as `None` and crash the same
+  `.items()` call) rather than patching the general "which one wins"
+  mechanism, out of scope for this pass. Verified live, end-to-end,
+  for every one of these six real domains: parses correctly standalone
+  *and* shows up correctly through a real, full `app.load()`, not
+  shadowed (`tests/test_magic_contact_via.py`,
+  `tests/test_magic_aliases_compose.py`, new). Full suite: 89 passed,
+  0 failed.
 
 ## About Us
 

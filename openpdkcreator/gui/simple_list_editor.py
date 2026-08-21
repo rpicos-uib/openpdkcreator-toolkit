@@ -22,12 +22,27 @@ real geometry recipe leading up to it, which this project doesn't
 model or author). Hides the New/Delete buttons entirely rather than
 leaving them present but broken; *new_entry_factory* is unused and may
 be ``None`` in this mode.
-"""
+
+**``combo_fields`` (new)**: a field whose own real values are genuinely
+limited to a known, closed set (Magic Tech's own ``check_type``/
+``directive`` keywords -- confirmed exhaustive against
+``pdklib/magic_tech.py``'s own parser -- or a real, dynamic Magic type
+name) gets a ``ttk.Combobox`` here instead of a plain ``ttk.Entry``,
+the same "don't make the user retype something this project already
+knows the real choices for" a hand-typed field otherwise risks a
+silent typo on. ``{field: (values, readonly)}`` -- *values* a static
+tuple for a real fixed keyword enum, or left empty and refreshed later
+via ``combo_widgets[field]["values"] = ...`` for a real, dynamic list
+(e.g. this technology's own current real Type names, which can change
+between refreshes); *readonly* ``True`` only for a real, truly closed
+enum with no other legal value ever -- a dynamic list stays editable
+(``state="normal"``) since the real choice it suggests can itself be
+mid-edit or not created yet."""
 
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import Callable
 
 from .list_filter import build_filter_row, matches
@@ -42,14 +57,40 @@ class SimpleListEditor(ttk.Frame):
         entry_label: str = "Entry",
         help_text: str = "",
         allow_new_delete: bool = True,
+        combo_fields: dict[str, tuple[tuple[str, ...], bool]] | None = None,
+        field_buttons: dict[str, tuple[str, Callable[[], None]]] | None = None,
+        help_popup: bool = False,
     ):
         """*columns*: (field, label, tree_column_width) -- also the
-        real form field order, one plain ``ttk.Entry`` per field, in
-        this same order."""
+        real form field order, one plain ``ttk.Entry`` per field
+        (or a ``ttk.Combobox``, for a field named in *combo_fields*
+        -- see this class's own docstring), in this same order.
+
+        *field_buttons* (new): ``{field: (button_text, command)}`` --
+        a real button placed directly below that one field's own row
+        (pushing every field after it down by one row), for a field
+        whose real editing needs more than a single-line widget can
+        offer (introduced for the DRC-checks Layers field's own real
+        multi-select popup, ``magic_tech_view.py``'s own
+        ``_select_drc_check_layers``) -- the field itself stays a
+        plain ``ttk.Entry``/``ttk.Combobox``, still hand-editable, the
+        button is an additional real way in, not a replacement.
+
+        *help_popup* (new): when true, *help_text* renders as a real
+        **Help** button (a modal ``messagebox.showinfo``) instead of
+        an always-visible wrapped label -- for a domain whose real
+        help text is long enough to crowd the form (DRC (Magic)'s own
+        three editors); every other real caller keeps the original,
+        always-visible label unless it opts in."""
         super().__init__(parent)
         self.columns = columns
         self.new_entry_factory = new_entry_factory
         self.entry_label = entry_label
+        self.combo_fields = combo_fields or {}
+        self.combo_widgets: dict[str, ttk.Combobox] = {}
+        self.field_buttons = field_buttons or {}
+        self.help_text = help_text
+        self.help_popup = help_popup
 
         self.entries: list | None = None
         self.current_entry = None
@@ -83,17 +124,38 @@ class SimpleListEditor(ttk.Frame):
         right.columnconfigure(1, weight=1)
 
         self.field_vars: dict[str, tk.StringVar] = {}
-        for row, (field, label, _width) in enumerate(columns):
-            ttk.Label(right, text=label).grid(row=row, column=0, sticky="w", pady=2)
+        form_row = 0
+        for field, label, _width in columns:
+            ttk.Label(right, text=label).grid(row=form_row, column=0, sticky="w", pady=2)
             var = tk.StringVar()
             var.trace_add("write", self._on_field_changed)
-            ttk.Entry(right, textvariable=var).grid(row=row, column=1, sticky="ew", pady=2)
+            if field in self.combo_fields:
+                values, readonly = self.combo_fields[field]
+                widget = ttk.Combobox(
+                    right, textvariable=var, values=values, state="readonly" if readonly else "normal",
+                )
+                self.combo_widgets[field] = widget
+            else:
+                widget = ttk.Entry(right, textvariable=var)
+            widget.grid(row=form_row, column=1, sticky="ew", pady=2)
             self.field_vars[field] = var
+            form_row += 1
+            if field in self.field_buttons:
+                button_text, command = self.field_buttons[field]
+                ttk.Button(right, text=button_text, command=command).grid(
+                    row=form_row, column=1, sticky="w", pady=(0, 4)
+                )
+                form_row += 1
 
         if help_text:
-            ttk.Label(right, text=help_text, foreground="#666", wraplength=260, justify="left").grid(
-                row=len(columns), column=0, columnspan=2, sticky="w", pady=(10, 0)
-            )
+            if help_popup:
+                ttk.Button(right, text="Help", command=self._show_help).grid(
+                    row=form_row, column=0, sticky="w", pady=(10, 0)
+                )
+            else:
+                ttk.Label(right, text=help_text, foreground="#666", wraplength=260, justify="left").grid(
+                    row=form_row, column=0, columnspan=2, sticky="w", pady=(10, 0)
+                )
 
     # -- public API ---------------------------------------------------------
 
@@ -104,7 +166,27 @@ class SimpleListEditor(ttk.Frame):
     def commit_pending_edits(self):
         self._commit_form()
 
+    def refresh_current_row(self):
+        """Re-syncs the form and this row's own tree display from
+        ``current_entry``'s real, current attribute values -- for a
+        caller that edited an entry's own field(s) directly (bypassing
+        ``field_vars``/its own text-entry widget entirely, e.g. a real
+        multi-select popup writing straight into a list field this
+        generic editor has no widget for), so both stay in step with
+        that real edit."""
+
+        entry = self.current_entry
+        if entry is None:
+            return
+        self._load_into_form(entry)
+        iid = self._iid(entry)
+        if self.tree.exists(iid):
+            self.tree.item(iid, values=self._row_values(entry))
+
     # -- internals ------------------------------------------------------------
+
+    def _show_help(self):
+        messagebox.showinfo(f"{self.entry_label} Help", self.help_text, parent=self)
 
     @staticmethod
     def _iid(entry) -> str:

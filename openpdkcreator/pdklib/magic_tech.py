@@ -149,7 +149,7 @@ _ALL_KNOWN_SECTIONS = _TABULAR_SECTIONS + (
 
 _SECTION_START_RE = re.compile(r"^(" + "|".join(_ALL_KNOWN_SECTIONS) + r")\s*$")
 _INCLUDE_RE = re.compile(r"^include\s+(\S+)\s*$")
-_LAYER_BLOCK_START_RE = re.compile(r"^\s*(?:layer|templayer)\s+(\S+)")
+_LAYER_BLOCK_START_RE = re.compile(r"^\s*(?:layer|templayer)\s+(\S+)(?:\s+(\S+))?")
 _CALMA_RE = re.compile(r"^\s*calma\s+(\d+)\s+(\d+)")
 _CIFINPUT_IGNORE_RE = re.compile(r"^\s*ignore\s+(\S+)")
 _CIFINPUT_CALMA_RE = re.compile(r"^\s*calma\s+(\S+)\s+(\d+)\s+(\d+|\*)")
@@ -181,11 +181,22 @@ _DRC_VALUE_TO_MICRONS = 1000.0
 # (see that dataclass's own docstring for real per-directive counts
 # and why `variants`/`style`/`scalefactor`/`cifstyle` are deliberately
 # excluded).
-_DRC_MISC_DIRECTIVES = (
+DRC_MISC_DIRECTIVES = (
     "surround", "edge4way", "widespacing", "cifmaxwidth", "cifwidth",
     "cifspacing", "area", "exact_overlap", "overhang", "extend",
     "rect_only", "cifarea", "no_overlap",
 )
+"""Every real drc-section keyword ``MagicDrcMiscStatement`` covers --
+see that dataclass's own docstring for the real, confirmed per-
+directive line counts. Not underscore-prefixed: also reused by
+``gui/magic_tech_view.py`` for its own directive combobox, so the two
+never drift apart into two separately-maintained real enums."""
+
+DRC_CHECK_TYPES = ("width", "spacing", "maxwidth")
+"""The three real drc-section keywords ``MagicDrcCheck`` covers (see
+its own docstring) -- reused by ``gui/magic_tech_view.py`` for its own
+check_type combobox, same "one real enum, not two" reason as
+``DRC_MISC_DIRECTIVES`` above."""
 
 
 @dataclass
@@ -299,6 +310,23 @@ class CifOutputLayerMapping:
     line_no: int = 0
     """Same real, source-mapped line tracking as ``PlaneEntry.line_no``
     (see ``_safe_prefix_line_count``)."""
+    recipe_types: tuple[str, ...] = ()
+    """The real, bare Magic type list from the enclosing ``layer``/
+    ``templayer`` line's own optional second token (e.g. the real
+    ``digisub`` in ``layer DIGITALID  digisub``, confirmed real and
+    common in IHP's own real cifoutput deck -- comma-separated for a
+    real multi-type recipe, e.g. ``layer EMITTER nec,gec``), captured
+    ONLY when this real ``calma`` line follows that layer-start line
+    with nothing else real in between -- confirmed real, found live:
+    plenty of real blocks (``layer NWELL allnwell`` then a real
+    ``and-not schottkyarea`` line before ``calma``) have a real
+    geometry op that changes what actually reaches this ``calma``
+    line, which this module still deliberately doesn't model (see this
+    class's own docstring above) -- ``()`` for those, not a guess.
+    Used by ``pdklib/drc_bridge.py`` to resolve a Magic *type* name to
+    its own real GDS layer/datatype for the bare pass-through case;
+    never written back (purely a parse-time convenience, same as every
+    other derived/display-only field here)."""
 
     @property
     def gds_layer_text(self) -> str:
@@ -1502,6 +1530,8 @@ def _parse_cifoutput_layers_with_lines(lines: list[str], safe_through: int):
     section_start = section_end = 0
     in_section = False
     current_name: str | None = None
+    current_types: tuple[str, ...] = ()
+    saw_recipe_op = False
 
     for line_no, raw_line in enumerate(lines, start=1):
         stripped = raw_line.strip()
@@ -1521,11 +1551,15 @@ def _parse_cifoutput_layers_with_lines(lines: list[str], safe_through: int):
         start_match = _LAYER_BLOCK_START_RE.match(stripped)
         if start_match:
             current_name = start_match.group(1)
+            types_token = start_match.group(2)
+            current_types = tuple(types_token.split(",")) if types_token else ()
+            saw_recipe_op = False
             continue
         if current_name is None:
             continue
         calma_match = _CALMA_RE.match(stripped)
         if calma_match is None:
+            saw_recipe_op = True
             continue
         safe_line_no = line_no if section_start and line_no <= safe_through else 0
         if safe_line_no:
@@ -1533,7 +1567,7 @@ def _parse_cifoutput_layers_with_lines(lines: list[str], safe_through: int):
         entries.append(
             CifOutputLayerMapping(
                 name=current_name, gds_layer=int(calma_match.group(1)), gds_datatype=int(calma_match.group(2)),
-                line_no=safe_line_no,
+                line_no=safe_line_no, recipe_types=() if saw_recipe_op else current_types,
             )
         )
 
@@ -1929,7 +1963,7 @@ def _parse_drc_angles_with_lines(lines: list[str], safe_through: int):
 
 def _parse_drc_misc_text(joined: str) -> MagicDrcMiscStatement | None:
     parts = joined.split()
-    if not parts or parts[0] not in _DRC_MISC_DIRECTIVES:
+    if not parts or parts[0] not in DRC_MISC_DIRECTIVES:
         return None
     return MagicDrcMiscStatement(directive=parts[0], args=tuple(parts[1:]))
 
@@ -1986,7 +2020,7 @@ def _parse_drc_misc_with_lines(lines: list[str], safe_through: int):
             continue
 
         first_token = stripped.split(None, 1)[0] if stripped.split() else ""
-        if first_token in _DRC_MISC_DIRECTIVES:
+        if first_token in DRC_MISC_DIRECTIVES:
             safe_start = line_no if section_start and line_no <= safe_through else 0
             if stripped.endswith("\\"):
                 pending = {"start": safe_start, "text": stripped[:-1].rstrip()}
