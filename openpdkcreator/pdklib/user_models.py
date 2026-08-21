@@ -55,6 +55,23 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 VERILOG_DIRNAME = "verilog"
 VERILOGA_DIRNAME = "veriloga"
 
+EDIT_NOTE = (
+    "your own real, git-tracked user model file (user_models/) -- not this project's own downloaded PDK data"
+)
+"""The one real, shared wording every real place a user model's own
+file gets opened for editing passes to
+``file_view_dialog.view_file_dialog``'s own ``edit_note`` -- both
+``gui/user_models_view.py``'s own **Edit Source** and
+``gui/library_manager_view.py``'s own **View** button for a
+Verilog/Verilog-A view (real, always redirected into this same real
+``user_models/`` tree by ``library_manager_view.py``'s own
+``_default_create_path``, never ``libraries/<library>/``) -- kept in
+one real place so both real call sites say the same real, accurate
+thing about where a save actually lands, instead of silently
+inheriting that function's own default wording, written for a
+different real case (this project's own downloaded, gitignored PDK
+data)."""
+
 
 @dataclass
 class UserModelFile:

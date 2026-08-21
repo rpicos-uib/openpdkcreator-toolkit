@@ -35,14 +35,23 @@ recipe (``pdklib/user_models.py``'s own ``osdi_snippet``), pointed at the
 selected module -- a real, copy-pasteable two-step wiring recipe, not
 executed or written to disk by this tool.
 
+**Edit Source** (or double-clicking a row) opens the selected module's
+own real file in a real, in-GUI View -> Edit -> Save editor
+(``file_view_dialog.view_file_dialog``, the same one every other real
+source-viewing dialog in this project already uses -- not a second,
+parallel editor) for the whole real behavioral body, not just the port
+list **Edit Ports** covers. Saving triggers a real, immediate
+**Rescan** (``on_save=self.refresh``), so the **Compile** column below
+reflects the just-saved real edit without a second, separate click.
+
 **Real, automatic compile-check on every refresh** (``pdklib/
 user_models.py``'s own ``run_compile_check``) -- the closest real
 equivalent this project has to Cadence's own "compile on save"
-Verilog/Verilog-A editors: this tool has no in-GUI text editor for a
-model's own behavioral body (editing happens in the user's own
-external editor), so **Rescan**/opening this tab is the real trigger
-point instead. Every real module's own file is actually run through
-``openvaf``/``iverilog`` (not just linted or guessed), and the
+Verilog/Verilog-A editors, now genuinely close: **Edit Source** ->
+**Save** -> **Rescan** (automatic) covers the same real edit-then-
+compile loop, just one real step more explicit than a live keystroke-
+level check would be. Every real module's own file is actually run
+through ``openvaf``/``iverilog`` (not just linted or guessed), and the
 **Compile** column shows the real, current verdict; **Compile Log**
 shows that real run's full stdout/stderr for the one selected row,
 instantly (cached from the last real ``refresh()``, never re-run just
@@ -60,6 +69,7 @@ from .. import export as export_mod
 from ..pdklib import user_models as user_models_mod
 from ..pdklib import verilog as verilog_mod
 from ..pdklib import verilog_writer as verilog_writer_mod
+from .file_view_dialog import view_file_dialog
 from .port_dialog import edit_ports_dialog
 from .text_dialog import show_text_dialog
 
@@ -100,6 +110,7 @@ class UserModelsView(ttk.Frame):
             self.tree.column(col, width=widths[col], anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew", padx=8)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<Double-1>", lambda _e: self._edit_source())
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -112,6 +123,10 @@ class UserModelsView(ttk.Frame):
         ttk.Button(form, text="Clear Link", command=self._clear_link).pack(side="left", padx=(4, 0))
         self.edit_ports_button = ttk.Button(form, text="Edit Ports", command=self._edit_ports, state="disabled")
         self.edit_ports_button.pack(side="left", padx=(12, 0))
+        self.edit_source_button = ttk.Button(
+            form, text="Edit Source", command=self._edit_source, state="disabled",
+        )
+        self.edit_source_button.pack(side="left", padx=(4, 0))
         self.osdi_button = ttk.Button(
             form, text="Generate ngspice OSDI Snippet", command=self._generate_osdi, state="disabled",
         )
@@ -188,6 +203,7 @@ class UserModelsView(ttk.Frame):
         if not selection:
             self.cell_name_var.set("")
             self.edit_ports_button.configure(state="disabled")
+            self.edit_source_button.configure(state="disabled")
             self.osdi_button.configure(state="disabled")
             self.compile_log_button.configure(state="disabled")
             return
@@ -199,6 +215,7 @@ class UserModelsView(ttk.Frame):
             }
             self.cell_name_var.set(link_by_key.get((relpath, module_name), ""))
             self.edit_ports_button.configure(state="normal")
+            self.edit_source_button.configure(state="normal")
             model_file, _module = self.row_by_iid[selection[0]]
             self.osdi_button.configure(state="normal" if model_file.kind == "veriloga" else "disabled")
             self.compile_log_button.configure(
@@ -206,10 +223,12 @@ class UserModelsView(ttk.Frame):
             )
         else:
             # Batch mode: don't show one row's own link text as if it
-            # applied to all of them; ports/OSDI generation are both
-            # inherently single-module actions.
+            # applied to all of them; ports/OSDI generation, source
+            # editing, and compile log are all inherently single-module
+            # actions.
             self.cell_name_var.set("")
             self.edit_ports_button.configure(state="disabled")
+            self.edit_source_button.configure(state="disabled")
             self.osdi_button.configure(state="disabled")
             self.compile_log_button.configure(state="disabled")
 
@@ -273,6 +292,27 @@ class UserModelsView(ttk.Frame):
         verilog_writer_mod.export_verilog_file(model_file.modules, model_file.path, model_file.path)
         self.status_var.set(f"Saved port edits to {model_file.path}.")
         self.refresh()
+
+    def _edit_source(self):
+        """Real, free-form editing of a user model's own real
+        behavioral body -- reuses ``file_view_dialog.view_file_dialog``
+        (the same real View -> Edit -> Save mechanism every other real
+        source-viewing dialog in this project already uses) rather than
+        a second, parallel editor; only ``edit_note`` differs from that
+        module's own default, since this is the user's own real,
+        git-tracked project content, not this project's own downloaded,
+        gitignored PDK data. ``on_save=self.refresh`` is the real,
+        immediate follow-up -- the same real **Rescan** action, re-
+        running every real module's own compile-check (``pdklib/
+        user_models.py``'s own ``run_compile_check``) so the **Compile**
+        column reflects a just-saved real edit without a second,
+        separate click."""
+
+        selection = self.tree.selection()
+        if len(selection) != 1:
+            return
+        model_file, module = self.row_by_iid[selection[0]]
+        view_file_dialog(self, model_file.path, edit_note=user_models_mod.EDIT_NOTE, on_save=self.refresh)
 
     def _generate_osdi(self):
         selection = self.tree.selection()

@@ -15,6 +15,7 @@ this project's own committed code.
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -22,13 +23,29 @@ from tkinter import messagebox, ttk
 def view_file_dialog(
     parent: tk.Widget, path: Path,
     focus_start_line: int | None = None, focus_end_line: int | None = None,
+    edit_note: str = "a real, local, downloaded PDK file -- only your local data/ copy (gitignored, never committed)",
+    on_save: Callable[[], None] | None = None,
 ) -> None:
     """*focus_start_line*/*focus_end_line* (1-indexed, both optional):
     when given, scrolls to and highlights that real line range on open
     -- used by ``cell_hub_view.py`` to jump straight to one real cell's
     own block inside a much larger, combined per-family file (e.g. a
     real ``.SUBCKT``/``.ends`` pair 25 lines into an 8000-line
-    ``sg13g2_stdcell.cdl``), rather than making the user hunt for it."""
+    ``sg13g2_stdcell.cdl``), rather than making the user hunt for it.
+
+    *edit_note*: what the status label/save confirmation call *path*
+    while editing -- defaults to this module's own original real,
+    downloaded-PDK-data framing (every existing real call site relies
+    on this default unchanged); a caller whose own real file is
+    project-owned/git-tracked instead (e.g. ``user_models_view.py``'s
+    own real Verilog/Verilog-A source) passes its own real, accurate
+    wording instead of this default -- never silently wrong about
+    whether a real save is local-only or actually committed.
+
+    *on_save*: called (no arguments) right after a real, confirmed
+    save -- lets a caller run its own real, immediate follow-up (e.g.
+    ``user_models_view.py``'s own real compile-check) without this
+    module needing to know anything about what that follow-up is."""
 
     dialog = tk.Toplevel(parent)
     dialog.title(f"View: {path.name}")
@@ -73,19 +90,20 @@ def view_file_dialog(
         text.configure(state="normal")
         edit_button.configure(state="disabled")
         save_button.configure(state="normal")
-        status_var.set(f"{path}  (editing -- a real, local, downloaded PDK file)")
+        status_var.set(f"{path}  (editing -- {edit_note})")
 
     def _save():
         if not messagebox.askyesno(
             "Save changes?",
-            f"Overwrite the real, local file\n{path}\nwith these changes?\n\n"
-            f"This only touches your local data/ copy (gitignored, never committed).",
+            f"Overwrite {edit_note}\n{path}\nwith these changes?",
             parent=dialog,
         ):
             return
         path.write_text(text.get("1.0", "end-1c"), encoding="utf-8")
         text.edit_modified(False)
         status_var.set(f"{path}  (saved)")
+        if on_save is not None:
+            on_save()
 
     def _close():
         if text.edit_modified() and not messagebox.askyesno(

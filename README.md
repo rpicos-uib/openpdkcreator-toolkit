@@ -5003,6 +5003,38 @@ models, ...), not just read/display layers. Concretely, still open:
     exact real OpenVAF diagnostic (file/line/column, "not found in the
     current scope") in Compile Log. Full suite: 82 passed, 0 failed.
 
+- **A real, in-GUI editor for user Verilog/Verilog-A source**, asked
+  for as a direct follow-up. Rather than a second, parallel editor,
+  User Models' new **Edit Source** button (or double-clicking a row)
+  reuses `file_view_dialog.view_file_dialog` -- the exact real
+  View -> Edit -> Save mechanism every other real source-viewing
+  dialog in this project already uses -- now generalized with two new
+  optional parameters: `edit_note` (what the status label/save
+  confirmation calls the file; every existing real call site keeps its
+  original default unchanged) and `on_save` (a real, immediate
+  follow-up after a confirmed save). **Edit Source** passes
+  `on_save=self.refresh`, so saving triggers the same real **Rescan**
+  that re-runs every module's own compile-check -- the **Compile**
+  column reflects a just-saved edit with no second click, closing the
+  edit-then-compile loop the previous entry only got halfway to.
+  Found and fixed along the way, prompted directly ("use the same
+  editor everywhere"): Library Manager's own **View** button for a
+  Verilog/Verilog-A view routes through the same generic branch as
+  real, downloaded PDK data and real `libraries/<library>/` content,
+  so it was about to inherit that branch's own "gitignored, local-only"
+  wording -- actively wrong for these files, since
+  `_default_create_path` always redirects Verilog/Verilog-A into the
+  same real, git-tracked `user_models/` tree **Edit Source** already
+  uses. Fixed by giving both real call sites the one shared, accurate
+  wording (`pdklib/user_models.py`'s new `EDIT_NOTE` constant) instead
+  of letting a second copy drift. Verified live, both call sites: a
+  deliberately broken `.va`'s error was fixed in-place (double-click
+  word to select, retype, Save, confirm) and the tree's own compile
+  error count correctly dropped to zero with no second click; Library
+  Manager's own **View** for the same real file showed the identical,
+  correct "your own real, git-tracked user model file" wording.
+  Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

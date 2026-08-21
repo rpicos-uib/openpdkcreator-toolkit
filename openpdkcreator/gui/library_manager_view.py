@@ -630,6 +630,20 @@ class LibraryManagerView(ttk.Frame):
             ttk.Label(
                 row_frame, text="  LibMan's own format -- open in LibMan itself", foreground="#e65100",
             ).pack(side="left")
+        elif view_kind in ("verilog", "veriloga"):
+            # Real, always redirected into user_models/ by this class's
+            # own _default_create_path -- the exact same real file
+            # gui/user_models_view.py's own Edit Source opens, so this
+            # View button uses the exact same real edit_note/refresh
+            # behavior, not the generic branch's own downloaded-PDK-data
+            # wording (which would be actively wrong here: this file is
+            # real, git-tracked project content, never gitignored).
+            ttk.Button(
+                row_frame, text="View", command=lambda e=entry: view_file_dialog(
+                    self, e.path, edit_note=user_models_mod.EDIT_NOTE,
+                    on_save=lambda: self._refresh_preserving_selection(self.current_library, self.current_cell),
+                ),
+            ).pack(side="left")
         else:
             ttk.Button(row_frame, text="View", command=lambda e=entry: view_file_dialog(self, e.path)).pack(
                 side="left"
