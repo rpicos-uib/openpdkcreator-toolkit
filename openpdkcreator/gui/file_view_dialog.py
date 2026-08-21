@@ -20,8 +20,7 @@ work this out for itself, the default now asks git directly
 (``_is_gitignored``, live, per real *path*, not assumed) and only
 falls back to a caller-supplied *edit_note* when one real caller
 already knows something more specific to say (e.g.
-``user_models_view.py``'s own real Verilog/Verilog-A wording, or
-``library_index.REGISTERED_EDIT_NOTE`` for a registered entry).
+``user_models_view.py``'s own real Verilog/Verilog-A wording).
 """
 
 from __future__ import annotations
