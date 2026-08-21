@@ -645,25 +645,19 @@ class LibraryManagerView(ttk.Frame):
                 ),
             ).pack(side="left")
         else:
-            # Real source-accuracy fix, same real bug class as the
-            # verilog/veriloga branch above, just needing a real,
-            # per-entry check instead of a fixed answer: this one
-            # generic branch also serves real, downloaded-PDK CDL/
-            # SPICE/Liberty/... (view_file_dialog's own default
-            # edit_note IS accurate there) *and* this project's own
-            # real, registered/project-authored views of the same
-            # kinds (e.g. a from-scratch project's own
-            # libraries/<library>/<cell>.cdl) -- gitignored is simply
-            # wrong for the second real case, so which real wording
-            # applies is decided per entry, from its own real
-            # ``source``, never assumed either way.
-            note = li_mod.REGISTERED_EDIT_NOTE if entry.source == "registered" else None
-            kwargs = {"edit_note": note} if note is not None else {}
+            # This one generic branch serves real, downloaded-PDK CDL/
+            # SPICE/Liberty/... *and* this project's own real,
+            # registered/project-authored views of the same kinds
+            # (e.g. a from-scratch project's own
+            # libraries/<library>/<cell>.cdl) -- no edit_note override
+            # needed here: view_file_dialog's own default now decides
+            # live, per real path (git check-ignore), not a fixed
+            # answer for every entry regardless of its own real
+            # ``source``.
             ttk.Button(
-                row_frame, text="View", command=lambda e=entry, kw=kwargs: view_file_dialog(
+                row_frame, text="View", command=lambda e=entry: view_file_dialog(
                     self, e.path,
                     on_save=lambda: self._refresh_preserving_selection(self.current_library, self.current_cell),
-                    **kw,
                 ),
             ).pack(side="left")
 

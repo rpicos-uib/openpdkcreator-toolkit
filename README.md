@@ -5062,6 +5062,47 @@ models, ...), not just read/display layers. Concretely, still open:
   registered CDL correctly shows "your own real, project-authored
   file" instead. Full suite: 82 passed, 0 failed.
 
+- **Asked directly to audit for more hardcoded wording/paths that
+  should be dynamic -- found the same real bug's root cause, fixed it
+  once for every real caller instead of patching each one.**
+  `file_picker_utils.py`'s own shared **Edit File**/**Create File**
+  toggle (LEF, xschem symbol/schematic, Qucs-S symbol/component,
+  SPICE models -- six real call sites, one shared function) opens a
+  cell's own real file under `pdk_root` via plain
+  `view_file_dialog(parent, path)`, no `edit_note` override -- so it
+  always got that function's *old* fixed default, "gitignored, never
+  committed." Real and accurate for this project's own IHP-based dev
+  checkout (`data/` really is gitignored there) -- and real and
+  *wrong* for a from-scratch project, where `data/` is that project's
+  own tracked, committed content instead (confirmed earlier this same
+  session: `docs/presentation/walkthrough.tex`'s own "Goal" slide,
+  `.gitignore`'s own comment). Rather than passing a context flag
+  through all six real call sites, `view_file_dialog`'s own default
+  `edit_note` (when a caller leaves it `None`) now asks git directly,
+  live, per real path (`_is_gitignored`) -- fixing every real existing
+  and future caller that doesn't already know something more specific
+  to say, not just these six.
+  A real, found-live subtlety while verifying this, not assumed: the
+  downloaded IHP PDK under `data/` ships its own real, nested `.git`
+  (a genuine clone of IHP's own real project, complete with IHP's own
+  unrelated Python-project `.gitignore`) -- a naive `git check-ignore`
+  run with `cwd=path.parent` lets git auto-discover *that* real, inner
+  repo boundary instead of this project's own real, outer one, so a
+  real `.tech` file under `data/ihp-sg13g2/...` came back "not
+  ignored," contradicting this project's own real, top-level `data/`
+  rule. Fixed by anchoring the check at `export.PROJECT_ROOT` via
+  `git -C`, confirmed correct against the real rule/line
+  (`git check-ignore -v`) once anchored there. Also let
+  `pdklib/library_index.py`'s own `REGISTERED_EDIT_NOTE` (added in the
+  entry just above) go: the new, general live check already gives the
+  same real answer for a registered CDL/SPICE/... entry, so a second,
+  narrower mechanism saying the same thing was real, unnecessary
+  duplication. Verified live, both real cases, before and after the
+  nested-repo fix: the real IHP `.tech` file correctly returned to
+  "downloaded PDK file... gitignored" wording; the memristor project's
+  own real `.tech` file kept its correct "project-owned... tracked,
+  committed" wording throughout. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,

@@ -4,26 +4,72 @@ file, or the .lyp).
 
 Deliberately two-stage, unlike OpenPDKCreator's own
 ``gui/file_view_dialog.py`` (always editable from the moment it
-opens): the files here are real, downloaded third-party PDK data (see
-README.md's "IHP data in git" note), so opening one always starts
-read-only -- an explicit **Edit** button, inside the dialog, is what
-switches it to editable and reveals **Save**. Editing only ever
-touches the real, local, gitignored copy under ``data/`` -- never
-this project's own committed code.
+opens): most real files opened here are real, downloaded third-party
+PDK data (see README.md's "IHP data in git" note), so opening one
+always starts read-only -- an explicit **Edit** button, inside the
+dialog, is what switches it to editable and reveals **Save**.
+
+*edit_note* (below) used to be a single fixed string claiming every
+real file opened here is "gitignored, never committed" -- true for
+this project's own real IHP-based dev checkout (``data/`` really is
+gitignored there), but real, found-live to be actively wrong for a
+from-scratch project (``data/`` is that project's own tracked,
+committed content instead -- confirmed via ``git check-ignore``
+against both real cases). Rather than pushing every real caller to
+work this out for itself, the default now asks git directly
+(``_is_gitignored``, live, per real *path*, not assumed) and only
+falls back to a caller-supplied *edit_note* when one real caller
+already knows something more specific to say (e.g.
+``user_models_view.py``'s own real Verilog/Verilog-A wording, or
+``library_index.REGISTERED_EDIT_NOTE`` for a registered entry).
 """
 
 from __future__ import annotations
 
+import subprocess
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from .. import export as export_mod
+
+
+def _is_gitignored(path: Path) -> bool:
+    """Real, live answer via ``git check-ignore --quiet``, anchored at
+    this project's own real git repo root (``export_mod.PROJECT_ROOT``
+    -- ``-C``, not plain ``cwd=path.parent``): a real, found-live
+    subtlety, not assumed -- the downloaded IHP PDK under ``data/``
+    ships its own real, nested ``.git`` (IHP's own real clone, with
+    IHP's own unrelated Python-project ``.gitignore``), so a bare
+    ``cwd=path.parent`` lets git auto-discover *that* real, inner repo
+    boundary instead of this project's own real, outer one -- caught
+    live: a real ``.tech`` file under ``data/ihp-sg13g2/...`` came back
+    "not ignored" that way, contradicting this project's own real,
+    top-level ``data/`` rule (confirmed correct once anchored via
+    ``-C``, verbose output naming exactly that real rule/line).
+    Exit 0 means *path* really is ignored from this project's own real
+    point of view, exit 1 means it's real, tracked (or trackable)
+    project content. Falls back to ``True`` (this module's own
+    original, real-downloaded-PDK-data assumption) only when git
+    itself can't real-answer at all (no repo, git missing, timed out)
+    -- an honest fallback for a genuinely unknown real case, never a
+    silent guess presented as a live check."""
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(export_mod.PROJECT_ROOT), "check-ignore", "--quiet", str(path)],
+            capture_output=True, timeout=5,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return True
+
 
 def view_file_dialog(
     parent: tk.Widget, path: Path,
     focus_start_line: int | None = None, focus_end_line: int | None = None,
-    edit_note: str = "a real, local, downloaded PDK file -- only your local data/ copy (gitignored, never committed)",
+    edit_note: str | None = None,
     on_save: Callable[[], None] | None = None,
 ) -> None:
     """*focus_start_line*/*focus_end_line* (1-indexed, both optional):
@@ -34,18 +80,25 @@ def view_file_dialog(
     ``sg13g2_stdcell.cdl``), rather than making the user hunt for it.
 
     *edit_note*: what the status label/save confirmation call *path*
-    while editing -- defaults to this module's own original real,
-    downloaded-PDK-data framing (every existing real call site relies
-    on this default unchanged); a caller whose own real file is
-    project-owned/git-tracked instead (e.g. ``user_models_view.py``'s
-    own real Verilog/Verilog-A source) passes its own real, accurate
-    wording instead of this default -- never silently wrong about
-    whether a real save is local-only or actually committed.
+    while editing. Left ``None`` (the real default nearly every real
+    call site relies on), it's decided live via ``_is_gitignored`` --
+    never a fixed guess. A caller whose own real file's status it
+    already knows for certain (e.g. ``user_models_view.py``'s own
+    real Verilog/Verilog-A source, always real, tracked project
+    content) can still pass its own, more specific real wording
+    instead, skipping the live check.
 
     *on_save*: called (no arguments) right after a real, confirmed
     save -- lets a caller run its own real, immediate follow-up (e.g.
     ``user_models_view.py``'s own real compile-check) without this
     module needing to know anything about what that follow-up is."""
+
+    if edit_note is None:
+        edit_note = (
+            "a real, local, downloaded PDK file -- only your local data/ copy (gitignored, never committed)"
+            if _is_gitignored(path) else
+            "a real, project-owned file -- part of this project's own tracked, committed content"
+        )
 
     dialog = tk.Toplevel(parent)
     dialog.title(f"View: {path.name}")
