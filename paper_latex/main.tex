@@ -381,12 +381,18 @@ to fabricate a placeholder native view for it.
 
 \section{Discussion and future work}
 
-The toolkit's current scope is deliberately bounded: it reads,
-cross-references, and edits an \emph{existing} real PDK's structured
-content, with verified round-trip fidelity, but does not yet generate
-new PDK content from scratch (a novel technology file, a new DRC
-deck, a new device model) -- the stated longer-term goal. Concretely
-still open: the much larger, structurally irregular remainder of
+The toolkit's original scope was deliberately bounded to reading,
+cross-referencing, and editing an \emph{existing} real PDK's
+structured content; from-scratch generation (a novel technology file,
+a new DRC deck, a new device model) has since been added
+(\texttt{File} $\to$ \textbf{Create a New/Blank PDK...}, each native
+format's own \texttt{create\_new\_*} skeleton writer) and exercised
+end-to-end building a genuinely independent, from-scratch memristor
+PDK -- its own technology file, DRC deck, xschem symbols/schematics,
+Magic layouts, and three distinct Verilog-A compact device models,
+verified through real Magic extraction, LVS, DRC, and \texttt{ngspice}
+simulation of the extracted layout. Concretely still open: the much
+larger, structurally irregular remainder of
 Magic's own \texttt{drc} section (variable argument counts, nested
 layer-boolean expressions, and one genuinely non-check, conditional-scoping
 construct); Liberty's own nested lookup-table sub-groups; the
