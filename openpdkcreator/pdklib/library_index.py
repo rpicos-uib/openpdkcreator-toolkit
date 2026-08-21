@@ -131,6 +131,21 @@ class ViewEntry:
     ``"registered"`` (user-added, persisted in ``library_index.yaml``)."""
 
 
+REGISTERED_EDIT_NOTE = (
+    "your own real, project-authored file -- not this project's own downloaded PDK data"
+)
+"""``file_view_dialog.view_file_dialog``'s own default ``edit_note``
+was written for *real* (``ViewEntry.source == "real"``) content --
+this project's own downloaded, gitignored PDK data. A real,
+``"registered"`` entry's own file is the opposite: real, project-
+authored content, meant to be tracked and committed, never gitignored
+-- any real caller opening a ``ViewEntry`` for editing (e.g.
+``gui/library_manager_view.py``'s own generic **View** button, which
+serves both real and registered entries through one real code path)
+picks between this real constant and that module's own default by
+checking ``entry.source``, never assumes one or the other."""
+
+
 def discover_real_entries_for_family(pdk_root: Path, family: str) -> list[ViewEntry]:
     """Every real view for *family* alone (``pdklib/cells.py``'s own
     ``build_cell_index``, reused not duplicated) -- deliberately

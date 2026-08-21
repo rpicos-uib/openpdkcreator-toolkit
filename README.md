@@ -5035,6 +5035,33 @@ models, ...), not just read/display layers. Concretely, still open:
   correct "your own real, git-tracked user model file" wording.
   Full suite: 82 passed, 0 failed.
 
+- **CDL/SPICE editing, checked rather than assumed to be missing.**
+  Asked "anything else we can edit in the GUI?", the first guess (CDL/
+  SPICE has port editing but no full-source editor, the same real gap
+  Verilog/Verilog-A just had) turned out to be wrong on checking:
+  `gui/cell_hub_view.py`'s own **View** button for CDL/SPICE already
+  opens the exact same real `view_file_dialog` -- which has always
+  supported real Edit -> Save, for every real call site, not just the
+  ones added this session. What was real and missing instead: that
+  same generic **View** button in Library Manager (used for CDL/
+  SPICE/Liberty/anything without its own dedicated branch) always
+  used `view_file_dialog`'s own default `edit_note` -- written for
+  *real*, downloaded, gitignored PDK data -- even for a real,
+  `source == "registered"` entry (this project's own project-authored
+  content, e.g. a from-scratch project's own
+  `libraries/<library>/<cell>.cdl`), where "gitignored, never
+  committed" is actively wrong. `pdklib/library_index.py`'s new
+  `REGISTERED_EDIT_NOTE` constant, picked per real entry from its own
+  `ViewEntry.source` (never assumed), fixes this for every view kind
+  that falls through to this one generic branch, not just CDL/SPICE.
+  `on_save` also now refreshes Library Manager here, matching the
+  same real convenience the two previous entries already added.
+  Verified live, both real cases: a real, downloaded IHP CDL
+  (`source == "real"`) still shows the original "downloaded PDK
+  file... gitignored" wording; the memristor project's own real,
+  registered CDL correctly shows "your own real, project-authored
+  file" instead. Full suite: 82 passed, 0 failed.
+
 ## About Us
 
 Not a company -- just a note on real ideas borrowed from elsewhere,
