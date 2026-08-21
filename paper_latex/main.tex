@@ -194,13 +194,22 @@ general-purpose grammar for the whole section:
 
 \begin{itemize}[leftmargin=1.4em]
   \item \textbf{cifoutput}: every real \texttt{layer NAME \ldots calma L D}
-    recipe -- a genuine Magic-type-name to GDS-layer/datatype mapping,
-    cross-referenced against the KLayout \texttt{.lyp} layers in
+    recipe -- \texttt{NAME} here is the layer's own CIF/GDS-side
+    label (e.g.\ \texttt{BE\_Au}), not the Magic type feeding it, so
+    this is a genuine CIF-layer-name to GDS-layer/datatype mapping,
+    cross-referenced against the KLayout \texttt{.lyp} layers (keyed
+    by that same CIF-side name) in
     \texttt{pdklib/reconcile.py} (100/377 real GDS layer/datatype pairs
     recognized by both independent descriptions of the same
     fabricated stream; the remaining 277 \texttt{.lyp}-only pairs are
     annotation/QA datatypes Magic's own fabrication output has no
-    reason to paint -- a sensible finding, not a parsing gap).
+    reason to paint -- a sensible finding, not a parsing gap). A later
+    pass (\texttt{CifOutputLayerMapping.recipe\_types}) additionally
+    recovers the real Magic type name(s) on that same \texttt{layer}
+    line, but only for the bare pass-through case with no real
+    geometry recipe in between -- 38/138 real entries in IHP's own
+    deck; the rest are correctly left unresolved rather than guessed
+    through an unmodeled recipe.
   \item \textbf{cifinput}: standalone \texttt{ignore}/\texttt{calma}
     hints (23 and 133 real entries respectively), plus the section's
     own real geometry-boolean recipe blocks
