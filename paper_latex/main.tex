@@ -130,10 +130,10 @@ IHP's real library names omit it
 
 \subsection{Directory layout and data flow}
 
-The tool is organized around three layers: \texttt{ihp/} (one module
+The tool is organized around three layers: \texttt{pdklib/} (one module
 per native format, each exposing a real, typed parse of that
 format's structured content), \texttt{gui/} (a Tk application whose
-tabs mirror the \texttt{ihp/} module boundaries, grouped by what they
+tabs mirror the \texttt{pdklib/} module boundaries, grouped by what they
 represent rather than left flat), and \texttt{export.py}/\texttt{main.py}
 (CLI commands and a write-back export path that reads the same
 parsed, possibly-edited in-memory objects the GUI edits and
@@ -149,7 +149,7 @@ not a redistribution of IHP's data.
 
 \subsection{Cell-centric aggregation}
 
-The \textbf{By Cell} view (\texttt{ihp/cells.py}, \texttt{gui/cell\_hub\_view.py})
+The \textbf{By Cell} view (\texttt{pdklib/cells.py}, \texttt{gui/cell\_hub\_view.py})
 is the toolkit's central cross-reference: for one real cell name, it
 aggregates whichever of LEF, CDL, SPICE, Verilog, Liberty, and GDS
 representations exist for it, scanning every real file under each
@@ -169,11 +169,11 @@ in the project's own regression tests.
 
 \subsection{KLayout layers}
 
-\texttt{ihp/layers.py} parses KLayout's \texttt{.lyp} layer-properties
+\texttt{pdklib/layers.py} parses KLayout's \texttt{.lyp} layer-properties
 XML via a hand-rolled, nesting-depth-aware text scanner (rather than
 \texttt{ElementTree}) specifically so that each real layer's own
 source line range can be tracked -- a prerequisite for the surgical,
-line-range write-back in \texttt{ihp/layers\_writer.py}, verified
+line-range write-back in \texttt{pdklib/layers\_writer.py}, verified
 against the real, 377-layer \texttt{sg13g2.lyp}. Only the fields that
 are genuinely real, patchable properties (name, GDS layer/datatype,
 frame/fill color) are ever written back; everything else is
@@ -182,7 +182,7 @@ project-only metadata that is never round-tripped into the real file.
 \subsection{Magic technology files}
 \label{sec:magic}
 
-\texttt{ihp/magic\_tech.py} parses Magic's \texttt{.tech} format,
+\texttt{pdklib/magic\_tech.py} parses Magic's \texttt{.tech} format,
 whose sections range from cleanly tabular
 (\texttt{tech}/\texttt{version}/\texttt{planes}/\texttt{types}/\allowbreak
 \texttt{contact}/\texttt{aliases}/\texttt{styles}/\texttt{compose}/\texttt{connect},
@@ -196,7 +196,7 @@ general-purpose grammar for the whole section:
   \item \textbf{cifoutput}: every real \texttt{layer NAME \ldots calma L D}
     recipe -- a genuine Magic-type-name to GDS-layer/datatype mapping,
     cross-referenced against the KLayout \texttt{.lyp} layers in
-    \texttt{ihp/reconcile.py} (100/377 real GDS layer/datatype pairs
+    \texttt{pdklib/reconcile.py} (100/377 real GDS layer/datatype pairs
     recognized by both independent descriptions of the same
     fabricated stream; the remaining 277 \texttt{.lyp}-only pairs are
     annotation/QA datatypes Magic's own fabrication output has no
@@ -234,7 +234,7 @@ general-purpose grammar for the whole section:
 
 \subsection{LEF}
 
-\texttt{ihp/lef.py} parses tech-LEF layers, \texttt{SITE}s, and real
+\texttt{pdklib/lef.py} parses tech-LEF layers, \texttt{SITE}s, and real
 \texttt{MACRO}s (class, size, site, symmetry) with their
 \texttt{PIN}s (direction, use, port layers and rectangle counts) and
 \texttt{OBS} layers, hand-verified against all 32 of IHP's real
@@ -243,11 +243,11 @@ and 28 real SRAM hard-macro LEFs). Real \texttt{VIA}/\texttt{ViaRULE}
 via-stack geometry is also parsed and shown read-only. Pin data is
 fully editable in both the LEF tab and the By Cell tab, through the
 shared object cache described above, with a verified, byte-identical
-write-back path (\texttt{ihp/lef\_writer.py}).
+write-back path (\texttt{pdklib/lef\_writer.py}).
 
 \subsection{KLayout DRC decks}
 
-\texttt{ihp/drc.py} extracts two reliable patterns from the real
+\texttt{pdklib/drc.py} extracts two reliable patterns from the real
 DRC-deck Ruby DSL --
 \texttt{width()}/\texttt{space()}/\texttt{sep()} and
 \texttt{.enclosed()} results assigned to a variable and later fed to
@@ -263,7 +263,7 @@ do.
 
 \subsection{Liberty timing libraries}
 
-\texttt{ihp/liberty.py} extracts real per-pin and per-timing-arc
+\texttt{pdklib/liberty.py} extracts real per-pin and per-timing-arc
 scalar data (direction, capacitance, function per pin;
 related\_pin/timing\_type/timing\_sense/when per arc) across all 97
 real \texttt{.lib} files and 700 real cells, editable through a
@@ -279,7 +279,7 @@ partially guessed.
 
 \subsection{GDS}
 
-\texttt{ihp/gds.py} provides real structural summaries -- bounding
+\texttt{pdklib/gds.py} provides real structural summaries -- bounding
 box and per-layer shape counts, not full polygon geometry -- via
 KLayout's own Python API (\texttt{klayout.db}), lazily imported so
 every other command in the toolkit still runs without it installed.
@@ -289,16 +289,16 @@ matching LEF's own 84 macros exactly; the largest real file
 
 \subsection{Netlists, digital Verilog, and ngspice/xschem}
 
-\texttt{ihp/netlist.py} and \texttt{ihp/verilog.py} extract real CDL/SPICE
+\texttt{pdklib/netlist.py} and \texttt{pdklib/verilog.py} extract real CDL/SPICE
 subcircuits and Verilog modules with real per-port direction (from a
 real CDL \texttt{*.PININFO} comment or real Verilog
 \texttt{input}/\texttt{output}/\texttt{inout} declarations), editable
-via a shared port editor. \texttt{ihp/spice\_models.py} extracts real
+via a shared port editor. \texttt{pdklib/spice\_models.py} extracts real
 ngspice \texttt{.model}/\texttt{.subckt} statements and, in a later
 extension, real \texttt{.LIB NAME \ldots .ENDL} PVT-corner blocks
 (their own \texttt{.param} overrides and \texttt{.include}
 statements, kept distinct from unrelated \texttt{.param} lines living
-inside a \texttt{.subckt} body). \texttt{ihp/xschem.py} extracts a
+inside a \texttt{.subckt} body). \texttt{pdklib/xschem.py} extracts a
 real symbol's device-attribute block and real pin list from
 xschem's \texttt{.sym} format, via a quote-aware, brace-depth-tracking
 scanner needed because real content can contain escaped braces inside
@@ -321,7 +321,7 @@ relaunch).
 \label{sec:netlist-writeback}
 
 Unlike the other writers, CDL/SPICE/Verilog port write-back
-(\texttt{ihp/netlist\_writer.py}, \texttt{ihp/verilog\_writer.py}) has
+(\texttt{pdklib/netlist\_writer.py}, \texttt{pdklib/verilog\_writer.py}) has
 no single stable per-entry line range to patch in place: a real
 \texttt{.SUBCKT} header can wrap across \texttt{+}-continuations in
 ways that are unsafe to token-patch. Both writers instead compare
