@@ -67,9 +67,12 @@ root.destroy()
 tech_file = ext_mod.default_tech_file(PDK_ROOT).resolve()
 # Reuse any real, already-registered .mag cell purely as a load target --
 # what's under test is the real .tech file's own section content, not
-# this specific cell's own geometry.
+# this specific cell's own geometry. Sorted, not just glob's own
+# unordered result, so which real .gds gets a real, harmless re-export
+# timestamp touch is deterministic across real runs, not whichever the
+# filesystem happens to list first.
 import glob
-mag_candidates = glob.glob("/foss/designs/openMemristorPDK/libraries/**/*.mag", recursive=True)
+mag_candidates = sorted(glob.glob("/foss/designs/openMemristorPDK/libraries/**/*.mag", recursive=True))
 assert mag_candidates, "no real .mag file found to use as a real Magic load target"
 gds_result = ext_mod.run_gds_export(Path(mag_candidates[0]).resolve(), tech_file, "magic")
 assert "Unrecognized layer" not in gds_result.log
