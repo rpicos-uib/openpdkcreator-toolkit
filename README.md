@@ -5534,6 +5534,54 @@ models, ...), not just read/display layers. Concretely, still open:
     "fixing" code that already works correctly would be a real,
     unmotivated change, not a real fix.
   - Full suite: 92 passed, 0 failed.
+- **Asked to expand the 4x4 crossbar deck: get a new, real subcircuit
+  from the extracted view (or the schematic, "since we have the
+  selector") and redo the simulation, showing both give the same real
+  result.** A real, direct, stronger check than LVS alone -- LVS only
+  confirms the two real views *match topologically*; this confirms
+  they *simulate identically*.
+  - **The real extracted-view subcircuit**: `run_extract_with_memristor_patch`
+    in `parasitic` mode (not `lvs` -- the real mode this project's own
+    established single-device precedent,
+    `docs/simulation/memristor_tio2_au_layout_extracted/`, already
+    uses for simulation), producing a real, complete, simulatable
+    `crossbar4x4_tio2_au_extracted.spice` (all 16 real devices, same
+    as the LVS-mode result).
+  - **The real schematic-view subcircuit**
+    (`docs/simulation/crossbar4x4_tio2_au/gen_schematic_netlist.py`,
+    new): not hand-transcribed -- a real, tracked script that
+    batch-netlists `crossbar4x4_tio2_au.sch` with real, live xschem
+    and wraps its own real 16 device lines in a `.subckt
+    crossbar4x4_tio2_au BE1..TE4 ... .ends` matching the extracted
+    view's own real port order, so the same real testbench can call
+    either one interchangeably.
+  - **Real write-then-read, scaled from 2x2 to 4x4**: the same real
+    V/2 bias and timing already validated for 2x2 generalizes to any
+    real NxN array unchanged (a same-row cell sees `Vw - Vw/2`, a
+    same-column cell sees `Vw/2`, equal for any N) -- writing cell
+    (1,1) now gives a real 1-written/6-disturbed/9-untouched contrast,
+    not 2x2's 1-1-1. Real, live result: 100 ohm (written), 10293 ohm
+    (all 6 disturbed cells), 15781 ohm (all 9 untouched cells) --
+    identical real per-cell values to 2x2, confirming the real device
+    physics doesn't depend on array size, only which cells get
+    disturbed does.
+  - **Real, live proof of equivalence**: the exact same real testbench
+    run twice, only the real `crossbar4x4_tio2_au` subcircuit
+    definition swapped -- **0.0000% relative difference across all 16
+    real cells** between the extracted-layout run and the schematic
+    run. `docs/simulation/crossbar4x4_tio2_au/run_simulation.sh`
+    reproduces the whole real, dual pipeline end to end (extract,
+    netlist the schematic, compile the real OSDI model, run both real
+    ngspice transients, plot the real comparison).
+  - `crossbar4x4.tex` extended with Steps 10-11 (the real, live
+    3-panel write-then-read result and the real extracted-vs-schematic
+    comparison, both with real, driven figures). Found and fixed one
+    real, found-live bug while parsing ngspice's own real `wrdata`
+    output for the first time in this shape: it pairs *each* requested
+    signal with its own repeated time column (`t sig0 t sig1 ...`),
+    not one shared leading time field -- an initial off-by-one field
+    count silently produced zero real parsed rows before this was
+    found and fixed.
 
 ## About Us
 
