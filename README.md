@@ -5492,6 +5492,48 @@ models, ...), not just read/display layers. Concretely, still open:
     this pass, `memristor_extract.py` is a real `pdklib` capability
     exercised by these tests -- not yet wired into the GUI's own **Run
     LVS** button.
+- **Asked to fix the two real, flagged-but-unfixed findings from the
+  crossbar extractor pass.** One was real, one wasn't -- both checked
+  properly rather than assumed:
+  - **Real bug, fixed**: the single-device cells' raw-extraction
+    regression. Root cause found live: `openmemristorpdk.tech`'s own
+    real fix earlier this session (giving `be_au` a real second
+    identity `via1` so a real `contact via1 be_au te_au` declaration
+    could be parsed at all) has a real, live side effect specific to
+    `memristor_tio2_au`/`_ti`/`_hfo2_al` -- each draws its own real
+    `be_au`/`te_au` footprint as fully, exactly coincident (both
+    `rect 0 0 1 1`), and real Magic's own implicit-contact mechanism
+    now reclassifies that *entire* coincident area as a real `via1`
+    contact tile, leaving no real `be_au`-typed material anywhere in
+    the cell for `device subcircuit` to find at all (confirmed via the
+    real, tracked `.ext`: node "BE" reports real layer `via1`, not
+    `be_au`) -- a real, zero-devices version of the crossbar's own
+    partial-overlap, 1-of-N pattern, not the same shape.
+    `pdklib/memristor_extract.py`'s own real, geometry-driven patch
+    already didn't depend on Magic's own device count at all --
+    except its own insertion logic only activated when there was at
+    least one real (even malformed) `X` line to anchor on, so a real
+    *zero*-device raw result left it a silent no-op. Fixed: computed
+    devices are inserted before the real `.ends`/`.ENDS` line when no
+    matching `X` line exists to replace. Real, live result: all 3 real
+    single-device cells now extract their own real device and Netgen
+    LVS reports `Circuits match uniquely`, confirmed byte-identical to
+    each cell's own real, already-tracked, pre-regression `.spice`
+    artifacts (the fix reproduces exactly what real Magic itself used
+    to produce, not merely "a" correct answer). New
+    `tests/test_memristor_devices_lvs.py` guards both the real,
+    found-live raw regression (still asserted as 0, so a future real
+    tech-file change that resolves it is caught as deliberate, not
+    silently masked) and the real, patched fix.
+  - **Not a real bug**: `tests/test_lef_new_macro_gui.py`'s single
+    full-suite failure. Reproduced standalone 5/5 times (all passed),
+    then the full suite itself re-run clean end to end (91 passed, 0
+    failed) -- a genuine one-time flake in that specific run, not a
+    deterministic defect in the real save/reload code path it tests
+    (already fixed for real back in `548c161`). Left untouched --
+    "fixing" code that already works correctly would be a real,
+    unmotivated change, not a real fix.
+  - Full suite: 92 passed, 0 failed.
 
 ## About Us
 

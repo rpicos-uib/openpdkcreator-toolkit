@@ -166,33 +166,56 @@ def patch_spice_with_memristor_devices(spice_text: str, mag_path: Path, tech: ma
     *model* matches a real `device subcircuit` declaration in *tech*
     with this module's own real, complete, geometry-derived device
     list for that model -- every other line (the `.subckt` header, any
-    other real device, any real comment) is returned unchanged."""
+    other real device, any real comment) is returned unchanged.
+
+    **Real, found-live edge case, not just the "some devices found"
+    case**: Magic's own real extraction can find *zero* real devices
+    for a model too (confirmed live on `memristor_tio2_au` -- a real,
+    fully-coincident-footprint device Magic's own real `contact`
+    mechanism reclassifies entirely as a real `via1` contact tile,
+    leaving no real `be_au`-typed material anywhere in the cell for
+    device recognition to find at all), so there is no real `X` line
+    to anchor an insertion point on. This module's own real,
+    geometry-driven computation does not depend on Magic's own real
+    output at all, so it is computed for every real declared model
+    regardless, and inserted before the real `.ends`/`.ENDS` line when
+    no real existing `X` line for that model was found to replace."""
 
     declarations = memristor_device_declarations(tech)
-    models = {model for model, _, _ in declarations}
-    if not models:
+    if not declarations:
+        return spice_text
+
+    computed_by_model: dict[str, list[MemristorDevice]] = {}
+    for model, gate_layer, term_layer in declarations:
+        devices = find_memristor_devices(mag_path, model, gate_layer, term_layer)
+        if devices:
+            computed_by_model[model] = devices
+    if not computed_by_model:
+        # Real, honest no-op: this module's own real geometry
+        # computation found nothing real to patch in either.
         return spice_text
 
     lines = spice_text.splitlines(keepends=True)
     kept_lines: list[str] = []
     insert_at: int | None = None
+    ends_at: int | None = None
     for line in lines:
         tokens = line.split()
-        if tokens and tokens[0].startswith("X") and tokens[-1] in models:
+        if tokens and tokens[0].startswith("X") and tokens[-1] in computed_by_model:
             if insert_at is None:
                 insert_at = len(kept_lines)
             continue
+        if tokens and tokens[0] in (".ends", ".ENDS") and ends_at is None:
+            ends_at = len(kept_lines)
         kept_lines.append(line)
 
     if insert_at is None:
-        # Real, honest no-op: nothing here referenced any declared real
-        # memristor model, so there is nothing for this module to patch.
-        return spice_text
+        insert_at = ends_at if ends_at is not None else len(kept_lines)
 
     new_lines: list[str] = []
     counter = 0
-    for model, gate_layer, term_layer in declarations:
-        for dev in find_memristor_devices(mag_path, model, gate_layer, term_layer):
+    for model, devices in computed_by_model.items():
+        for dev in devices:
             new_lines.append(f"X{counter} {dev.gate_net} {dev.term_net} {dev.model}\n")
             counter += 1
 
