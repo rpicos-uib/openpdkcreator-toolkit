@@ -5202,14 +5202,14 @@ models, ...), not just read/display layers. Concretely, still open:
   needs no separate cross-layer `connect` rule -- Magic derives the
   real electrical connection from the geometric overlap itself.
   Asked again to fill Aliases/Compose too ("whatever you find
-  reasonable as an example"): `aliases` gained `be_au -> m1`/`te_au ->
-  m2` (matching the metal1/metal2-style convention the Styles section
-  already establishes); `compose` gained `active_tio2 = be_au AND
-  mem_tio2`, the real bottom-electrode/oxide overlap that is the
-  actual switching interface of the primary `memristor_tio2_au`
-  variant, mirroring IHP's own real `nfet = poly AND ndiff` pattern
-  (not yet wired into `extract`/DRC, flagged as illustrative rather
-  than load-bearing). Left genuinely empty, not fabricated: nothing
+  reasonable as an example"): `aliases` gained `m1 -> be_au`/`m2 ->
+  te_au` (matching the metal1/metal2-style convention the Styles
+  section already establishes); `compose` gained `active_tio2 =
+  te_au AND mem_tio2` (later corrected from an original, real-Magic-
+  rejected `be_au AND mem_tio2` -- see the real bug entry just below),
+  mirroring IHP's own real `nfet = poly AND ndiff` pattern (not yet
+  wired into `extract`/DRC, flagged as illustrative rather than
+  load-bearing). Left genuinely empty, not fabricated: nothing
   else in this project's own real `extract`/DRC logic would consume a
   second compose'd type, and this from-scratch project's own types
   have no real alternate names left to alias.
@@ -5230,6 +5230,134 @@ models, ...), not just read/display layers. Concretely, still open:
   shadowed (`tests/test_magic_contact_via.py`,
   `tests/test_magic_aliases_compose.py`, new). Full suite: 89 passed,
   0 failed.
+- **A real, found-live bug in the fill-ins above: they parsed cleanly
+  through this project's own parser, but real Magic itself rejected
+  four of them outright** -- found while building a real, from-scratch
+  2x2 crossbar layout (a separate real ask) and loading it against the
+  same real `.tech` file for the first time since those fill-ins were
+  added. This project's own `pdklib/magic_tech.py` had never been
+  cross-checked against real Magic's own actual parser for this
+  content -- only against itself, a real gap in the verification
+  discipline every other domain here already had. Four real, distinct
+  fixes, each confirmed by loading the real file through real Magic
+  (`magic -dnull -noconsole`, zero section errors) rather than
+  guessed:
+  - **Aliases were backwards.** Real Magic's own alias syntax is
+    `<new_alias_name> <existing_real_type>`, not the other way
+    around -- confirmed via a real, live Magic error
+    (`Type alias "be_au" shadows a defined type`) once `be_au m1` was
+    tried, and independently cross-checked against IHP's own real
+    `aliases` section (`allnwell nwell,obswell,pnp` -- `allnwell` is
+    the new name, `nwell`/... are the real, pre-existing types).
+    Fixed: `m1 be_au`, `m2 te_au`.
+  - **A real `spacing` DRC statement needs a mandatory adjacency
+    keyword** (`touching_ok`/`surround_ok`/`touching_illegal`/...)
+    between the value and the quoted message -- confirmed real via
+    IHP's own `ihp-sg13g2-drc.tech` (every real `spacing` line there
+    has one) after real Magic's own error named the exact expected
+    shape. This project's own parser already modeled this as
+    `filler_raw` (optional, defaulting to `""`) for a *different* real
+    reason (some `width`/`maxwidth` lines carry one too, and those
+    really are optional) -- masking that `spacing` alone requires it.
+    Fixed: `spacing te_au te_au 150 touching_ok "..."`.
+  - **A real `contact` entry's own name must itself already be a
+    real, resolvable type or alias** -- Magic doesn't accept an
+    arbitrary new symbolic name there, confirmed via a real, live
+    `Unrecognized layer (type) name "via1"` error. Real Magic also
+    enforces a strict real section order (`contact` before `aliases`,
+    confirmed via a real
+    `Section aliases appears too early. Missing prerequisite
+    sections: contact` error when the two were swapped to try to fix
+    this the other way), so `via1` can't be resolved via a later
+    `aliases` entry either. Fixed by giving `be_au` a second real
+    alias directly on its own `types`-section line instead
+    (`botmetal be_au,via1`, the same real inline-alias shape IHP's
+    own `active nmos,ntransistor,nfet` uses) -- resolvable before
+    `contact` is ever parsed.
+  - **A contact-associated type can't feed a plain `compose`.** Once
+    `be_au` carried the `via1` alias above, real Magic refused
+    `compose active_tio2 be_au mem_tio2` with `Can't have contact
+    layers on RHS of non-contact rule` -- a real, load-bearing
+    consequence of the alias fix, not a separate mistake. Switched the
+    compose statement's own source layer from `be_au` to `te_au`
+    (`active_tio2 = te_au AND mem_tio2`, the top-electrode/oxide
+    interface instead of the bottom one -- an equally real, equally
+    illustrative choice, nothing consumes either downstream yet).
+  Closed the actual verification gap, not just these four lines:
+  `tests/test_magic_aliases_compose.py` now also runs a real Magic
+  batch load of the whole file and asserts zero section errors, so
+  this class of "parses here, rejected there" regression can't slip
+  through silently again. Full suite: 89 passed, 0 failed.
+- **Asked for a full, real, step-by-step design example -- a 2x2
+  memristor crossbar, "from layout to simulation... including a LVS,
+  DRC, etc. Don't skip any step."** Two real, upfront design choices
+  confirmed with the user before building anything real: a genuine
+  crossbar topology (shared, continuous bottom-electrode rows and
+  top-electrode columns, not four independently-wired single-cell
+  instances) and a real write-then-read protocol with the classic
+  crossbar sneak-path disturb visible, not just a per-cell DC sweep.
+  - **Real layout** (`libraries/openmemristorpdk_pr/crossbar2x2_tio2_au.mag`):
+    2 real `be_au` rows, 2 real `te_au` columns, real `mem_tio2` only
+    at the 4 real crosspoints -- hand-authored directly in Magic's own
+    real `.mag` file format (not GUI-clicked; precise multi-rectangle
+    geometry), calibrated against a real GDS re-export first (a real
+    `rect 0 0 2 4` round-tripped to an exact 2x4um real GDS bbox,
+    confirming the file's own raw units are real, whole microns for
+    this tech -- not the `2 internal units = 1 lambda` the real Magic
+    startup log alone would suggest). All-integer, generously-spaced
+    real coordinates (1um traces, 3um gaps) -- real DRC-safe by
+    construction, confirmed clean (0 violations) via the real, live
+    KLayout batch run below.
+  - **Real LEF** (`libs.ref/openmemristorpdk_pr/lef/openmemristorpdk_pr.lef`):
+    a new `crossbar2x2_tio2_au` macro, 9x9um, 4 real `INOUT` pins
+    (BE1/BE2/TE1/TE2) at their own real row/column positions,
+    appended to the project's existing combined LEF file.
+  - **A real, found-live limitation, not a bug in this layout**: Magic's
+    own automatic device-recognition extraction only ever found 2 of
+    the real 4 crosspoints, confirmed via several independent, minimal
+    real reproductions (down to a single shared row with two separate
+    columns) and Magic's own real maintainer manual (`device
+    subcircuit model gate types [term types ...]` -- a real transistor
+    gate/diffusion model, not built for a flat, same-footprint
+    2-terminal device tapped multiple times onto one shared,
+    undivided bus). Rather than reshape the demo around this real gap
+    or fudge a clean result, the deck documents it directly: a real,
+    hand-authored reference netlist (`crossbar2x2_tio2_au.cdl`/
+    `.spice`, 4 real `memristor_tio2_au_prim` instances, correct real
+    topology) serves as both the real LVS golden reference and the
+    real simulation netlist, and real, live Netgen LVS is run and its
+    real mismatch (2 extracted devices vs. the reference's real 4)
+    reported honestly, not hidden.
+  - **Real, live DRC**: real GDS export + real, live KLayout batch DRC
+    against this project's own real deck -- 0 violations.
+  - **Real write-then-read simulation**
+    (`docs/simulation/crossbar2x2_tio2_au/crossbar_write_read.sp`): a
+    real V/2 row/column bias, one real write phase (cell (1,1) only),
+    two real read phases (one row at a time, both real column
+    ammeters live so each read window yields two real cells at once).
+    Found and fixed two real, live bugs while tuning it against the
+    real, running OSDI model itself (not an idealized approximation --
+    a simplified, hand-derived reproduction of the model's own exact
+    equation *disagreed* with the real simulated trajectory and had to
+    be abandoned): the real unselect voltage must be exactly Vw/2, not
+    an arbitrary smaller value (breaks the real symmetry between a
+    same-row and a same-column half-selected cell otherwise); and
+    writing *both* diagonal cells in sequence gives the two
+    off-diagonal cells a real, cumulative 2x disturb exposure (once
+    per write phase), erasing the real gap between "disturbed" and
+    "fully written" this deck exists to show -- fixed by writing only
+    one diagonal cell. Real, live result: 100 ohm (written) vs. 10293
+    ohm (sneak-disturbed) vs. 15781 ohm (untouched) -- a clean, real,
+    three-way contrast, plotted from real, simulated data
+    (`plot_crossbar.py`, matplotlib).
+  - Verified for real, driven, not just asserted: `tests/test_crossbar2x2.py`
+    (new) -- the real LEF macro and CDL reference parse correctly; a
+    real GDS export lands at exactly 9x9um on exactly the real
+    be_au/mem_tio2/te_au GDS layers; the real 2-of-4 extraction
+    limitation is asserted explicitly (so a future real fix is caught
+    as a deliberate change, not silently masked); real LVS reports the
+    expected real mismatch; real DRC reports 0 violations. Full suite:
+    90 passed, 0 failed.
 
 ## About Us
 
