@@ -5328,6 +5328,24 @@ models, ...), not just read/display layers. Concretely, still open:
     real simulation netlist, and real, live Netgen LVS is run and its
     real mismatch (2 extracted devices vs. the reference's real 4)
     reported honestly, not hidden.
+  - **Asked directly whether a real fix exists -- tried the genuinely
+    more principled one, and it didn't help either, confirmed live.**
+    Real, professional hierarchical extraction: 4 real instances of
+    the already-working single-device cell (`memristor_tio2_au`,
+    which extracts perfectly alone), placed via Magic's own real
+    `getcell child ll parent x y` at the 4 real crosspoints, wired
+    only through ordinary same-type bus material so device-recognition
+    never spans more than one real crosspoint. Real, live result, with
+    `ext2spice hierarchy on`/`blackbox on` explicitly set: still only
+    2 of the real 4 instances recognized (the same real "roughly half,
+    whichever net was processed last" pattern as the flat layout), and
+    even those two were re-descended into rather than treated as real
+    black boxes. This rules out layout topology (flat vs. hierarchical)
+    as the real cause -- the real limitation lives inside Magic's own
+    core `extract` device-recognition itself, not in how this
+    project's own layout is drawn or in `ext2spice`'s own formatting
+    flags. Documented as its own frame in the deck
+    ("Step 6, continued") rather than left as a dropped investigation.
   - **Real, live DRC**: real GDS export + real, live KLayout batch DRC
     against this project's own real deck -- 0 violations.
   - **Real write-then-read simulation**
