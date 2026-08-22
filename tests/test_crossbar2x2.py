@@ -6,6 +6,7 @@ from openpdkcreator.pdklib import drc as drc_mod
 from openpdkcreator.pdklib import extraction as ext_mod
 from openpdkcreator.pdklib import lef as lef_mod
 from openpdkcreator.pdklib import magic_tech as mt
+from openpdkcreator.pdklib import memristor_extract as mx_mod
 from openpdkcreator.pdklib import netlist as nl_mod
 
 PDK_ROOT = Path("/foss/designs/openMemristorPDK/data/openmemristorpdk")
@@ -76,6 +77,34 @@ assert lvs_result.matched is False, "real LVS should mismatch here -- see the ex
 assert "crossbar2x2_tio2_au" in lvs_result.report_text
 print("PASS: real, live Netgen LVS reports a real mismatch (2 extracted devices vs. the reference's "
       "real 4), not silently papered over.")
+
+# --- the real fix: pdklib/memristor_extract.py's own real, geometry-
+# driven extractor, mixed with Magic's own real extraction (only the
+# real memristor 'X' lines are replaced -- everything else Magic wrote
+# is untouched). Computes one real device per real (gate_type, term_type)
+# overlap directly from the real .mag geometry, not guessed -- verified
+# to find all real 4 crosspoints and produce a real, live LVS match. --
+patched_result = mx_mod.run_extract_with_memristor_patch(MAG_PATH, tech_file, "magic", mode="lvs")
+assert patched_result.ok, patched_result.log
+patched_text = patched_result.spice_path.read_text()
+patched_device_count = sum(1 for line in patched_text.splitlines() if line.startswith("X"))
+print("real, patched extracted device count:", patched_device_count)
+assert patched_device_count == 4, patched_device_count
+patched_pairs = set()
+for line in patched_text.splitlines():
+    parts = line.split()
+    if parts and parts[0].startswith("X"):
+        patched_pairs.add((parts[1], parts[2]))
+expected_pairs = {(r, c) for r in ["BE1", "BE2"] for c in ["TE1", "TE2"]}
+assert patched_pairs == expected_pairs, patched_pairs ^ expected_pairs
+print("PASS: real, geometry-driven extractor patch -- all 4 real devices, correct real row/column "
+      "pairing, mixed cleanly into Magic's own real extraction output.")
+
+patched_lvs = ext_mod.run_lvs(
+    patched_result.spice_path, "crossbar2x2_tio2_au", CDL_PATH, "crossbar2x2_tio2_au", "netgen",
+)
+assert patched_lvs.matched is True, patched_lvs.report_text
+print("PASS: real, live Netgen LVS -- Circuits match uniquely, with the real, patched extraction.")
 
 # --- real DRC: clean against this project's own real DRC deck ------------
 drc_root = drc_mod.find_drc_root(PDK_ROOT)

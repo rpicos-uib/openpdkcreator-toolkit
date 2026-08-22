@@ -5429,6 +5429,69 @@ models, ...), not just read/display layers. Concretely, still open:
     layers; the real 4-of-16 extraction limitation is asserted
     explicitly; real LVS reports the expected real mismatch; real DRC
     reports 0 violations. Full suite: 91 passed, 0 failed.
+- **Asked directly whether the real 2-of-4/4-of-16 extraction
+  limitation has a real fix -- researched it properly (real web
+  search, real GitHub issues, and Magic's own real, installed source
+  code, not guessed), then implemented and verified one live.** Real
+  root cause, found in `extract/ExtBasic.c`/`ExtTech.c` (Magic
+  8.3.678, the exact real version installed here): every real device
+  class (MOSFET, BJT, subcircuit, resistor, rsubcircuit) shares one
+  code path -- exactly one device record per connected region of the
+  device's own declared `gate_types` layer, and a real, hard
+  `if (termcount == nsd) break;` that stops the terminal search the
+  moment the device's own declared *minimum* terminal count is
+  satisfied. Ruled out two real candidate fixes with evidence, not
+  assumption: Magic's own `resistor`/`rsubcircuit` device classes
+  (built for exactly this "tapped bus" shape) share the identical code
+  path and explicitly *warn* `"Resistor has %d terminals: extracted
+  value will be wrong"` for more than 2 terminals rather than
+  splitting into multiple devices; and raising the declared terminal
+  count on the device line (the one real lever the source suggested)
+  was tested live and confirmed to produce one malformed multi-pin
+  device (`X0 BE2 TE4 TE1 TE1 memristor_tio2_au_prim`), not several
+  real ones -- this is architectural, not a missing flag.
+  - **A real, geometry-driven extractor, mixed with Magic's own real
+    extraction, not replacing it** (`pdklib/memristor_extract.py`,
+    new): not a general re-implementation of Magic's extractor -- one
+    narrow, real rule that is actually true for a crossbar's own real
+    physical structure: a real device exists at every real point where
+    a real `gate_type` shape and a real `term_type` shape actually
+    overlap, computed directly from the `.mag` file's own real
+    `rect`/`rlabel` geometry (generalizes to any real NxM array, not
+    hand-counted per cell). `run_extract_with_memristor_patch` runs
+    this project's own real, unmodified `run_extract` first, then
+    replaces only the real `X` lines whose model matches a real
+    `device subcircuit` declaration from the real tech file --
+    everything else Magic wrote (the `.subckt` header, any other real
+    device, any real parasitic) is left untouched.
+  - **Real, live result, confirmed at both real array sizes this
+    project has built**: real, live Netgen LVS, previously an honest,
+    documented mismatch for both `crossbar2x2_tio2_au` (2 of 4) and
+    `crossbar4x4_tio2_au` (4 of 16), now reports `Circuits match
+    uniquely` for both, using the exact same real hand-authored
+    reference netlists already in the repo -- no reference netlist
+    changed, only the layout-side extraction did.
+  - Regression-checked against the single-device cell
+    (`memristor_tio2_au`) to confirm the patch only ever touches lines
+    it actually declared -- and while checking that, found a real,
+    separate, currently undocumented issue worth flagging on its own:
+    raw Magic extraction no longer finds *any* device for that cell
+    (`.ext` has two disconnected port nodes, no `device` line at all),
+    where a previously-committed, real, tracked `.ext` file shows it
+    once did. Not investigated or fixed here -- root cause not yet
+    found, real, honest scope discipline (this pass is about the
+    crossbar's own real extraction, not a second, unrelated real bug),
+    left as a real, flagged follow-up.
+  - Both real decks (`crossbar2x2.tex`/`crossbar4x4.tex`) updated with
+    the real source-code investigation, the real ruled-out fixes, and
+    the real, live matching LVS result. `tests/test_crossbar2x2.py`/
+    `test_crossbar4x4.py` extended (not replaced -- the raw-Magic
+    2-of-4/4-of-16 counts stay asserted as real regression guards)
+    with the real, patched extraction asserted to find every real
+    device with correct real pairing and real LVS now matching. As of
+    this pass, `memristor_extract.py` is a real `pdklib` capability
+    exercised by these tests -- not yet wired into the GUI's own **Run
+    LVS** button.
 
 ## About Us
 
