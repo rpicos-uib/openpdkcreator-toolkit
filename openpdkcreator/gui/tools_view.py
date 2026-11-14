@@ -210,7 +210,7 @@ class ToolsView(ttk.Frame):
             # Open in KLayout -- see klayout_server.klayout_env.
             extra_env = klayout_server_mod.klayout_env(self.app.pdk_root)
 
-        argv, cwd = eda_tools.resolve_launch(status.tool, status.path, extra_argv=extra_argv)
+        argv, cwd = eda_tools.resolve_launch(status.tool, status.path, extra_argv=extra_argv, pdk_root=self.app.pdk_root)
         if tool_id == "klayout" and "-l" not in argv:
             lyp = klayout_server_mod.current_layers_lyp(self.app.pdk_root, self.app.lyp_path, self.app.project.layers)
             if lyp is not None:

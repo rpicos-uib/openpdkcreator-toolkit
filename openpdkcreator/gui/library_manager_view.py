@@ -867,7 +867,7 @@ class LibraryManagerView(ttk.Frame):
         if not status.found:
             messagebox.showerror("Open", f"{tool.name} isn't on PATH.", parent=self)
             return False
-        argv, cwd = eda_tools.resolve_launch(tool, status.path, extra_argv=extra_argv)
+        argv, cwd = eda_tools.resolve_launch(tool, status.path, extra_argv=extra_argv, pdk_root=self.app.pdk_root)
         env = {**os.environ, **extra_env} if extra_env else None
         subprocess.Popen(argv, cwd=cwd, env=env)
         self.status_var.set(f"Launched: {' '.join(argv)}")

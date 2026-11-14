@@ -1,5 +1,9 @@
 import sys
-sys.path.insert(0, "/foss/designs/openMemristorPDK")
+sys.path.insert(0, "/foss/designs")
+# openPDKcreator from this checkout, pointed at the openMemristorPDK project
+# (same as main.py --project-root openMemristorPDK).
+from main import use_project_root as _use_project_root  # noqa: E402
+_use_project_root(__import__("pathlib").Path("/foss/designs/openMemristorPDK"))
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk

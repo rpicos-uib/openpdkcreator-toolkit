@@ -993,6 +993,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--pdk-root", type=Path, default=DEFAULT_PDK_ROOT,
         help=f"Root of the downloaded ihp-sg13g2/ tree (default: {DEFAULT_PDK_ROOT})",
     )
+    parser.add_argument(
+        "--project-root", type=Path, default=None,
+        help="Project directory holding saves/, user_models/, libraries/, library_index.yaml and "
+        "export/ (default: this checkout, i.e. the directory main.py is in). Lets one copy of "
+        "openPDKcreator work on a separate project, e.g. --project-root openMemristorPDK "
+        "--pdk-root openMemristorPDK/data/openmemristorpdk.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     fetch_parser = sub.add_parser("fetch", help="Download the real IHP PDK.")
     fetch_parser.add_argument("--dest", type=Path, default=fetch_mod.DEFAULT_DEST)
@@ -1056,8 +1063,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def use_project_root(project_root: Path) -> None:
+    """Points every project-level location at *project_root* -- the same
+    three module-level settings ``App.change_project_directory`` swaps
+    at runtime (every consumer re-reads them module-qualified)."""
+
+    project_root = project_root.resolve()
+    if not project_root.is_dir():
+        raise SystemExit(f"--project-root: not a directory: {project_root}")
+    export_mod.PROJECT_ROOT = project_root
+    export_mod.EXPORT_ROOT = project_root / "export"
+    project_io.SAVE_DIR = project_root / "saves"
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.project_root is not None:
+        use_project_root(args.project_root)
     if args.command == "fetch":
         return cmd_fetch(args.dest)
     if args.command == "inventory":

@@ -97,14 +97,15 @@ fi
 # desktop is scaled to fit the browser window instead of scrolling.
 echo "[INFO] VNC session: http://127.0.0.1:${WEBSERVER_PORT}/?password=${VNC_PW}&autoconnect=true&resize=scale  (NOT the 'localhost' form -- see header comment)"
 
-# launch_gui <workdir-in-container> <pdk-dir relative to workdir> <label> [pdk-root arg]
-# Starts `main.py [--pdk-root <arg>] gui` from <workdir> on the
-# container's VNC display, unless that exact GUI is already running.
-# With no [pdk-root arg], main.py's own default PDK root is used.
+# launch_gui <workdir-in-container> <pdk-dir relative to workdir> <label> [main.py options...]
+# Starts `main.py [options] gui` from <workdir> on the container's VNC
+# display, unless that exact GUI is already running. With no options,
+# main.py's own default PDK root and project directory are used.
 launch_gui() {
-	local workdir="$1" pdk_dir="$2" label="$3" pdk_arg="${4:-}"
+	local workdir="$1" pdk_dir="$2" label="$3"
+	shift 3
 	local cmd="main.py gui"
-	[ -n "${pdk_arg}" ] && cmd="main.py --pdk-root ${pdk_arg} gui"
+	[ $# -gt 0 ] && cmd="main.py $* gui"
 	# -x: exact full command line, so "main.py gui" never matches the
 	# memristor GUI's "main.py --pdk-root ... gui" (or vice versa).
 	if "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" pgrep -fx "python3 ${cmd}" > /dev/null 2>&1; then
@@ -133,8 +134,9 @@ case "${1:-}" in
 		launch_gui /foss/designs data/ihp-sg13g2 "IHP SG13G2"
 		;;
 	--gui-memristor)
-		# openMemristorPDK/ is its own project (own main.py, saves/,
-		# user_models/, libraries/), so run it from its own directory.
-		launch_gui /foss/designs/openMemristorPDK data/openmemristorpdk "openMemristorPDK" data/openmemristorpdk
+		# openMemristorPDK/ is its own project (own saves/, user_models/,
+		# libraries/), run with this checkout's own openPDKcreator.
+		launch_gui /foss/designs openMemristorPDK/data/openmemristorpdk "openMemristorPDK" \
+			--project-root openMemristorPDK --pdk-root openMemristorPDK/data/openmemristorpdk
 		;;
 esac

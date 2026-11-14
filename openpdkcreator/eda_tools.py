@@ -511,6 +511,7 @@ def install_command_for(tool: Tool, package_manager: str | None = None) -> str |
 
 def resolve_launch(
     tool: Tool, binary_path: str, repo_root: Path = REPO_ROOT, extra_argv: tuple[str, ...] = (),
+    pdk_root: Path | None = None,
 ) -> tuple[list[str], Path]:
     """The real argv and working directory to ``subprocess.Popen`` to open
     *tool* (found at the already-detected *binary_path* -- never
@@ -534,8 +535,16 @@ def resolve_launch(
     guidance = tool.launch
     if guidance is None:
         return [binary_path, *extra_argv], repo_root
-    if guidance.requires_path and not Path(guidance.requires_path.format(repo_root=repo_root)).is_file():
-        return [binary_path, *extra_argv], repo_root
+    if guidance.requires_path:
+        required = Path(guidance.requires_path.format(repo_root=repo_root))
+        if not required.is_file():
+            return [binary_path, *extra_argv], repo_root
+        # *pdk_root*: the PDK actually open. The recorded presets point at
+        # IHP's own files under this checkout's data/, so with a different
+        # PDK open (e.g. --project-root/--pdk-root on openMemristorPDK)
+        # they would load IHP's Magic rc / KLayout layers into it.
+        if pdk_root is not None and not required.resolve().is_relative_to(pdk_root.resolve()):
+            return [binary_path, *extra_argv], repo_root
 
     argv = [binary_path] + [arg.format(repo_root=repo_root) for arg in guidance.argv]
     if guidance.startup_script:
