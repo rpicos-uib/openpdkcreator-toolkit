@@ -27,9 +27,14 @@ assert [(a.name, a.members_raw) for a in tech.aliases] == [
 ]
 print("PASS: openmemristorpdk's own real aliases (m1->be_au, m2->te_au, active_tio2->mem_tio2) parse correctly.")
 
+# The former `compose active_tio2 te_au mem_tio2` statement is gone on
+# purpose: active_tio2 is only an alias of mem_tio2, so the rule made
+# Magic merge every Au top electrode drawn over TiO2 into the oxide --
+# exactly the memristor_tio2_au stack -- and the top electrode vanished
+# from layouts and from the exported GDS.
 print("real compose:", [(c.verb, c.args) for c in tech.compose])
-assert [(c.verb, c.args) for c in tech.compose] == [("compose", ("active_tio2", "te_au", "mem_tio2"))]
-print("PASS: openmemristorpdk's own real compose statement (active_tio2 = te_au AND mem_tio2) parses correctly.")
+assert tech.compose == []
+print("PASS: openmemristorpdk has no compose rules (none that would eat the TiO2 device's top electrode).")
 
 # --- no-edit export stays byte-identical ----------------------------------
 rendered = mtw.render_tech_file(TECH_PATH, tech)
@@ -55,9 +60,9 @@ root.update()
 print("real, live Aliases rows:", len(mtv.aliases_editor.tree.get_children()))
 assert len(mtv.aliases_editor.tree.get_children()) == 3
 print("real, live Compose rows:", len(mtv.compose_editor.tree.get_children()))
-assert len(mtv.compose_editor.tree.get_children()) == 1
-print("PASS: real, live -- Aliases/Compose tabs show their real content after a real app.load(), "
-      "not shadowed by a stale save.")
+assert len(mtv.compose_editor.tree.get_children()) == 0
+print("PASS: real, live -- Aliases/Compose tabs show their real content (3 aliases, no compose rules) "
+      "after a real app.load(), not shadowed by a stale save.")
 
 root.destroy()
 

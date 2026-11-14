@@ -12,20 +12,15 @@ from openpdkcreator.pdklib import memristor_extract as mx_mod
 PDK_ROOT = Path("/foss/designs/openMemristorPDK/data/openmemristorpdk")
 LIB_DIR = Path("/foss/designs/openMemristorPDK/libraries/openmemristorpdk_pr")
 
-# --- real, found-live regression: a real Magic tech-file fix elsewhere
-# this session (giving be_au a real second identity via1 so a real
-# `contact via1 be_au te_au` declaration could be parsed at all --
-# openmemristorpdk.tech's own real `types` line) has a real, live side
-# effect on these 3 real single-device cells specifically: each draws
-# its own real be_au/te_au footprint as fully, exactly coincident (both
-# `rect 0 0 1 1`), and real Magic's own implicit-contact mechanism now
-# reclassifies that entire coincident area as a real via1 contact tile,
-# leaving no real be_au-typed material anywhere in the cell for
-# `device subcircuit memristor_..._prim be_au te_...` to find at all --
-# confirmed live via the real, tracked .ext output: node "BE" reports
-# real layer via1, not be_au. Zero devices, not the crossbar's own
-# partial-overlap 1-of-N pattern -- a real, different-shaped
-# consequence of the same real tech-file fix. ---------------------------
+# --- Magic's own extraction finds each single-device cell's memristor.
+# These cells draw be_au, the oxide and the top electrode as exactly
+# coincident rects. via1 used to be declared as a second name of be_au
+# (`botmetal be_au,via1`) with `contact via1 be_au te_au`, so Magic
+# reclassified every be_au/te_* overlap as a via1 contact tile: the top
+# electrode vanished, no be_au was left for `device subcircuit ...` and
+# raw extraction found 0 devices (the GDS export lost the TE layer too).
+# via1 is now its own type on its own GDS layer (15/0), present only
+# where a via is drawn, so Magic sees the real device stack again. -------
 tech_file = ext_mod.default_tech_file(PDK_ROOT)
 for stem in ["memristor_tio2_au", "memristor_tio2_ti", "memristor_hfo2_al"]:
     mag_path = LIB_DIR / f"{stem}.mag"
@@ -33,13 +28,12 @@ for stem in ["memristor_tio2_au", "memristor_tio2_ti", "memristor_hfo2_al"]:
     assert raw_result.ok, raw_result.log
     raw_text = raw_result.spice_path.read_text()
     raw_device_count = sum(1 for line in raw_text.splitlines() if line.startswith("X"))
-    assert raw_device_count == 0, (
-        f"{stem}: raw Magic device count changed from the real, found-live 0 -- if this project's own "
-        "tech file or layout was changed such that real Magic itself now finds this cell's own device "
-        "again, update this real, found-live regression note accordingly, don't just relax this assertion."
+    assert raw_device_count == 1, (
+        f"{stem}: Magic's own extraction should find exactly this cell's one memristor, found "
+        f"{raw_device_count} -- check that via1 is still its own drawn type (not an alias of be_au) "
+        "in openmemristorpdk.tech."
     )
-print("PASS: real, live -- Magic's own raw extraction finds 0 real devices for all 3 real single-device "
-      "cells (the real, found-live via1-reclassification regression), not silently drifted.")
+print("PASS: Magic's own raw extraction finds the 1 real device in each of the 3 single-device cells.")
 
 # --- the real fix: the same pdklib/memristor_extract.py geometry-driven
 # patch built for the crossbar cells does not depend on Magic's own raw

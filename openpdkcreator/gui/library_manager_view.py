@@ -403,6 +403,7 @@ class LibraryManagerView(ttk.Frame):
         top.pack(fill="x", pady=(0, 4))
         ttk.Label(top, text="Cells", font=("TkDefaultFont", 10, "bold")).pack(side="left")
         ttk.Button(top, text="New Cell...", command=self._new_cell).pack(side="right")
+        ttk.Button(top, text="Delete Cell...", command=self._delete_cell).pack(side="right", padx=(0, 4))
 
         self.cell_tree = ttk.Treeview(parent, columns=("views",), show="headings", selectmode="browse")
         self.cell_tree.heading("views", text="Cell (real view count)")
@@ -513,6 +514,59 @@ class LibraryManagerView(ttk.Frame):
             return
         self.current_cell = name
         self._create_view(view_kind)
+
+    def _delete_cell(self):
+        """Deletes the selected cell's own project views: every view
+        registered for it in ``library_index.yaml`` is unregistered and
+        its file deleted (plus the ``.osdi`` compiled next to a
+        Verilog-A model). Only this project's registered files under
+        the project directory are touched -- never real, downloaded PDK
+        data, which can't be deleted from here. Asks first, listing
+        every file."""
+
+        library, cell = self.current_library, self.current_cell
+        if library is None or cell is None:
+            messagebox.showinfo("Delete Cell", "Select a cell first.", parent=self)
+            return
+        project_root = Path(self.project_root).resolve()
+        owned = [
+            e for (c, _k), e in li_mod.merged_entries(self.app.pdk_root, self.project_root, library).items()
+            if c == cell and e.source != "real"
+        ]
+        if not owned:
+            messagebox.showinfo(
+                "Delete Cell",
+                f"{cell!r} has no project views to delete (its views come from the downloaded PDK).",
+                parent=self,
+            )
+            return
+        files: list[Path] = []
+        for e in owned:
+            path = Path(e.path)
+            if path.resolve().is_relative_to(project_root):
+                files.append(path)
+                if path.suffix.lower() == ".va":
+                    files.append(user_models_mod.osdi_path_for(path))
+        existing = [f for f in files if f.is_file()]
+        listing = "\n".join(f"  {f.name}" for f in existing)
+        if not messagebox.askyesno(
+            "Delete Cell",
+            f"Delete the cell {cell!r} from {library!r}?\n\n"
+            f"This removes its {len(owned)} view(s) from the library and deletes these files:\n\n"
+            f"{listing or '  (no files on disk)'}\n\nThis cannot be undone from here.",
+            icon="warning", parent=self,
+        ):
+            return
+        for f in existing:
+            f.unlink()
+        for e in owned:
+            li_mod.unregister_entry(self.project_root, library, cell, e.view_kind)
+        self.current_cell = None
+        self.refresh_libraries()
+        if self.library_tree.exists(library):
+            self.library_tree.selection_set(library)
+            self.library_tree.see(library)
+        self.status_var.set(f"Deleted cell {cell!r}: {len(owned)} view(s), {len(existing)} file(s).")
 
     def _ask_creatable_view_kind(self, title: str, prompt: str) -> str | None:
         labels = [li_mod.VIEW_KIND_LABELS[k] for k in li_mod.VIEW_KIND_ORDER if k in li_mod.CREATABLE_VIEW_KINDS]
@@ -1316,6 +1370,13 @@ class LibraryManagerView(ttk.Frame):
             self, f"Run DRC -- {entry.path.stem} ({verdict})",
             f"{drc_result.log}\n\n--- {drc_result.report_path.name} ---\n{report_text}",
         )
+        # The GDS export above writes <cell>.gds next to the layout: register
+        # it now so the GDS/Layout row (Open in KLayout...) shows up straight
+        # away instead of only after re-selecting the library.
+        library, cell = self.current_library, self.current_cell
+        if library is not None and cell is not None:
+            li_mod.auto_register_new_files(self.project_root, library)
+            self._refresh_preserving_selection(library, cell)
 
     # -- IHP LibMan project-file import/export ---------------------------------
 
