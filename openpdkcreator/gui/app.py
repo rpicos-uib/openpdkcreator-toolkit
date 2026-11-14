@@ -113,10 +113,12 @@ write-back either).
 from __future__ import annotations
 
 import re
+import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from .. import eda_tools
 from .. import export as export_mod
 from .. import project_io
 from ..pdklib import drc as drc_mod
@@ -1209,6 +1211,71 @@ class App(ttk.Frame):
 
         self.user_models = user_models_mod.load_user_models(export_mod.PROJECT_ROOT)
         self.user_model_links = user_models_mod.load_links(export_mod.PROJECT_ROOT)
+        # Deferred to the event loop: this first runs while the window is
+        # still being built (UserModelsView's own constructor reloads),
+        # before the status bar exists.
+        self.root.after_idle(self._auto_compile_veriloga)
+
+    def _auto_compile_veriloga(self):
+        """Compiles every Verilog-A model whose ``.osdi`` is missing or
+        older than its ``.va`` -- automatically, with nothing to click:
+        a fresh checkout has no ``.osdi`` at all (gitignored build
+        product), and simulations load the ``.osdi``, never the ``.va``.
+
+        Runs OpenVAF in a background thread so the window appears right
+        away; the result -- success or which models failed -- goes to
+        the status bar only, never a (modal) window. Up-to-date models are
+        skipped, so this costs nothing on later reloads. Closing an
+        edited ``.va`` window still recompiles that one file and reports
+        (``file_view_dialog.compile_veriloga``)."""
+
+        if getattr(self, "_osdi_compile_running", False):
+            return  # startup reloads several times; one compile pass at a time
+        stale = [
+            m.path for m in self.user_models
+            if m.kind == "veriloga" and user_models_mod.osdi_is_stale(m.path)
+        ]
+        if not stale:
+            return
+        tool = eda_tools._TOOL_BY_ID.get("openvaf")
+        status = eda_tools.check_tool(tool) if tool is not None else None
+        if status is None or not status.found:
+            self.status.set(
+                f"{len(stale)} Verilog-A model(s) not compiled: OpenVAF (openvaf) isn't on PATH."
+            )
+            return
+
+        results: list[tuple[Path, user_models_mod.CompileCheckResult]] = []
+
+        def work():
+            for va_path in stale:
+                results.append((va_path, user_models_mod.compile_osdi(va_path, status.path)))
+
+        worker = threading.Thread(target=work, daemon=True)
+        self._osdi_compile_running = True
+        worker.start()
+        self.status.set(f"Compiling {len(stale)} Verilog-A model(s) with OpenVAF...")
+
+        def finish():
+            if worker.is_alive():
+                self.root.after(200, finish)
+                return
+            self._osdi_compile_running = False
+            failed = [(p, r) for p, r in results if not r.ok]
+            done = len(results) - len(failed)
+            if not failed:
+                self.status.set(f"Compilation performed correctly: {done} Verilog-A model(s) compiled to .osdi.")
+                return
+            # Status bar only -- never a window: this runs on its own at
+            # every start, and a model that doesn't compile yet (e.g. a
+            # fresh skeleton) must not block the app behind a dialog.
+            names = ", ".join(p.name for p, _r in failed)
+            self.status.set(
+                f"Verilog-A: {done} compiled; could not compile {names}. To see why, open it "
+                f"(Library Manager > Verilog-A > View) and close it, or use User Models > Compile Log."
+            )
+
+        self.root.after(200, finish)
 
     def user_models_by_cell(self) -> dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]]:
         return user_models_mod.group_by_cell(export_mod.PROJECT_ROOT, self.user_models, self.user_model_links)

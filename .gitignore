@@ -34,3 +34,7 @@ openMemristorPDK/
 # exported from a real .sch) -- derived, not this project's own
 # original code, same reasoning as data/saves/export/ above.
 simulations/
+
+# Compiled Verilog-A (OpenVAF) modules -- openPDKcreator rebuilds these
+# automatically from the .va sources (at startup and after an edit).
+*.osdi
