@@ -168,7 +168,7 @@ from ..pdklib import xschem_sch as xschem_sch_mod
 from ..pdklib import xschem_view_switch as xschem_view_switch_mod
 from .file_view_dialog import view_file_dialog
 from .text_dialog import show_text_dialog
-from .tooltip import add_help_icon
+from .tooltip import Tooltip, add_help_icon
 
 LIBRARIES_DIRNAME = li_mod.LIBRARIES_DIRNAME
 
@@ -585,9 +585,12 @@ class LibraryManagerView(ttk.Frame):
             return
 
         source_tag = "real" if entry.source == "real" else "project"
-        ttk.Label(row_frame, text=f"{entry.path} ({source_tag})", foreground="#2e7d32").pack(
-            side="left", padx=(4, 8), fill="x", expand=True
-        )
+        # Just the file name, full path on hover: the full absolute path
+        # is long enough to push this row's own action buttons (Open in
+        # xschem, View, Run DRC...) past the right edge of the window.
+        path_label = ttk.Label(row_frame, text=f"{entry.path.name} ({source_tag})", foreground="#2e7d32")
+        path_label.pack(side="left", padx=(4, 8))
+        path_label._path_tooltip = Tooltip(path_label, str(entry.path))
 
         if view_kind in ("xschem_symbol", "xschem_schematic"):
             ttk.Button(row_frame, text="Open in xschem", command=lambda e=entry: self._open_xschem(e)).pack(
@@ -1091,7 +1094,8 @@ class LibraryManagerView(ttk.Frame):
         self.status_var.set("Opening in KLayout...")
         self.update_idletasks()
         reused = klayout_server_mod.open_cell(
-            self.app.pdk_root, status.path, entry.path, self.current_cell or "", lyp_path=self.app.lyp_path,
+            self.app.pdk_root, status.path, entry.path, self.current_cell or "",
+            lyp_path=klayout_server_mod.current_layers_lyp(self.app.pdk_root, self.app.lyp_path, self.app.project.layers),
         )
         self.status_var.set(
             f"Sent {self.current_cell!r} to the real, already-running KLayout." if reused

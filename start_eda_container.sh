@@ -40,6 +40,22 @@
 # URL this script prints, not "localhost".
 set -euo pipefail
 
+# Usage:
+#   ./start_eda_container.sh                  start the container only
+#   ./start_eda_container.sh --gui            + GUI on the IHP SG13G2 PDK
+#   ./start_eda_container.sh --gui-memristor  + GUI on openMemristorPDK/
+usage() {
+	echo "Usage: $0 [--gui | --gui-memristor]" >&2
+	echo "  (no option)      start the container only" >&2
+	echo "  --gui            also open the GUI on the IHP SG13G2 PDK" >&2
+	echo "  --gui-memristor  also open the GUI on the openMemristorPDK" >&2
+	exit 2
+}
+case "${1:-}" in
+	""|--gui|--gui-memristor) ;;
+	*) usage ;;
+esac
+
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 IIC_OSIC_TOOLS_DIR="${IIC_OSIC_TOOLS_DIR:-$HOME/eda/IIC-OSIC-TOOLS}"
 CONTAINER_ENGINE="${CONTAINER_ENGINE:-podman}"
@@ -77,20 +93,48 @@ else
 	)
 fi
 
-echo "[INFO] VNC session: http://127.0.0.1:${WEBSERVER_PORT}/?password=${VNC_PW}  (NOT the 'localhost' form -- see header comment)"
+# autoconnect: no "Connect" button to press; resize=scale: the remote
+# desktop is scaled to fit the browser window instead of scrolling.
+echo "[INFO] VNC session: http://127.0.0.1:${WEBSERVER_PORT}/?password=${VNC_PW}&autoconnect=true&resize=scale  (NOT the 'localhost' form -- see header comment)"
 
-if [ "${1:-}" = "--gui" ]; then
-	if "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" pgrep -f "main.py gui" > /dev/null 2>&1; then
-		echo "[INFO] main.py gui is already running inside the container."
-	else
-		if "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" test -d /foss/designs/data/ihp-sg13g2; then
-			:
-		else
-			echo "[WARNING] /foss/designs/data/ihp-sg13g2 not found inside the container --"
-			echo "           run 'python3 main.py fetch' first (either on the host, since"
+# launch_gui <workdir-in-container> <pdk-dir relative to workdir> <label> [pdk-root arg]
+# Starts `main.py [--pdk-root <arg>] gui` from <workdir> on the
+# container's VNC display, unless that exact GUI is already running.
+# With no [pdk-root arg], main.py's own default PDK root is used.
+launch_gui() {
+	local workdir="$1" pdk_dir="$2" label="$3" pdk_arg="${4:-}"
+	local cmd="main.py gui"
+	[ -n "${pdk_arg}" ] && cmd="main.py --pdk-root ${pdk_arg} gui"
+	# -x: exact full command line, so "main.py gui" never matches the
+	# memristor GUI's "main.py --pdk-root ... gui" (or vice versa).
+	if "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" pgrep -fx "python3 ${cmd}" > /dev/null 2>&1; then
+		echo "[INFO] The ${label} GUI is already running inside the container."
+		return 0
+	fi
+	if ! "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" test -d "${workdir}/${pdk_dir}"; then
+		echo "[WARNING] ${workdir}/${pdk_dir} not found inside the container."
+		if [ "${pdk_dir}" = "data/ihp-sg13g2" ]; then
+			echo "           Run 'python3 main.py fetch' first (either on the host, since"
 			echo "           data/ is bind-mounted, or inside the container)."
 		fi
-		echo "[INFO] Launching main.py gui inside the container ..."
-		"${CONTAINER_ENGINE}" exec -d -e DISPLAY=:1 -w /foss/designs "${CONTAINER_NAME}" python3 main.py gui
 	fi
-fi
+	echo "[INFO] Launching the ${label} GUI inside the container ..."
+	# Run through a login shell (bash -l) so the container's own env
+	# setup runs: a bare `exec` only gets the image's minimal PATH,
+	# without /foss/tools/bin etc., and the GUI then finds no EDA
+	# tools (magic, xschem, klayout, ngspice, netgen...).
+	"${CONTAINER_ENGINE}" exec -d -e DISPLAY=:1 -w "${workdir}" "${CONTAINER_NAME}" \
+		bash -lc "exec python3 ${cmd}"
+}
+
+case "${1:-}" in
+	"") ;;
+	--gui)
+		launch_gui /foss/designs data/ihp-sg13g2 "IHP SG13G2"
+		;;
+	--gui-memristor)
+		# openMemristorPDK/ is its own project (own main.py, saves/,
+		# user_models/, libraries/), so run it from its own directory.
+		launch_gui /foss/designs/openMemristorPDK data/openmemristorpdk "openMemristorPDK" data/openmemristorpdk
+		;;
+esac

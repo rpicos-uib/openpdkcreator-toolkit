@@ -37,6 +37,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .. import eda_tools
+from ..pdklib import klayout_server as klayout_server_mod
 from ..pdklib import tool_env as tool_env_mod
 
 
@@ -100,22 +101,27 @@ class ToolsView(ttk.Frame):
         statuses = eda_tools.check_all()
         self.statuses = {status.tool.id: status for status in statuses}
         found = 0
+        superseded = []
         missing_required = []
         for status in statuses:
             tool = status.tool
             if status.found:
                 found += 1
+            elif tool.superseded_by:
+                superseded.append(tool.id)
             elif tool.required:
                 missing_required.append(tool.id)
             self.tree.insert(
                 "", "end", iid=tool.id,
                 values=(
                     tool.id, tool.category, "yes" if tool.required else "no",
-                    "found" if status.found else "MISSING", status.version or "", status.path or "",
+                    eda_tools.status_label(status), status.version or "", status.path or "",
                 ),
             )
 
-        summary = f"{found}/{len(statuses)} tool(s) found"
+        summary = f"{found}/{len(statuses) - len(superseded)} tool(s) found"
+        if superseded:
+            summary += f" ({len(superseded)} superseded, not needed: {', '.join(superseded)})"
         if missing_required:
             summary += f" -- {len(missing_required)} required missing: {', '.join(missing_required)}"
         self.summary_var.set(summary)
@@ -147,6 +153,11 @@ class ToolsView(ttk.Frame):
         if status.found:
             lines.append(f"Found: {status.path}")
             lines.append(f"Version: {status.version or 'unknown'}")
+        elif tool.superseded_by:
+            lines.append(
+                f"Not installed -- superseded by {tool.superseded_by}, which replaces it. "
+                f"No need to install this unless an old design specifically requires it."
+            )
         else:
             lines.append("Not found on PATH.")
         lines.append("")
@@ -194,6 +205,15 @@ class ToolsView(ttk.Frame):
             if script is not None:
                 extra_argv = (script,)
 
+        elif tool_id == "klayout":
+            # Same project-only KLAYOUT_PATH/HOME as Library Manager's
+            # Open in KLayout -- see klayout_server.klayout_env.
+            extra_env = klayout_server_mod.klayout_env(self.app.pdk_root)
+
         argv, cwd = eda_tools.resolve_launch(status.tool, status.path, extra_argv=extra_argv)
+        if tool_id == "klayout" and "-l" not in argv:
+            lyp = klayout_server_mod.current_layers_lyp(self.app.pdk_root, self.app.lyp_path, self.app.project.layers)
+            if lyp is not None:
+                argv = [*argv, "-l", str(lyp)]
         env = {**os.environ, **extra_env} if extra_env else None
         subprocess.Popen(argv, cwd=cwd, env=env)

@@ -156,7 +156,12 @@ print("open_cell call:", open_cell_calls[-1])
 assert pdk_root_arg == app.pdk_root
 assert gds_path_arg == lmv._entries["gds"].path
 assert cell_name_arg == "sg13g2_inv_1"
-assert lyp_path_arg == app.lyp_path and lyp_path_arg is not None
+# The .lyp handed over is a rendered copy of the app's current layers
+# (klayout_server.current_layers_lyp) -- so saved Layers edits reach
+# KLayout too. With no edits and every layer from the real file, that
+# copy must be byte-identical to the real IHP .lyp itself.
+assert lyp_path_arg is not None and lyp_path_arg.name == "current_layers.lyp", lyp_path_arg
+assert lyp_path_arg.read_text(encoding="utf-8") == app.lyp_path.read_text(encoding="utf-8")
 print("PASS: Open in KLayout calls the real klayout_server.open_cell with the real pdk_root/gds path/cell name/.lyp.")
 
 launched.clear()

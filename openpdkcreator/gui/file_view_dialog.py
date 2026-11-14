@@ -31,7 +31,10 @@ from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from .. import eda_tools
 from .. import export as export_mod
+from ..pdklib import user_models as user_models_mod
+from .text_dialog import show_text_dialog
 
 
 def _is_gitignored(path: Path) -> bool:
@@ -63,6 +66,48 @@ def _is_gitignored(path: Path) -> bool:
         return proc.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return True
+
+
+def compile_veriloga(parent: tk.Widget, va_path: Path) -> bool:
+    """Compiles *va_path* to its ``.osdi`` (``user_models.compile_osdi``)
+    and tells the user how it went: "Compilation performed correctly"
+    or OpenVAF's own error output. Run when a Verilog-A file's window
+    closes after an edit was saved -- or whenever its ``.osdi`` is
+    missing/out of date, so a fresh checkout gets one too. Returns
+    whether a usable ``.osdi`` was produced."""
+
+    tool = eda_tools._TOOL_BY_ID.get("openvaf")
+    status = eda_tools.check_tool(tool) if tool is not None else None
+    if status is None or not status.found:
+        messagebox.showwarning(
+            "Verilog-A not compiled",
+            f"{va_path.name} was not compiled: OpenVAF (openvaf) isn't on PATH.\n\n"
+            "See Settings > Tools > OpenVAF for how to install it.",
+            parent=parent,
+        )
+        return False
+    toplevel = parent.winfo_toplevel()
+    toplevel.configure(cursor="watch")
+    toplevel.update_idletasks()
+    try:
+        result = user_models_mod.compile_osdi(va_path, status.path)
+    finally:
+        toplevel.configure(cursor="")
+    osdi = user_models_mod.osdi_path_for(va_path)
+    if result.ok:
+        messagebox.showinfo(
+            "Verilog-A compiled",
+            f"Compilation performed correctly.\n\n{va_path.name} -> {osdi}",
+            parent=parent,
+        )
+    else:
+        show_text_dialog(
+            parent, f"Compilation errors -- {va_path.name}",
+            f"OpenVAF could not compile {va_path}.\n"
+            f"{'The previous ' + osdi.name + ' was kept.' if osdi.is_file() else 'No .osdi was produced.'}\n\n"
+            f"{result.log.strip() or '(OpenVAF printed no messages.)'}",
+        )
+    return result.ok
 
 
 def view_file_dialog(
@@ -144,6 +189,8 @@ def view_file_dialog(
         save_button.configure(state="normal")
         status_var.set(f"{path}  (editing -- {edit_note})")
 
+    saved = [False]
+
     def _save():
         if not messagebox.askyesno(
             "Save changes?",
@@ -152,6 +199,7 @@ def view_file_dialog(
         ):
             return
         path.write_text(text.get("1.0", "end-1c"), encoding="utf-8")
+        saved[0] = True
         text.edit_modified(False)
         status_var.set(f"{path}  (saved)")
         if on_save is not None:
@@ -163,6 +211,8 @@ def view_file_dialog(
         ):
             return
         dialog.destroy()
+        if path.suffix.lower() == ".va" and (saved[0] or user_models_mod.osdi_is_stale(path)):
+            compile_veriloga(parent, path)
 
     edit_button.configure(command=_enable_edit)
     save_button.configure(command=_save)

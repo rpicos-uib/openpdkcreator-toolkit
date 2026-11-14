@@ -93,6 +93,18 @@ ALIVE_TIMEOUT_S = 5.0
 a real, live server between two real poll ticks is never mistaken for
 a dead one."""
 
+FULL_HIERARCHY = "<full-hierarchy-new-cell>true</full-hierarchy-new-cell>"
+"""klayoutrc setting that shows every hierarchy level of a newly opened
+cell. With it left at KLayout's default (false), a fresh launch shows a
+modal Tip ("only the top cell's content is shown initially...") that
+TIP_WINDOW_HIDDEN does not cover; with it true the tip has nothing to
+ask about and never appears."""
+
+VIEW_HATCHES = ("I9", "I5", "I3", "I13", "I8", "I4")
+"""KLayout built-in stipples (diagonal hatches / dots in alternating
+directions) handed out in turn to app-created layers in the viewing
+copy of the layer file -- see ``current_layers_lyp``."""
+
 POLL_INTERVAL_MS = 500
 
 _LAUNCH_WAIT_S = 15.0
@@ -127,10 +139,70 @@ def _klayout_home(pdk_root: Path) -> Path:
             '<?xml version="1.0" encoding="utf-8"?>\n'
             "<config>\n"
             f" <tip-window-hidden>{TIP_WINDOW_HIDDEN}</tip-window-hidden>\n"
+            f" {FULL_HIERARCHY}\n"
             "</config>\n",
             encoding="utf-8",
         )
+    else:
+        # Older seeded files predate FULL_HIERARCHY -- add it in place.
+        text = rcfile.read_text(encoding="utf-8", errors="replace")
+        if "<full-hierarchy-new-cell>" not in text and "</config>" in text:
+            rcfile.write_text(text.replace("</config>", f" {FULL_HIERARCHY}\n</config>", 1), encoding="utf-8")
     return home
+
+
+def klayout_env(pdk_root: Path) -> dict[str, str]:
+    """Environment for any KLayout this app launches for *pdk_root*.
+
+    ``KLAYOUT_HOME``: the per-project settings directory above.
+    ``KLAYOUT_PATH``: only this project's own ``libs.tech/klayout``
+    (plus its ``tech/``). The IIC-OSIC-TOOLS container exports a global
+    ``KLAYOUT_PATH`` pointing at IHP's own ``/foss/pdks/ihp-sg13g2``
+    KLayout tree, so without this override every KLayout started from
+    here -- for *any* project -- loads IHP's technology, its SG13G2 PDK
+    menu, and IHP's layer names for whatever GDS numbers happen to
+    collide (a memristor PDK's 10/0 showed up as IHP's "Metal2")."""
+
+    home = _klayout_home(pdk_root)
+    own = pdk_root.resolve() / "libs.tech" / "klayout"
+    search = [str(home)]
+    if own.is_dir():
+        search += [str(own), str(own / "tech")]
+    return {"KLAYOUT_HOME": str(home), "KLAYOUT_PATH": os.pathsep.join(search)}
+
+
+def current_layers_lyp(pdk_root: Path, lyp_path: Path | None, layers: list) -> Path | None:
+    """A ``.lyp`` reflecting the layers the app currently has -- the
+    file on disk *plus* this project's saved/unsaved Layers edits --
+    written to this project's state directory, or *lyp_path* unchanged
+    when there's nothing to add. Needed because a from-scratch PDK's
+    own on-disk ``.lyp`` can be an empty skeleton with every real layer
+    living only in ``saves/<pdk>.yaml``: passing that file to ``-l``
+    gave KLayout no layer names at all."""
+
+    if lyp_path is None or not lyp_path.is_file() or not layers:
+        return lyp_path
+    import re
+
+    from . import layers_writer
+
+    text = layers_writer.render_lyp_file(lyp_path, layers)
+    # Layers created in this app (no block of their own in the file on
+    # disk) all get the writer's default hollow pattern, so a vertical
+    # stack drawn on top of itself -- e.g. a memristor's electrode/oxide/
+    # electrode squares -- shows as one bare outline. For this viewing
+    # copy only, give each such layer its own hatch so stacked layers
+    # stay visible; layers from a real downloaded .lyp keep theirs.
+    new_names = [layer.name for layer in layers if not layer.start_line]
+    for i, name in enumerate(new_names):
+        hatch = VIEW_HATCHES[i % len(VIEW_HATCHES)]
+        text = re.sub(
+            r"(<dither-pattern>)I1(</dither-pattern>(?:(?!</properties>).)*?<name>" + re.escape(name) + r"</name>)",
+            lambda m, h=hatch: m.group(1) + h + m.group(2), text, count=1, flags=re.S,
+        )
+    out = _state_dir(pdk_root) / "current_layers.lyp"
+    out.write_text(text, encoding="utf-8")
+    return out
 
 
 @dataclass
@@ -190,6 +262,11 @@ def _poll():
     cell = cv.layout().cell(req["cell_name"])
     if cell is not None:
         lv.select_cell(cell.cell_index(), lv.active_cellview_index)
+    # -l on the command line only applies to layouts named on that same
+    # command line, never to one opened later from this script -- so the
+    # project's own layer names/colors are applied to the view here.
+    if req.get("lyp_path"):
+        lv.load_layer_props(req["lyp_path"])
     lv.zoom_fit()
 
 
@@ -201,9 +278,13 @@ _timer.start()
 '''
 
 
-def send_open_request(paths: ServerPaths, gds_path: Path, cell_name: str) -> None:
+def send_open_request(paths: ServerPaths, gds_path: Path, cell_name: str, lyp_path: Path | None = None) -> None:
     paths.cmd_file.write_text(
-        json.dumps({"gds_path": str(gds_path), "cell_name": cell_name}), encoding="utf-8",
+        json.dumps({
+            "gds_path": str(gds_path), "cell_name": cell_name,
+            "lyp_path": str(lyp_path.resolve()) if lyp_path is not None else "",
+        }),
+        encoding="utf-8",
     )
 
 
@@ -242,10 +323,10 @@ def open_cell(
         if lyp_path is not None:
             argv += ["-l", str(lyp_path)]
         argv += ["-rr", str(paths.script_file)]
-        env = {**os.environ, "KLAYOUT_HOME": str(_klayout_home(pdk_root))}
+        env = {**os.environ, **klayout_env(pdk_root)}
         subprocess.Popen(argv, env=env)
         deadline = time.time() + _LAUNCH_WAIT_S
         while time.time() < deadline and not is_server_alive(paths):
             time.sleep(_LAUNCH_POLL_S)
-    send_open_request(paths, gds_path, cell_name)
+    send_open_request(paths, gds_path, cell_name, lyp_path)
     return reused

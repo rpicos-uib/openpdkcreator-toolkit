@@ -171,6 +171,19 @@ class Tool:
     (the default, currently every tool in this registry) means no
     project-specific launch setup exists for this tool yet;
     `resolve_launch` still lets it be started as a bare binary."""
+    superseded_by: str | None = None
+    """Id of the tool that replaces this one. When set and this tool
+    isn't installed, it's reported as "superseded" rather than MISSING
+    and left out of the found/total count -- there's nothing to fix."""
+
+
+def status_label(status: "ToolStatus") -> str:
+    """Short status text shared by the CLI table and the GUI Tools tab."""
+    if status.found:
+        return "found"
+    if status.tool.superseded_by:
+        return f"superseded by {status.tool.superseded_by}"
+    return "MISSING"
 
 
 TOOL_REGISTRY: tuple[Tool, ...] = (
@@ -383,6 +396,7 @@ TOOL_REGISTRY: tuple[Tool, ...] = (
                   "support and no Nix/Docker needed in this project's own container.",
             docs_url="https://openlane2.readthedocs.io/",
         ),
+        superseded_by="librelane",
     ),
     Tool(
         id="librelane", name="LibreLane", category="orchestration",
@@ -567,7 +581,7 @@ def cmd_check(required_only: bool = False) -> int:
     for status in statuses:
         if required_only and not status.tool.required:
             continue
-        mark = "found" if status.found else "MISSING"
+        mark = status_label(status)
         version = status.version or ("unknown" if status.found else "-")
         rows.append((status.tool.id, mark, version, status.path or "-"))
         if status.tool.required and not status.found:

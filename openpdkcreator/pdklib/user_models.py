@@ -238,6 +238,41 @@ def run_compile_check(model_file: UserModelFile, tool_binary: str, timeout: floa
     return CompileCheckResult(ok=proc.returncode == 0, log=log)
 
 
+def osdi_path_for(va_path: Path) -> Path:
+    """Where a Verilog-A file's compiled OSDI module lives: right next to
+    it, same name (``user_models/veriloga/foo.va`` -> ``foo.osdi``) --
+    the path testbenches load with ngspice's ``osdi``/``pre_osdi``."""
+
+    return va_path.with_suffix(".osdi")
+
+
+def osdi_is_stale(va_path: Path) -> bool:
+    """True when *va_path*'s compiled ``.osdi`` is missing or older than
+    the source -- e.g. a fresh checkout (``*.osdi`` is gitignored as a
+    build product) or a ``.va`` edited outside this app."""
+
+    osdi = osdi_path_for(va_path)
+    return not osdi.is_file() or osdi.stat().st_mtime < va_path.stat().st_mtime
+
+
+def compile_osdi(va_path: Path, tool_binary: str, timeout: float = 120.0) -> CompileCheckResult:
+    """Compiles *va_path* for real with OpenVAF into ``osdi_path_for``
+    -- the same ``openvaf -D__NGSPICE__ -o <out> <src>`` command as
+    ``run_compile_check``/``osdi_snippet``, but keeping the output. On a
+    failed compile any previous ``.osdi`` is left untouched (OpenVAF
+    writes nothing on error), so a simulation keeps using the last
+    good build rather than a half-written one."""
+
+    out_path = osdi_path_for(va_path)
+    argv = [tool_binary, "-D__NGSPICE__", "-o", str(out_path), str(va_path)]
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return CompileCheckResult(ok=False, log=f"OpenVAF did not finish within {timeout:.0f}s.")
+    log = _ANSI_RE.sub("", proc.stdout + proc.stderr)
+    return CompileCheckResult(ok=proc.returncode == 0 and out_path.is_file(), log=log)
+
+
 def group_by_cell(
     project_root: Path, models: list[UserModelFile], links: list[UserModelLink],
 ) -> dict[str, list[tuple[verilog_mod.VerilogModule, Path, str]]]:
