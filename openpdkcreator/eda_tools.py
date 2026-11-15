@@ -484,7 +484,10 @@ def check_tool(tool: Tool) -> ToolStatus:
     for flag in tool.version_flags:
         output = _try_run((path, flag))
         if output:
-            version = output.splitlines()[0][:120]
+            # First line with a letter or digit in it: ngspice's banner
+            # opens with a line of asterisks ("******").
+            lines = [ln.strip(" *") for ln in output.splitlines()]
+            version = next((ln for ln in lines if any(c.isalnum() for c in ln)), lines[0])[:120]
             break
     return ToolStatus(tool=tool, found=True, path=path, version=version)
 
