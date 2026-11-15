@@ -5597,6 +5597,15 @@ credited rather than silently absorbed:
   too -- one real, already-running KLayout instance handed new
   open-cell requests, instead of a fresh window every click.
 
+## Credits
+
+Created by R. Picos (rpicos.uib@gmail.com / rodrigo.picos@uib.es).
+
+This work is part of the research project MemFRAME, PID2025-170062NB,
+funded by MICIU/AEI/[10.13039/501100011033](https://doi.org/10.13039/501100011033).
+
+<img src="docs/miciu_aei.png" alt="Ministerio de Ciencia, Innovación y Universidades and Agencia Estatal de Investigación logos" width="400">
+
 ## License
 
 Apache-2.0 (see `LICENSE`) -- matching `OpenPDKCreator`, the project
